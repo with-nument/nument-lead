@@ -11,6 +11,11 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.18"
+  }
   public: {
     Tables: {
       activities: {
@@ -48,6 +53,62 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "leads"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activities_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_followups_due"
+            referencedColumns: ["lead_id"]
+          },
+          {
+            foreignKeyName: "activities_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_funnel"
+            referencedColumns: ["lead_id"]
+          },
+          {
+            foreignKeyName: "activities_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_lead_funnel"
+            referencedColumns: ["lead_id"]
+          },
+          {
+            foreignKeyName: "activities_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_admin"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activities_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_caller"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activities_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_pipeline"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activities_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_sheet_leads"
+            referencedColumns: ["lead_id"]
+          },
+          {
+            foreignKeyName: "activities_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_today"
+            referencedColumns: ["lead_id"]
           },
           {
             foreignKeyName: "activities_user_id_fkey"
@@ -231,6 +292,13 @@ export type Database = {
             referencedRelation: "businesses"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "contacts_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "v_sheet_leads"
+            referencedColumns: ["business_id"]
+          },
         ]
       }
       costs: {
@@ -380,6 +448,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "facts_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "v_sheet_leads"
+            referencedColumns: ["business_id"]
+          },
+          {
             foreignKeyName: "facts_page_id_fkey"
             columns: ["page_id"]
             isOneToOne: false
@@ -422,6 +497,62 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "feedback_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_followups_due"
+            referencedColumns: ["lead_id"]
+          },
+          {
+            foreignKeyName: "feedback_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_funnel"
+            referencedColumns: ["lead_id"]
+          },
+          {
+            foreignKeyName: "feedback_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_lead_funnel"
+            referencedColumns: ["lead_id"]
+          },
+          {
+            foreignKeyName: "feedback_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_admin"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feedback_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_caller"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feedback_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_pipeline"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feedback_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_sheet_leads"
+            referencedColumns: ["lead_id"]
+          },
+          {
+            foreignKeyName: "feedback_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_today"
+            referencedColumns: ["lead_id"]
+          },
+          {
             foreignKeyName: "feedback_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -462,6 +593,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "businesses"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "golden_labels_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "v_sheet_leads"
+            referencedColumns: ["business_id"]
           },
           {
             foreignKeyName: "golden_labels_labeled_by_fkey"
@@ -517,6 +655,62 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "leads"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_posts_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_followups_due"
+            referencedColumns: ["lead_id"]
+          },
+          {
+            foreignKeyName: "inbox_posts_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_funnel"
+            referencedColumns: ["lead_id"]
+          },
+          {
+            foreignKeyName: "inbox_posts_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_lead_funnel"
+            referencedColumns: ["lead_id"]
+          },
+          {
+            foreignKeyName: "inbox_posts_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_admin"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_posts_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_caller"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_posts_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_pipeline"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_posts_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_sheet_leads"
+            referencedColumns: ["lead_id"]
+          },
+          {
+            foreignKeyName: "inbox_posts_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_today"
+            referencedColumns: ["lead_id"]
           },
           {
             foreignKeyName: "inbox_posts_segment_id_fkey"
@@ -637,9 +831,16 @@ export type Database = {
           {
             foreignKeyName: "leads_business_id_fkey"
             columns: ["business_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "businesses"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "v_sheet_leads"
+            referencedColumns: ["business_id"]
           },
           {
             foreignKeyName: "leads_owner_id_fkey"
@@ -804,6 +1005,13 @@ export type Database = {
             referencedRelation: "businesses"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "pages_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "v_sheet_leads"
+            referencedColumns: ["business_id"]
+          },
         ]
       }
       profiles: {
@@ -824,6 +1032,36 @@ export type Database = {
           full_name?: string | null
           role?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      reports: {
+        Row: {
+          content: Json
+          created_at: string
+          id: number
+          kind: string
+          markdown: string
+          period_end: string | null
+          period_start: string | null
+        }
+        Insert: {
+          content: Json
+          created_at?: string
+          id?: number
+          kind: string
+          markdown: string
+          period_end?: string | null
+          period_start?: string | null
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          id?: number
+          kind?: string
+          markdown?: string
+          period_end?: string | null
+          period_start?: string | null
         }
         Relationships: []
       }
@@ -952,6 +1190,13 @@ export type Database = {
             referencedRelation: "businesses"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "scores_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "v_sheet_leads"
+            referencedColumns: ["business_id"]
+          },
         ]
       }
       segments: {
@@ -1038,6 +1283,62 @@ export type Database = {
             referencedRelation: "leads"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "sheet_snapshots_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_followups_due"
+            referencedColumns: ["lead_id"]
+          },
+          {
+            foreignKeyName: "sheet_snapshots_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_funnel"
+            referencedColumns: ["lead_id"]
+          },
+          {
+            foreignKeyName: "sheet_snapshots_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_lead_funnel"
+            referencedColumns: ["lead_id"]
+          },
+          {
+            foreignKeyName: "sheet_snapshots_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_admin"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sheet_snapshots_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_caller"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sheet_snapshots_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_pipeline"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sheet_snapshots_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_sheet_leads"
+            referencedColumns: ["lead_id"]
+          },
+          {
+            foreignKeyName: "sheet_snapshots_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_today"
+            referencedColumns: ["lead_id"]
+          },
         ]
       }
       signals: {
@@ -1093,6 +1394,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "businesses"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "signals_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "v_sheet_leads"
+            referencedColumns: ["business_id"]
           },
         ]
       }
@@ -1165,6 +1473,13 @@ export type Database = {
             referencedRelation: "businesses"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "source_records_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "v_sheet_leads"
+            referencedColumns: ["business_id"]
+          },
         ]
       }
       suppression: {
@@ -1205,6 +1520,39 @@ export type Database = {
           },
         ]
       }
+      weight_versions: {
+        Row: {
+          created_at: string
+          created_by: string
+          diff: Json | null
+          id: number
+          method: string
+          reason: string | null
+          version: number
+          weights: Json
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string
+          diff?: Json | null
+          id?: number
+          method: string
+          reason?: string | null
+          version: number
+          weights: Json
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          diff?: Json | null
+          id?: number
+          method?: string
+          reason?: string | null
+          version?: number
+          weights?: Json
+        }
+        Relationships: []
+      }
     }
     Views: {
       v_costs_daily: {
@@ -1232,7 +1580,15 @@ export type Database = {
           segment_id: string | null
           which: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "leads_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "segments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       v_funnel: {
         Row: {
@@ -1251,7 +1607,15 @@ export type Database = {
           test_group: string | null
           top_signal_type: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "leads_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "segments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       v_kpis_week: {
         Row: {
@@ -1264,6 +1628,30 @@ export type Database = {
           won: number | null
         }
         Relationships: []
+      }
+      v_lead_funnel: {
+        Row: {
+          angle: string | null
+          contacted_at: string | null
+          country: string | null
+          grade: string | null
+          is_wrong_contact: boolean | null
+          lead_id: string | null
+          max_rank: number | null
+          pitch_mode: string | null
+          segment_id: string | null
+          stage: string | null
+          test_group: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leads_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "segments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       v_leads_admin: {
         Row: {
@@ -1321,7 +1709,43 @@ export type Database = {
           web_domain: string | null
           website: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "leads_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "v_sheet_leads"
+            referencedColumns: ["business_id"]
+          },
+          {
+            foreignKeyName: "leads_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "leads_score_id_fkey"
+            columns: ["score_id"]
+            isOneToOne: false
+            referencedRelation: "scores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "segments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       v_leads_caller: {
         Row: {
@@ -1378,7 +1802,43 @@ export type Database = {
           web_domain: string | null
           website: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "leads_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "v_sheet_leads"
+            referencedColumns: ["business_id"]
+          },
+          {
+            foreignKeyName: "leads_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "leads_score_id_fkey"
+            columns: ["score_id"]
+            isOneToOne: false
+            referencedRelation: "scores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "segments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       v_pipeline: {
         Row: {
@@ -1436,7 +1896,43 @@ export type Database = {
           web_domain: string | null
           website: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "leads_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "v_sheet_leads"
+            referencedColumns: ["business_id"]
+          },
+          {
+            foreignKeyName: "leads_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "leads_score_id_fkey"
+            columns: ["score_id"]
+            isOneToOne: false
+            referencedRelation: "scores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "segments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       v_primary_contact: {
         Row: {
@@ -1452,7 +1948,90 @@ export type Database = {
           source_url: string | null
           verified: boolean | null
         }
+        Relationships: [
+          {
+            foreignKeyName: "contacts_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contacts_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "v_sheet_leads"
+            referencedColumns: ["business_id"]
+          },
+        ]
+      }
+      v_quota_month: {
+        Row: {
+          calls: number | null
+          provider: string | null
+          task: string | null
+        }
         Relationships: []
+      }
+      v_quota_today: {
+        Row: {
+          calls: number | null
+          provider: string | null
+          task: string | null
+        }
+        Relationships: []
+      }
+      v_sheet_leads: {
+        Row: {
+          angle: string | null
+          business_id: string | null
+          call_at: string | null
+          city: string | null
+          contact_name: string | null
+          contact_role: string | null
+          country: string | null
+          d3_at: string | null
+          d7_at: string | null
+          deal_value_inr: number | null
+          due_at: string | null
+          email: string | null
+          followup_d3: string | null
+          followup_d7: string | null
+          grade: string | null
+          judge_note: string | null
+          lead_id: string | null
+          lead_updated_at: string | null
+          meeting_at: string | null
+          message: string | null
+          message_alt: string | null
+          name: string | null
+          next_step: string | null
+          notes: string | null
+          phone_e164: string | null
+          phone_source: string | null
+          phone_type: string | null
+          pitch_mode: string | null
+          reasons: Json | null
+          score_total: number | null
+          segment_id: string | null
+          stage: string | null
+          test_group: string | null
+          top_signal_at: string | null
+          top_signal_quote: string | null
+          top_signal_type: string | null
+          top_signal_url: string | null
+          wa_at: string | null
+          website: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "businesses_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "segments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       v_source_health: {
         Row: {
@@ -1466,6 +2045,37 @@ export type Database = {
           requests_day: string | null
           requests_today: number | null
           source: string | null
+        }
+        Insert: {
+          blocked_until?: string | null
+          enabled?: boolean | null
+          health?: never
+          last_error?: string | null
+          last_error_at?: string | null
+          last_ok_at?: string | null
+          recent_blocks?: string[] | null
+          requests_day?: string | null
+          requests_today?: number | null
+          source?: string | null
+        }
+        Update: {
+          blocked_until?: string | null
+          enabled?: boolean | null
+          health?: never
+          last_error?: string | null
+          last_error_at?: string | null
+          last_ok_at?: string | null
+          recent_blocks?: string[] | null
+          requests_day?: string | null
+          requests_today?: number | null
+          source?: string | null
+        }
+        Relationships: []
+      }
+      v_spend_today: {
+        Row: {
+          inr: number | null
+          usd: number | null
         }
         Relationships: []
       }
@@ -1499,7 +2109,29 @@ export type Database = {
           top_signal_url: string | null
           total: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "leads_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "v_sheet_leads"
+            referencedColumns: ["business_id"]
+          },
+          {
+            foreignKeyName: "leads_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "segments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       v_top_signal: {
         Row: {
@@ -1513,7 +2145,22 @@ export type Database = {
           type: string | null
           url: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "signals_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "signals_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "v_sheet_leads"
+            referencedColumns: ["business_id"]
+          },
+        ]
       }
       v_verified_facts: {
         Row: {
@@ -1530,7 +2177,29 @@ export type Database = {
           verified_at: string | null
           verify_score: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "facts_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "facts_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "v_sheet_leads"
+            referencedColumns: ["business_id"]
+          },
+          {
+            foreignKeyName: "facts_page_id_fkey"
+            columns: ["page_id"]
+            isOneToOne: false
+            referencedRelation: "pages"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Functions: {
@@ -1546,9 +2215,125 @@ export type Database = {
   }
 }
 
-type PublicSchema = Database['public']
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
 
-export type Tables<T extends keyof PublicSchema['Tables']> = PublicSchema['Tables'][T]['Row']
-export type TablesInsert<T extends keyof PublicSchema['Tables']> = PublicSchema['Tables'][T]['Insert']
-export type TablesUpdate<T extends keyof PublicSchema['Tables']> = PublicSchema['Tables'][T]['Update']
-export type Views<T extends keyof PublicSchema['Views']> = PublicSchema['Views'][T]['Row']
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never) = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never) = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never) = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never) = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never) = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {},
+  },
+} as const
