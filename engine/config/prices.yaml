@@ -1,0 +1,2 @@
+# engine/config/prices.yaml : model and API prices, FX rate.
+# Written in Step 4 from Appendix B of IMPLEMENTATION_PLAN.md. Verify every price on the build day.

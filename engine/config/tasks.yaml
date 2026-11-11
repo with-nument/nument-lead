@@ -1,0 +1,2 @@
+# engine/config/tasks.yaml : AI task to model mapping per tier, with fallback chains.
+# Written in Step 4 from Appendix C of IMPLEMENTATION_PLAN.md. Gemini alone must be able to run every task.
