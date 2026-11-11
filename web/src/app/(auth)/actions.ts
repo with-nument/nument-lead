@@ -2,7 +2,10 @@
 
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
+import { getSessionUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
+import { mustChangePassword } from '@/lib/password-flag'
+import { setPasswordFlag } from '@/lib/password-flag-server'
 import { env } from '@/lib/env'
 import { PasswordSchema } from '@/lib/password'
 import { fieldErrorsOf } from '@/lib/action-result'
@@ -37,7 +40,7 @@ export async function login(_: AuthFormState, formData: FormData): Promise<AuthF
   }
   // A redirect from a Server Action renders the target in the same response, without the proxy,
   // so the temporary-password rule is applied here as well.
-  if (data.user?.user_metadata?.must_change_password === true) redirect('/settings?change_password=1')
+  if (mustChangePassword(data.user?.app_metadata)) redirect('/settings?change_password=1')
   redirect(safeNext(parsed.data.next))
 }
 
@@ -66,18 +69,27 @@ const NewPassword = z
   .object({ password: PasswordSchema, confirm: z.string() })
   .refine((v) => v.password === v.confirm, { message: 'The two passwords do not match.', path: ['confirm'] })
 
-/** Sets a new password after the email link (or a forced change) and clears the temporary-password flag. */
+/** Sets a new password after the email link and clears the temporary-password flag. */
 export async function updatePassword(_: AuthFormState, formData: FormData): Promise<AuthFormState> {
   const parsed = NewPassword.safeParse({ password: formData.get('password'), confirm: formData.get('confirm') })
   if (!parsed.success) return { fieldErrors: fieldErrorsOf(parsed.error), message: 'Check the highlighted fields.' }
+  const user = await getSessionUser()
+  if (!user) return { message: 'That link has expired. Ask for a new one.' }
   const supabase = await createClient()
-  const { data: claims } = await supabase.auth.getClaims()
-  if (!claims?.claims) return { message: 'That link has expired. Ask for a new one.' }
-  const { error } = await supabase.auth.updateUser({ password: parsed.data.password, data: { must_change_password: false } })
+  const { error } = await supabase.auth.updateUser({ password: parsed.data.password })
   if (error) {
     if (error.code === 'same_password') return { fieldErrors: { password: ['Choose a password you have not used here before.'] } }
     if (error.code === 'weak_password') return { fieldErrors: { password: ['Choose a stronger password.'] } }
     return { message: 'Could not save the new password. Try again.' }
+  }
+  // Only after the user's own password change succeeded; app_metadata needs the service role.
+  if (user.mustChangePassword) {
+    try {
+      await setPasswordFlag(user.id, false)
+    } catch (e) {
+      console.error(e)
+      return { message: 'Your password was saved, but we could not finish signing you in. Sign in again with the new password.' }
+    }
   }
   // New token, so the proxy sees the cleared flag at once.
   await supabase.auth.refreshSession()

@@ -1,6 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
+import { mustChangePassword } from '@/lib/password-flag'
 import { isRole, type Role } from '@/lib/roles'
 
 export type AppUser = {
@@ -37,7 +38,7 @@ export async function getUsers(): Promise<AppUser[]> {
         lastSignInAt: u.last_sign_in_at ?? null,
         createdAt: u.created_at,
         disabled: Boolean(bannedUntil && Date.parse(bannedUntil) > now),
-        mustChangePassword: u.user_metadata?.must_change_password === true,
+        mustChangePassword: mustChangePassword(u.app_metadata),
       }
     })
     .sort((a, b) => a.name.localeCompare(b.name))

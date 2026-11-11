@@ -6,6 +6,7 @@ import { requireRole } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { fail, fieldErrorsOf, ok, type ActionResult } from '@/lib/action-result'
 import { generateTempPassword } from '@/lib/password'
+import { flagUpdate } from '@/lib/password-flag'
 import { ROLES } from '@/lib/roles'
 
 // User management (plan 15.3.4). Public sign-up is off: only an admin creates people, and every
@@ -34,7 +35,9 @@ export async function createUser(_: unknown, formData: FormData): Promise<Action
     email,
     password: tempPassword,
     email_confirm: true,
-    user_metadata: { full_name: fullName, must_change_password: true },
+    user_metadata: { full_name: fullName },
+    // app_metadata, not user_metadata: users cannot clear it themselves (see lib/password-flag.ts).
+    app_metadata: { must_change_password: true },
   })
   if (error || !data.user) {
     if (error?.code === 'email_exists' || error?.status === 422) return fail('An account with this email already exists.', { email: ['Already has an account.'] })
@@ -75,7 +78,7 @@ export async function resetPasswordForUser(input: { userId: string }): Promise<A
   const tempPassword = generateTempPassword()
   const { error } = await admin.auth.admin.updateUserById(parsed.data.userId, {
     password: tempPassword,
-    user_metadata: { ...(existing.user.user_metadata ?? {}), must_change_password: true },
+    ...flagUpdate(existing.user.app_metadata, true),
   })
   if (error) return fail('Could not reset the password. Try again.')
   revalidatePath('/settings/users')

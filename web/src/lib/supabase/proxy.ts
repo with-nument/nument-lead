@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import type { Database } from '@/lib/database.types'
+import { mustChangePassword } from '@/lib/password-flag'
 
 /** Paths anyone can open. Everything else needs a session. */
 export const PUBLIC_PATHS = ['/login', '/reset-password', '/auth/confirm', '/api/health'] as const
@@ -55,8 +56,7 @@ export async function updateSession(request: NextRequest) {
   }
   if (claims && path === '/login') return redirectTo('/')
 
-  const mustChange = (claims?.user_metadata as { must_change_password?: boolean } | undefined)?.must_change_password
-  if (claims && mustChange && !publicPath && path !== '/settings') {
+  if (claims && mustChangePassword(claims.app_metadata) && !publicPath && path !== '/settings') {
     return redirectTo('/settings', { change_password: '1' })
   }
 
