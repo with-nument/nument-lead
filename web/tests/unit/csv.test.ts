@@ -9,8 +9,8 @@ describe('toCsv', () => {
       { key: 'c', label: 'C' },
       { key: 'd', label: 'D' },
     ])
-    expect(csv.startsWith('﻿')).toBe(true)
-    expect(csv).toBe('﻿A,B,C,D\r\n"He said ""hi""","x,y","line1\nline2",\r\n')
+    expect(csv.startsWith('\uFEFF')).toBe(true)
+    expect(csv).toBe('\uFEFFA,B,C,D\r\n"He said ""hi""","x,y","line1\nline2",\r\n')
   })
 
   it('neutralises spreadsheet formulas but keeps numbers and phones', () => {

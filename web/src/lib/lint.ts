@@ -2,10 +2,10 @@
 
 export type MessageKind = 'message' | 'message_alt' | 'followup_d3' | 'followup_d7'
 
-const EMOJI = /[\u{1F300}-\u{1FAFF}☀-➿\u{1F1E6}-\u{1F1FF}]/u
+const EMOJI = /[\u{1F300}-\u{1FAFF}\u2600-\u27BF\u{1F1E6}-\u{1F1FF}]/u
 const PRICE = /₹|\brs\.?\s*\d|\binr\b|\baed\b|\$\s*\d|\blakh\b|\bcrore\b|\bper month\b|\/month|\bk\b\s*(?:per|\/)/i
 const LINK = /https?:\/\/|www\.|\.com\b|\.in\b|\.ae\b|\.io\b/i
-const DASH = /[–—]| - /
+const DASH = /[\u2013\u2014]| - /
 export const BANNED = [
   'businesses like yours', 'ai-powered', 'ai powered', 'hope you are', "hope you're", 'hope this finds',
   'reaching out', 'synergy', 'leverage', 'cutting-edge', 'cutting edge', 'game-changer', 'game changer',

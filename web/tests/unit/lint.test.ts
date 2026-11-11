@@ -21,7 +21,7 @@ describe('lintMessage (same rules as the engine, plan 12.5)', () => {
 
   it('rejects links, dashes, emojis and prices', () => {
     expect(lintMessage(GOOD.replace('works', 'works at nument.in'))).toContain('Contains a link')
-    expect(lintMessage(GOOD.replace('busy.', 'busy — always.'))).toContain('Contains a dash')
+    expect(lintMessage(GOOD.replace('busy.', 'busy \u2014 always.'))).toContain('Contains a dash')
     expect(lintMessage(GOOD.replace('busy.', 'busy - always.'))).toContain('Contains a dash')
     expect(lintMessage(GOOD.replace('busy.', 'busy \u{1F600}.'))).toContain('Contains an emoji')
     expect(lintMessage(GOOD.replace('busy.', 'busy, from ₹15,000.'))).toContain('Mentions a price')
