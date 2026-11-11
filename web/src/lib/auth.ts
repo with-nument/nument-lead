@@ -3,6 +3,7 @@ import { cache } from 'react'
 import { redirect } from 'next/navigation'
 import { connection } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { mustChangePassword } from '@/lib/password-flag'
 import { isRole, type Role } from '@/lib/roles'
 
 export type SessionUser = {
@@ -40,7 +41,7 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     email,
     name: profile.full_name?.trim() || email.split('@')[0] || 'User',
     role: profile.role,
-    mustChangePassword: user.user_metadata?.must_change_password === true,
+    mustChangePassword: mustChangePassword(user.app_metadata),
   }
 })
 
