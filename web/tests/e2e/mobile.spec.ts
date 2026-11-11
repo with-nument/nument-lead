@@ -1,5 +1,12 @@
 import { expect, test } from '@playwright/test'
-import { cleanup, creds, expectNoHorizontalScroll, hasAdmin, seed, signIn, type Seeded } from './support'
+import { readRun, type Run } from './fixtures'
+import { expectNoHorizontalScroll, signIn } from './support'
+
+// Read after globalSetup has written it (test files are also loaded for listing).
+let run: Run
+test.beforeAll(() => {
+  run = readRun()
+})
 
 test('Login works on a phone without sideways scroll', async ({ page }) => {
   await page.goto('/login')
@@ -8,24 +15,12 @@ test('Login works on a phone without sideways scroll', async ({ page }) => {
   await expectNoHorizontalScroll(page)
 })
 
-test.describe('signed in', () => {
-  test.skip(!hasAdmin, 'Set E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD (a dev test admin) to run.')
-
-  let s: Seeded | undefined
-  test.beforeAll(async () => {
-    s = await seed()
-  })
-  test.afterAll(async () => {
-    await cleanup(s)
-  })
-
-  test('Today on a phone: stacked rows, the WhatsApp app button first, no sideways scroll', async ({ page }) => {
-    await signIn(page, creds.admin.email, creds.admin.password)
-    await expect(page.getByRole('heading', { name: 'Today' })).toBeVisible()
-    const row = page.getByRole('listitem').filter({ has: page.getByRole('link', { name: `E2E Test Clinic 1 ${s!.runId}` }) })
-    const firstAction = row.getByRole('link').filter({ hasText: /WhatsApp|Call/ }).first()
-    await expect(firstAction).toHaveText(/Open WhatsApp app/)
-    await expect(row.getByRole('link', { name: /Open WhatsApp Web/ })).toBeHidden()
-    await expectNoHorizontalScroll(page)
-  })
+test('Today on a phone: the WhatsApp app button first, no sideways scroll', async ({ page }) => {
+  await signIn(page, run.caller.email, run.caller.password)
+  await expect(page.getByRole('heading', { name: 'Today' })).toBeVisible()
+  const row = page.getByRole('listitem').filter({ has: page.getByRole('link', { name: run.names.new1 }) })
+  const firstAction = row.getByRole('link').filter({ hasText: /WhatsApp|Call/ }).first()
+  await expect(firstAction).toHaveText(/Open WhatsApp app/)
+  await expect(row.getByRole('link', { name: /Open WhatsApp Web/ })).toBeHidden()
+  await expectNoHorizontalScroll(page)
 })
