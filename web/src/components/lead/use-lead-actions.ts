@@ -21,7 +21,8 @@ export function useLeadActions(onOptimistic?: (leadId: string) => void) {
             label: 'Undo',
             onClick: () => {
               void undoLeadChange(leadId, previous, kind).then((r) => {
-                if (!r.ok) toast.error(r.message)
+                if (r.ok) toast(r.message ?? 'Undone')
+                else toast.error(r.message)
               })
             },
           }
