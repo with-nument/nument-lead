@@ -1,6 +1,7 @@
 import 'server-only'
 import { cache } from 'react'
 import { redirect } from 'next/navigation'
+import { connection } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { isRole, type Role } from '@/lib/roles'
 
@@ -17,6 +18,8 @@ export type SessionUser = {
  * disabled user loses access at once. Cached per request, so pages and layouts can call it freely.
  */
 export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
+  // Per-request work: token checks read the clock, so keep it out of any prerender or prefetch.
+  await connection()
   const supabase = await createClient()
   const { data: claimsData } = await supabase.auth.getClaims()
   const sub = claimsData?.claims?.sub

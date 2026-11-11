@@ -1,23 +1,39 @@
 'use client'
 
 import Link from 'next/link'
-import { useActionState, useId } from 'react'
+import { useActionState, useId, useSyncExternalStore } from 'react'
 import { useFormStatus } from 'react-dom'
+import { useHydrated } from '@/lib/use-hydrated'
 import { Spinner } from '@/components/ui/spinner'
 import { login, type AuthFormState } from '../actions'
 import { AuthAlert, authInput, authPrimary } from '../auth-ui'
 
 function Submit() {
   const { pending } = useFormStatus()
+  const hydrated = useHydrated()
   return (
-    <button type="submit" className={authPrimary} disabled={pending} aria-busy={pending || undefined}>
+    <button type="submit" className={authPrimary} disabled={pending || !hydrated} data-hydrating={hydrated ? undefined : true} aria-busy={pending || undefined}>
       {pending ? <Spinner label="Signing in" /> : 'Sign in'}
     </button>
   )
 }
 
-export function LoginForm({ next, linkError }: { next: string; linkError: boolean }) {
+const noop = () => () => {}
+
+/** The page is fully static; `next` and `error` are read from the address bar in the browser. */
+function useQuery() {
+  const search = useSyncExternalStore(
+    noop,
+    () => window.location.search,
+    () => '',
+  )
+  const params = new URLSearchParams(search)
+  return { next: params.get('next') ?? '', linkError: params.get('error') === 'link' }
+}
+
+export function LoginForm() {
   const [state, action] = useActionState<AuthFormState, FormData>(login, undefined)
+  const { next, linkError } = useQuery()
   const id = useId()
   return (
     <form action={action} className="flex flex-col gap-3" noValidate>
