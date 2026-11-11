@@ -2,15 +2,15 @@
 // One parser and one query builder serve the page, the CSV export and saved views.
 import { GRADES, type Grade } from '@/lib/grades'
 import { PITCH_VALUES, SIGNAL_VALUES, type PitchMode, type SignalType } from '@/lib/signals'
-import { STAGE_VALUES, type Stage } from '@/lib/stages'
+import { CLOSED_STAGE_LIST, STAGE_VALUES, type Stage } from '@/lib/stages'
 import { istMidnightUtc, addDays } from '@/lib/dates'
 
 export const PAGE_SIZE = 50
 
 export const SORTS = {
   created: { column: 'created_at', label: 'Added' },
-  score: { column: 'score_total', label: 'Score' },
-  company: { column: 'business_name', label: 'Company' },
+  score: { column: 'total', label: 'Score' },
+  company: { column: 'name', label: 'Company' },
   grade: { column: 'grade', label: 'Grade' },
   stage: { column: 'stage', label: 'Stage' },
   activity: { column: 'last_activity_at', label: 'Last activity' },
@@ -136,7 +136,7 @@ type FilterOps = {
 
 export type FilterContext = { userId: string; today: string }
 
-/** Applies every filter except `signal` (signals live in another table, see queries/leads.ts). */
+/** Applies every filter in `f` to a query on v_leads_caller (or v_leads_admin, which has the same columns). */
 export function applyLeadFilters<Q>(query: Q, f: LeadFilters, ctx: FilterContext): Q {
   let q = query as unknown as FilterOps
   if (f.seg.length) q = q.in('segment_id', f.seg)
@@ -145,18 +145,19 @@ export function applyLeadFilters<Q>(query: Q, f: LeadFilters, ctx: FilterContext
   if (f.grade.length) q = q.in('grade', f.grade)
   if (f.stage.length) q = q.in('stage', f.stage)
   if (f.pitch.length) q = q.in('pitch_mode', f.pitch)
+  if (f.signal.length) q = q.in('top_signal_type', f.signal)
   if (f.mobile) q = q.eq('phone_type', 'mobile')
   if (f.owner === 'me') q = q.eq('owner_id', ctx.userId)
   else if (f.owner === 'none') q = q.is('owner_id', null)
   else if (f.owner) q = q.eq('owner_id', f.owner)
   if (f.overdue) {
-    q = q.lt('due_at', ctx.today).not('stage', 'in', '(won,retainer,lost,not_now,not_a_fit,wrong_contact)')
+    q = q.lt('due_at', ctx.today).not('stage', 'in', CLOSED_STAGE_LIST)
   }
   if (f.from) q = q.gte('created_at', istMidnightUtc(f.from))
   if (f.to) q = q.lt('created_at', istMidnightUtc(addDays(f.to, 1)))
   const text = sanitizeSearch(f.q)
   if (text) {
-    const parts = [`business_name.ilike.*${text}*`, `website.ilike.*${text}*`]
+    const parts = [`name.ilike.*${text}*`, `web_domain.ilike.*${text}*`]
     const digits = text.replace(/\D/g, '')
     if (digits.length >= 4) parts.push(`phone_e164.ilike.*${digits}*`)
     q = q.or(parts.join(','))

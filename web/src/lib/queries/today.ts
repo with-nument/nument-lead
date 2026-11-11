@@ -1,96 +1,60 @@
 import 'server-only'
 import { createClient } from '@/lib/supabase/server'
-import { startOfMonthIst, startOfWeekIst, istDate } from '@/lib/dates'
+import { istDate, startOfMonthIst, startOfWeekIst } from '@/lib/dates'
 import { CLOSED_STAGE_LIST } from '@/lib/stages'
-import { getTopSignals, type TopSignal } from './shared'
 
 export const TODAY_LIMIT = 100
 
-const SEND_COLUMNS =
-  'lead_id, business_id, business_name, city, country, segment_id, grade, score_total, pitch_mode, angle, channel, contact_name, contact_role, phone_e164, phone_type, contact_source, email, message, created_at' as const
-
-export type SendRow = {
-  lead_id: string
-  business_id: string
-  business_name: string
-  city: string | null
-  country: string | null
-  segment_id: string | null
-  grade: string | null
-  score_total: number | null
-  pitch_mode: string | null
-  angle: string | null
-  channel: string | null
-  contact_name: string | null
-  contact_role: string | null
-  phone_e164: string | null
-  phone_type: string | null
-  contact_source: string | null
-  email: string | null
-  message: string | null
-  created_at: string | null
-  signal: TopSignal | null
-}
-
-/** Today's send list: new A and B leads, best first (plan 15.6.3). */
-export async function getSendList(limit = TODAY_LIMIT): Promise<SendRow[]> {
+/** Today's send list from v_today: new A and B leads, reachable, not skipped, best first (plan 15.6.3). */
+export async function getSendList(limit = TODAY_LIMIT) {
   const sb = await createClient()
   const { data, error } = await sb
     .from('v_today')
-    .select(SEND_COLUMNS)
+    .select(
+      'lead_id, company, city, segment_id, grade, total, channel, top_signal_type, top_signal_quote, top_signal_url, top_signal_at, contact_name, contact_role, phone_e164, phone_type, phone_source, email, email_subject, email_body, message',
+    )
     .order('grade', { ascending: true })
-    .order('score_total', { ascending: false, nullsFirst: false })
+    .order('total', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: true })
     .limit(limit)
   if (error) throw error
-  const rows = (data ?? []).filter((r) => r.lead_id && r.business_id)
-  const signals = await getTopSignals(sb, rows.map((r) => r.business_id!))
-  return rows.map((r) => ({
-    ...r,
-    lead_id: r.lead_id!,
-    business_id: r.business_id!,
-    business_name: r.business_name ?? 'Unnamed business',
-    signal: signals.get(r.business_id!) ?? null,
-  }))
+  return (data ?? []).flatMap((r) => (r.lead_id ? [{ ...r, lead_id: r.lead_id, company: r.company ?? 'Unnamed business' }] : []))
 }
 
-export type FollowupRow = {
-  lead_id: string
-  business_name: string
-  city: string | null
-  stage: string
-  next_step: string | null
-  due_at: string
-  phone_e164: string | null
-  phone_type: string | null
-  contact_name: string | null
-  followup_d3: string | null
-  followup_d7: string | null
-  d3_at: string | null
-  d7_at: string | null
-  wa_at: string | null
-}
+export type SendRow = Awaited<ReturnType<typeof getSendList>>[number]
 
-/** Open leads whose next step is due today or earlier. */
-export async function getFollowupsDue(limit = TODAY_LIMIT): Promise<FollowupRow[]> {
+/** Day 3 and day 7 follow-ups due today or earlier, with the phone type (WhatsApp is for mobiles only). */
+export async function getFollowupsDue(limit = TODAY_LIMIT) {
   const sb = await createClient()
   const { data, error } = await sb
     .from('v_followups_due')
-    .select('lead_id, business_name, city, stage, next_step, due_at, phone_e164, phone_type, contact_name, followup_d3, followup_d7, d3_at, d7_at, wa_at')
-    .order('due_at', { ascending: true })
-    .order('score_total', { ascending: false, nullsFirst: false })
+    .select('lead_id, company, segment_id, grade, contact_name, phone_e164, which, followup_text, due_on')
+    .order('due_on', { ascending: true })
     .limit(limit)
   if (error) throw error
-  return (data ?? [])
-    .filter((r) => r.lead_id && r.due_at)
-    .map((r) => ({
-      ...r,
-      lead_id: r.lead_id!,
-      business_name: r.business_name ?? 'Unnamed business',
-      stage: r.stage ?? 'contacted',
-      due_at: r.due_at!,
-    }))
+  const rows = (data ?? []).filter((r) => r.lead_id && r.due_on && (r.which === 'd3' || r.which === 'd7'))
+  const ids = [...new Set(rows.map((r) => r.lead_id!))]
+  const extra = new Map<string, { city: string | null; phone_type: string | null }>()
+  if (ids.length) {
+    const { data: more, error: moreError } = await sb.from('v_leads_caller').select('id, city, phone_type').in('id', ids)
+    if (moreError) throw moreError
+    for (const m of more ?? []) if (m.id) extra.set(m.id, { city: m.city, phone_type: m.phone_type })
+  }
+  return rows.map((r) => ({
+    lead_id: r.lead_id!,
+    company: r.company ?? 'Unnamed business',
+    grade: r.grade,
+    contact_name: r.contact_name,
+    phone_e164: r.phone_e164,
+    which: r.which as 'd3' | 'd7',
+    followup_text: r.followup_text,
+    due_on: r.due_on!,
+    city: extra.get(r.lead_id!)?.city ?? null,
+    phone_type: extra.get(r.lead_id!)?.phone_type ?? null,
+  }))
 }
+
+export type FollowupRow = Awaited<ReturnType<typeof getFollowupsDue>>[number]
 
 export type TodayKpis = {
   ready: number
@@ -107,28 +71,38 @@ export async function getTodayKpis(withMoney: boolean): Promise<TodayKpis> {
   const sb = await createClient()
   const now = new Date()
   const today = istDate(now)
+  const weekStart = istDate(new Date(startOfWeekIst(now)))
   const head = { count: 'exact' as const, head: true }
-  const [ready, contacted, talking, discovery, proposals, overdue] = await Promise.all([
+  const results = await Promise.all([
     sb.from('v_today').select('lead_id', head),
-    sb.from('v_leads_caller').select('lead_id', head).gte('wa_at', weekStartDay(now)),
-    sb.from('v_leads_caller').select('lead_id', head).eq('stage', 'talking'),
-    sb.from('v_leads_caller').select('lead_id', head).in('stage', ['discovery_booked', 'discovery_done']),
-    sb.from('v_leads_caller').select('lead_id', head).eq('stage', 'proposal_sent'),
-    sb.from('v_leads_caller').select('lead_id', head).lt('due_at', today).not('stage', 'in', CLOSED_STAGE_LIST),
+    sb.from('v_leads_caller').select('id', head).gte('wa_at', weekStart),
+    sb.from('v_leads_caller').select('id', head).eq('stage', 'talking'),
+    sb.from('v_leads_caller').select('id', head).in('stage', ['discovery_booked', 'discovery_done']),
+    sb.from('v_leads_caller').select('id', head).eq('stage', 'proposal_sent'),
+    sb.from('v_leads_caller').select('id', head).lt('due_at', today).not('stage', 'in', CLOSED_STAGE_LIST),
   ])
-  for (const r of [ready, contacted, talking, discovery, proposals, overdue]) if (r.error) throw r.error
+  for (const r of results) if (r.error) throw r.error
+  const [ready, contacted, talking, discovery, proposals, overdue] = results.map((r) => r.count ?? 0) as [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+  ]
 
   let wonThisMonthInr: number | null = null
   if (withMoney) {
-    const { data: wonEvents } = await sb
+    // Leads that moved to Won or Retainer this month (the stage_change rows are written by the database).
+    const { data: events } = await sb
       .from('activities')
       .select('lead_id, payload')
       .eq('type', 'stage_change')
       .gte('at', startOfMonthIst(now))
-      .limit(1000)
+      .limit(2000)
     const ids = [
       ...new Set(
-        (wonEvents ?? [])
+        (events ?? [])
           .filter((a) => {
             const to = (a.payload as { to?: string } | null)?.to
             return to === 'won' || to === 'retainer'
@@ -137,26 +111,13 @@ export async function getTodayKpis(withMoney: boolean): Promise<TodayKpis> {
       ),
     ]
     wonThisMonthInr = 0
-    if (ids.length) {
-      const { data } = await sb.from('v_leads_admin').select('lead_id, stage, deal_value_inr').in('lead_id', ids.slice(0, 200))
-      wonThisMonthInr = (data ?? [])
+    for (let i = 0; i < ids.length; i += 150) {
+      const { data } = await sb.from('v_leads_admin').select('id, stage, deal_value_inr').in('id', ids.slice(i, i + 150))
+      wonThisMonthInr += (data ?? [])
         .filter((r) => r.stage === 'won' || r.stage === 'retainer')
         .reduce((sum, r) => sum + Number(r.deal_value_inr ?? 0), 0)
     }
   }
 
-  return {
-    ready: ready.count ?? 0,
-    contactedThisWeek: contacted.count ?? 0,
-    talking: talking.count ?? 0,
-    discovery: discovery.count ?? 0,
-    proposals: proposals.count ?? 0,
-    overdue: overdue.count ?? 0,
-    wonThisMonthInr,
-  }
-}
-
-/** Monday of this week in India, as "YYYY-MM-DD" (wa_at is a date column). */
-function weekStartDay(now: Date) {
-  return istDate(new Date(startOfWeekIst(now)))
+  return { ready, contactedThisWeek: contacted, talking, discovery, proposals, overdue, wonThisMonthInr }
 }
