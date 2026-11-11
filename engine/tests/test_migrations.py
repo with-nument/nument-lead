@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 
 import psycopg
 import pytest
+from psycopg import sql
+from psycopg.conninfo import make_conninfo
 
 from nument_engine.ops import migrate
 
@@ -80,3 +83,17 @@ def test_apply_runs_new_files_and_rolls_back_a_failing_one(migrated_dsn: str, tm
 def test_apply_needs_autocommit(migrated_dsn: str) -> None:
     with psycopg.connect(migrated_dsn) as conn, pytest.raises(migrate.MigrationError, match="autocommit"):
         migrate.apply(conn)
+
+
+def test_dry_run_on_an_empty_database_creates_nothing(pg_server_dsn: str) -> None:
+    name = f"nlead_dry_{uuid.uuid4().hex[:8]}"
+    with psycopg.connect(pg_server_dsn, autocommit=True) as admin:
+        admin.execute(sql.SQL("create database {}").format(sql.Identifier(name)))
+    try:
+        with psycopg.connect(make_conninfo(pg_server_dsn, dbname=name), autocommit=True) as conn:
+            assert [m.filename for m in migrate.apply(conn, dry_run=True)] == EXPECTED_FILES
+            assert conn.execute("select to_regclass('supabase_migrations.schema_migrations')").fetchone() == (None,)
+            assert migrate.status(conn)[0][1] is False
+    finally:
+        with psycopg.connect(pg_server_dsn, autocommit=True) as admin:
+            admin.execute(sql.SQL("drop database if exists {} with (force)").format(sql.Identifier(name)))
