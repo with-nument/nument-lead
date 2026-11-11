@@ -168,7 +168,7 @@ function Column({ stage, label, closed, cards, canEdit, isAdmin }: { stage: stri
         {cards.map((c) => (
           <DraggableCard key={c.id} card={c} canEdit={canEdit} isAdmin={isAdmin} compact={closed} />
         ))}
-        {!cards.length ? <li className="px-2 py-6 text-center text-sm text-tx-4">{canEdit ? 'Drop leads here' : 'Empty'}</li> : null}
+        {!cards.length ? <li className="px-2 py-6 text-center text-sm text-tx-3">{canEdit ? 'Drop leads here' : 'Empty'}</li> : null}
       </ul>
     </section>
   )

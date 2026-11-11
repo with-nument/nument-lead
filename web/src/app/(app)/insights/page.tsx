@@ -132,7 +132,7 @@ async function Insights({ searchParams }: Pick<PageProps<'/insights'>, 'searchPa
                       <tr key={g.id} className={cn('border-b border-line-2 last:border-b-0', thin && 'text-tx-3')}>
                         <td className="h-11 px-3 pl-4 sm:pl-5">
                           <span className={cn(!thin && 'text-tx-1')}>{groupLabel(g.id)}</span>
-                          {thin ? <span className="ml-2 text-xs text-tx-4">too few to judge</span> : null}
+                          {thin ? <span className="ml-2 text-xs text-tx-3">too few to judge</span> : null}
                         </td>
                         <td className="px-3 text-right tabular">{formatNumber(g.contacted)}</td>
                         <td className="px-3 text-right tabular">{rate(g.replied, g.contacted)}</td>
