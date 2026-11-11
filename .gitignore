@@ -1,0 +1,56 @@
+# ---- secrets and env ----
+.env
+.env.*
+!.env.example
+**/.env.dev
+**/.env.prod
+**/.env.local
+.env.handover
+service-account*.json
+*.pem
+*.key
+
+# ---- python ----
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# ---- node / next ----
+node_modules/
+web/.next/
+web/out/
+.pnpm-store/
+*.tsbuildinfo
+next-env.d.ts
+
+# ---- playwright ----
+web/test-results/
+web/playwright-report/
+web/blob-report/
+playwright/.cache/
+
+# ---- supabase ----
+supabase/.temp/
+supabase/.branches/
+
+# ---- engine data and caches (never commit raw data) ----
+engine/.cache/
+engine/data/
+*.parquet
+*.duckdb
+*.sql.gz
+*.gpg
+
+# ---- os and editors ----
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
