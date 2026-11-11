@@ -19,6 +19,9 @@ export default defineConfig({
   timeout: 45_000,
   expect: { timeout: 10_000 },
   reporter: [['list'], ['html', { open: 'never' }]],
+  // Temporary users and fixture leads, created before and deleted after every run (fixtures.ts).
+  globalSetup: './tests/e2e/global-setup.ts',
+  globalTeardown: './tests/e2e/global-teardown.ts',
   use: {
     baseURL,
     trace: 'retain-on-failure',
