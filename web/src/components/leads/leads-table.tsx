@@ -143,7 +143,7 @@ export function LeadsTable({
               <div className="text-xs text-tx-3">{row.original.signalAge}</div>
             </div>
           ) : (
-            <span className="text-tx-4">None live</span>
+            <span className="text-tx-3">None live</span>
           ),
       },
       { id: 'score', header: 'Score', cell: ({ row }) => <span className="tabular text-tx-2">{row.original.score ?? ''}</span> },

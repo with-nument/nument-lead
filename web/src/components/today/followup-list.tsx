@@ -65,11 +65,11 @@ function FollowupRow({ f, canEdit, onSend }: { f: FollowupItem; canEdit: boolean
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-tx-2">
               <span>{LABEL[f.which]}</span>
-              <span className="text-tx-4">·</span>
+              <span aria-hidden className="text-tx-3">·</span>
               {f.overdue ? <Tag tone="bad">Overdue, due {f.dueLabel}</Tag> : <span className="text-tx-3">Due {f.dueLabel}</span>}
               {f.contactName ? (
                 <>
-                  <span className="text-tx-4">·</span>
+                  <span aria-hidden className="text-tx-3">·</span>
                   <span className="text-tx-3">{f.contactName}</span>
                 </>
               ) : null}

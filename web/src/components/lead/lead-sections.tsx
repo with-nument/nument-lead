@@ -275,18 +275,18 @@ export function TechCard({ facts }: { facts: Fact[] }) {
               <div key={r.label} className="flex items-center justify-between gap-3 border-b border-line-2 py-1.5">
                 <dt className="text-base text-tx-2">{r.label}</dt>
                 <dd className="text-sm">
-                  {r.value === null ? <span className="text-tx-4">Unknown</span> : r.value ? <Tag tone="ok">Yes</Tag> : <Tag>No</Tag>}
+                  {r.value === null ? <span className="text-tx-3">Unknown</span> : r.value ? <Tag tone="ok">Yes</Tag> : <Tag>No</Tag>}
                 </dd>
               </div>
             ))}
             <div className="flex items-center justify-between gap-3 border-b border-line-2 py-1.5">
               <dt className="text-base text-tx-2">Site built with</dt>
-              <dd className="text-sm text-tx-2">{cms ?? <span className="text-tx-4">Unknown</span>}</dd>
+              <dd className="text-sm text-tx-2">{cms ?? <span className="text-tx-3">Unknown</span>}</dd>
             </div>
             <div className="flex items-center justify-between gap-3 border-b border-line-2 py-1.5">
               <dt className="text-base text-tx-2">Mobile speed</dt>
               <dd className="text-sm">
-                {Number.isFinite(speedNum) ? <Tag tone={speedNum < 40 ? 'bad' : speedNum < 70 ? 'warn' : 'ok'}>{Math.round(speedNum)} / 100</Tag> : <span className="text-tx-4">Unknown</span>}
+                {Number.isFinite(speedNum) ? <Tag tone={speedNum < 40 ? 'bad' : speedNum < 70 ? 'warn' : 'ok'}>{Math.round(speedNum)} / 100</Tag> : <span className="text-tx-3">Unknown</span>}
               </dd>
             </div>
           </dl>

@@ -147,7 +147,7 @@ async function Engine() {
                           {s.last_error}
                         </div>
                       ) : (
-                        <span className="text-tx-4">None</span>
+                        <span className="text-tx-3">None</span>
                       )}
                       {s.blocked_until && Date.parse(s.blocked_until) > now.getTime() ? <div className="text-xs text-bad">Blocked until {formatDateTime(s.blocked_until)}</div> : null}
                     </td>

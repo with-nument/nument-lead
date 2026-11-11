@@ -69,7 +69,7 @@ function SendRow({ item, canEdit, actions }: { item: SendItem; canEdit: boolean;
               {item.signal ? (
                 <>
                   <span>{item.signal.label}</span>
-                  <span className="text-tx-4">·</span>
+                  <span aria-hidden className="text-tx-3">·</span>
                   <span className="text-tx-3">{item.signal.age}</span>
                   {item.signal.url ? (
                     <a
