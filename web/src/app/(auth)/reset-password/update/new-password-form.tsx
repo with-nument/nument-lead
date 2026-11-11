@@ -3,14 +3,16 @@
 import Link from 'next/link'
 import { useActionState, useId } from 'react'
 import { useFormStatus } from 'react-dom'
+import { useHydrated } from '@/lib/use-hydrated'
 import { Spinner } from '@/components/ui/spinner'
 import { updatePassword, type AuthFormState } from '../../actions'
 import { AuthAlert, authInput, authPrimary } from '../../auth-ui'
 
 function Submit() {
   const { pending } = useFormStatus()
+  const hydrated = useHydrated()
   return (
-    <button type="submit" className={authPrimary} disabled={pending} aria-busy={pending || undefined}>
+    <button type="submit" className={authPrimary} disabled={pending || !hydrated} data-hydrating={hydrated ? undefined : true} aria-busy={pending || undefined}>
       {pending ? <Spinner label="Saving" /> : 'Save new password'}
     </button>
   )

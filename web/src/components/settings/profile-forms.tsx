@@ -10,6 +10,7 @@ import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { SubmitButton } from '@/components/ui/submit-button'
 import type { ActionResult } from '@/lib/action-result'
+import { useHydrated } from '@/lib/use-hydrated'
 
 function withToast(fn: (prev: unknown, fd: FormData) => Promise<ActionResult>) {
   return async (prev: ActionResult | undefined, fd: FormData) => {
@@ -65,6 +66,7 @@ export function PasswordForm({ forced }: { forced: boolean }) {
 
 export function SessionButtons() {
   const [pending, start] = useTransition()
+  const hydrated = useHydrated()
   return (
     <div className="flex flex-wrap gap-2">
       <Button
@@ -81,7 +83,7 @@ export function SessionButtons() {
         Sign out other devices
       </Button>
       <form action={logout}>
-        <Button type="submit" variant="ghost">
+        <Button type="submit" variant="ghost" disabled={!hydrated} data-hydrating={hydrated ? undefined : true}>
           <LogOut aria-hidden />
           Log out
         </Button>
