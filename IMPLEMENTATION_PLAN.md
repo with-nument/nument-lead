@@ -697,6 +697,23 @@ Rule: where two steps show the same model with different fields, the step in the
 
 ---
 
+### A.13.5 Final rules where steps disagree (apply these first)
+1. **Activity rows:** database triggers (Step 2) write `lead_created`, `stage_change`, `grade_change` and `message_edited`. Application code (Steps 11, 13, 15) must not insert those four types again; it only sets the transaction context `app.source` and `app.context` through `db.tx(source, context)` so the trigger records who made the change.
+2. **No money leaks through views:** every view uses `with (security_invoker = true)` except `v_leads_admin`. This includes Step 13's `v_sheet_leads` and Step 19's cost views. Step 19 must not recreate `v_costs_daily` (Step 2 owns it).
+3. **Migration numbers:** as in A.13.3 (`0005_sheet_views`, `0006_cost_views`, `0007_learning`, `0008_llm`). Tables Step 2 already creates (`llm_cache`, `llm_batch_reservations`, `costs.fallback_from`, `saved_views`) are skipped in later migrations with `if not exists`.
+4. **Cost providers:** Places calls are logged with provider `google_places`, grounded search with `google_search`, PageSpeed with `pagespeed`, cache hits with `cache`.
+5. **OpenAI starts off:** `providers_enabled.openai = false` by default everywhere (seed, Step 4 text, tests).
+6. **One exclusions file shape:** the shape defined in Step 3.6 is the only one. Steps 8, 10 and Appendix D read it through the Step 3 loader.
+7. **Subcategories and ticket classes:** use the Step 3 names (`ivf_fertility`, `hair_transplant`, `aesthetic`, `dermatology`, `dental`, `physio`, `therapy_group`, `developer`, `broker`, `property_services`, `study_abroad`, `coaching_institute`, `academy`, `tutoring`). The IVF registry adapter sets the subcategory from `registries[].subcategory`, never a hard-coded `'ivf'`.
+8. **Scoring reads config:** Step 11 reads every weight (fit bonus, stacking bonus, reach multipliers, grade thresholds) from `scoring_config(segment)`, which merges `engine/config/scoring.yaml`, segment overrides and `settings.score_weights`.
+9. **Inbox and custom query statuses:** `new`, `processing`, `researched`, `lead_created`, `rejected`.
+10. **Fact field names:** Step 9 names (A.13.2) everywhere, including the Appendix A prompts.
+11. **Daily quota:** after the first seed, `segments.daily_quota` in the database is the source of truth (the app edits it). Step 8 reads the database value.
+12. **Backups:** dump only the `public` schema (`pg_dump --schema=public`), compress and encrypt, and keep files under the storage upload limit (verify at build). Restores go into a fresh project after running the migrations.
+13. **Database size on the free tier (500 MB):** keep raw page text for 30 days only (90 days for businesses that became leads), store page text trimmed to 20,000 characters, and keep facts, signals and leads for good. `nlead health` warns at 350 MB. Upgrading Supabase is a founder decision.
+
+---
+
 # Step 0: Accounts, access and machine setup
 
 ## 0.1 Goal, owner and time
@@ -2220,151 +2237,106 @@ Open the repo's **Actions** tab and wait for the `ci` workflow: both jobs must b
 
 ## 2.1 Goal and outputs
 
-**Goal:** one Postgres database that is the single source of truth for everything: businesses, signals, facts, scores, leads, stages, costs and runs. The engine writes to it with the service role. The web app reads and edits it as a logged-in user, protected by Row Level Security (RLS). The sheet is synced from it (Step 13).
+**Goal:** one Postgres database that is the single source of truth: businesses, signals, facts, scores, leads, stages, costs and runs. The engine writes with the service role. The web app reads and edits as a logged-in user, protected by Row Level Security (RLS). The sheets are synced from it (Step 13).
 
-**You need first:** Step 0 done (Supabase account), Step 1 done (repo with a `supabase/` folder, env files `engine/.env.dev`, `engine/.env.prod`, `web/.env.local`, GitHub environments `dev` and `prod`).
+**You need first:**
+- Step 0: both Supabase projects, their keys and auth settings (0.3), and where each secret lives (0.10).
+- Step 1: the repo, the `supabase/` folder linked to the **dev** project (1.6), and `engine/src/nument_engine/db.py` (1.4.6).
 
 **Outputs of this step:**
 
 | Output | Path |
 |---|---|
-| Dev and prod Supabase projects | Supabase dashboard |
 | Core schema | `supabase/migrations/0001_core.sql` |
 | Views and helper functions | `supabase/migrations/0002_views.sql` |
-| Row Level Security, grants, storage policies, RPCs | `supabase/migrations/0003_rls.sql` |
+| Row Level Security, grants, storage buckets | `supabase/migrations/0003_rls.sql` |
 | Seed data | `supabase/migrations/0004_seed.sql` |
-| RLS tests | `supabase/tests/rls_test.sql` + `engine/tests/test_rls.py` |
-| TypeScript types for the web app | `web/src/lib/database.types.ts` (generated) |
-| Weekly encrypted backup | `.github/workflows/backup.yml` (full YAML in Step 14, procedure here) |
+| RLS and trigger tests | `supabase/tests/rls_test.sql` and `engine/tests/test_rls.py` |
+| A small change to `db.tx()` | `engine/src/nument_engine/db.py` |
+
+In this step you push to **dev only**. Step 21 pushes the same migrations to prod.
 
 ---
 
-## 2.2 Create the two Supabase projects
+## 2.2 Check the Supabase projects (made in Step 0)
 
-### 2.2.1 Create the projects
-Do this twice: once for **dev**, once for **prod**.
+Step 0 already created both projects. Before writing SQL, check each item:
 
-1. Go to the Supabase dashboard and click **New project**.
-2. Organisation: the founder's organisation (create one named `Nument` if none exists).
-3. Name: `nument-leads-dev` (then later `nument-leads-prod`).
-4. Database password: click **Generate a password**. Save it in the founder's password manager as "Supabase nument-leads-dev DB password". You need it for `DATABASE_URL`.
-5. Region: **South Asia (Mumbai)**, code `ap-south-1`. Closest to India and good for UAE. Verify at build that the region is offered on the free plan.
-6. Plan: **Free**.
-7. Click **Create new project** and wait about 2 minutes.
+| # | Check | Where it was set |
+|---|---|---|
+| 1 | `nument-leads-dev` and `nument-leads-prod` exist in South Asia (Mumbai), Free plan | 0.3.2, 0.3.3 |
+| 2 | Sign-ups off, confirm email on, minimum password length 12, Site URL and redirect URLs set | 0.3.7 |
+| 3 | `DATABASE_URL` is the **session pooler** string (port 5432) for each project | 0.3.5 |
+| 4 | Keys are stored as in table 0.10: `engine/.env.dev`, `engine/.env.prod`, `web/.env.local`, GitHub environments `dev` and `prod` | 0.3.6, 0.10 |
+| 5 | The dev project is paired only with the **Leads-staging** sheet (`SHEET_STAGING_ID`). Prod is paired with the real master and caller sheets (Step 13). Never point dev at the real sheets | 0.5, Step 13 |
+| 6 | Data API settings (verify at build where the dashboard shows them): the `public` schema is exposed. Migration 0003 removes default access for anything created later, so a dashboard switch like "expose new tables automatically" does not matter | this step |
 
-> Free plan limits to remember (verify at build): 2 active projects, 500 MB database, 1 GB file storage, 50,000 monthly active users, and a project **pauses after 7 days with no activity**. Our nightly jobs keep prod active. The dev project may pause; `nlead health` warns you, and you resume it from the dashboard.
-
-### 2.2.2 Record the project details
-From **Project Settings > API** and **Connect** (top bar), copy these. They go into the founder's password manager and into the env files and GitHub environments named below, never into git:
-
-| Item | Where it goes |
-|---|---|
-| Project ref (the id in the URL, for example `abcdxyz`) | Notes, Supabase CLI link |
-| Project URL `https://<ref>.supabase.co` | `SUPABASE_URL` in `engine/.env.dev` or `engine/.env.prod`; `NEXT_PUBLIC_SUPABASE_URL` in `web/.env.local` |
-| `anon` public key | `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `web/.env.local` and Render |
-| `service_role` secret key | `SUPABASE_SERVICE_ROLE_KEY` in engine env files, GitHub environment secrets (`dev`, `prod`), Render (server only) |
-| Session pooler connection string | `DATABASE_URL` in engine env files and GitHub environment secrets (see 2.3) |
-
-### 2.2.3 Auth settings (both projects)
-In **Authentication > Sign In / Providers**:
-1. **Email** provider: enabled.
-2. **Allow new users to sign up: OFF.** Users are invited by an admin only.
-3. **Confirm email:** ON (invited users confirm through the invite link).
-4. Password rules: minimum length **12**, require letters and digits. Verify at build where Supabase shows this setting.
-5. In **Authentication > URL Configuration**:
-   - Site URL: `http://localhost:3000` for dev, the Render URL (or `https://leads.nument.in`) for prod.
-   - Redirect URLs: add `http://localhost:3000/**` (dev) and `https://<render-app>.onrender.com/**`, `https://leads.nument.in/**` (prod).
-6. Email templates: change the sender name to "Nument Leads". The default email sender has a low hourly limit, which is fine for a few users.
-
-### 2.2.4 Storage bucket
-The private `proposals` bucket and its access rules are created by migration `0003_rls.sql` (2.8.2). After pushing, check in **Storage** that it exists, is not public, allows PDF, PNG, JPEG and DOCX, and has a 20 MB limit.
+> The Google service account key (`~/.config/nument-leads/service-account.json`) and every API key are **not** database data. Never store a key in any table, including `settings`.
 
 ---
 
-## 2.3 Connection strings and the IPv4 note
+## 2.3 Connections
 
-### 2.3.1 Which connection to use
-| Connection | Address | IPv4? | Use it for |
-|---|---|---|---|
-| Direct | `db.<ref>.supabase.co:5432` | **No (IPv6 only on free plan)** | Nothing in CI. GitHub Actions runners have no IPv6, so it fails there |
-| Session pooler (Supavisor) | `aws-0-ap-south-1.pooler.supabase.com:5432` | Yes | **The engine** (`DATABASE_URL`). Supports prepared statements and session settings |
-| Transaction pooler | same host, port `6543` | Yes | Not used (breaks prepared statements and `set_config` across statements) |
-| HTTPS (PostgREST via supabase-js) | `https://<ref>.supabase.co` | Yes | **The web app** |
+| Who | How | RLS? |
+|---|---|---|
+| Engine (laptop and GitHub Actions) | `DATABASE_URL`, session pooler, port 5432, IPv4, user `postgres` | **Bypassed.** Only `engine/.env.dev`, `engine/.env.prod`, GitHub environment secrets (`dev`, `prod`) and Render server variables hold it |
+| Web app, browser and server | supabase-js over HTTPS with the anon key and the user's session | **Applies** |
+| Web app, admin server actions | supabase-js with `SUPABASE_SERVICE_ROLE_KEY`, server code only, after a role check (Step 15) | Bypassed |
 
-Copy the exact session pooler string from **Connect > Session pooler**. The host prefix (`aws-0` or `aws-1`) varies by project; verify at build. It looks like:
+Not used: the direct connection (IPv6 only on the free plan, so it fails on GitHub runners) and the transaction pooler on port 6543 (breaks session settings).
 
-```
-postgresql://postgres.<ref>:<DB_PASSWORD>@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require
-```
-
-URL-encode the password if it has special characters (`@` becomes `%40`, `#` becomes `%23`, `/` becomes `%2F`).
-
-### 2.3.2 Engine connection settings
-In `engine/src/nument_engine/db.py` (Step 1 skeleton, filled here):
+### 2.3.1 Change `db.tx()` so triggers know who is writing
+The lead triggers in 2.6 log activities. They read two transaction settings to label them: `app.source` (`engine` or `sheet`) and `app.context` (extra payload keys, for example `{"sheet": "master"}`). Replace `tx()` in `engine/src/nument_engine/db.py` (Step 1.4.6) with this version and add `import json` to the imports:
 
 ```python
-from contextlib import contextmanager
-from psycopg_pool import ConnectionPool
-from psycopg.rows import dict_row
-from .settings import settings
-
-_pool: ConnectionPool | None = None
-
-def pool() -> ConnectionPool:
-    global _pool
-    if _pool is None:
-        _pool = ConnectionPool(
-            conninfo=settings.database_url,
-            min_size=1,
-            max_size=4,            # free plan has a small pooler limit; 4 is enough
-            kwargs={
-                "row_factory": dict_row,
-                "application_name": f"nlead-{settings.app_env}",
-                "options": "-c statement_timeout=120000 -c timezone=UTC",
-            },
-            open=True,
-        )
-    return _pool
-
 @contextmanager
-def tx(source: str = "engine"):
-    """One transaction. `source` is read by the lead triggers when they write activities."""
-    with pool().connection() as conn:
-        with conn.transaction():
-            conn.execute("select set_config('app.source', %s, true)", (source,))
-            yield conn
+def tx(source: str = "engine", context: dict[str, Any] | None = None) -> Iterator[Connection[Any]]:
+    """A transaction: commits on success, rolls back on any exception.
+
+    source   'engine' or 'sheet'. Becomes activities.source when a lead trigger logs something.
+    context  Extra keys merged into the activity payload, for example {"sheet": "master"}.
+    """
+    with pool().connection() as conn, conn.transaction():
+        conn.execute(
+            "select set_config('app.source', %s, true), set_config('app.context', %s, true)",
+            (source, json.dumps(context or {})),
+        )
+        yield conn
 ```
 
-Add `psycopg-pool` to the engine dependencies (Step 1).
+Step 13 opens its write transactions with `db.tx(source="sheet", context={"sheet": target})`. Everything else keeps the default.
 
-### 2.3.3 Rules
-- Store all timestamps as `timestamptz` (UTC). Convert to IST only for display and for "today" logic: `(now() at time zone 'Asia/Kolkata')::date`.
-- The engine connects as the `postgres` user through the pooler. That user **bypasses RLS**. Only GitHub environment secrets, the founder's laptop (`engine/.env.*`) and Render's server-side variables hold the service credentials.
+### 2.3.2 Rules
+- Store every timestamp as `timestamptz` (UTC). Convert to IST only for display and for "today": `(now() at time zone 'Asia/Kolkata')::date`.
+- `SUPABASE_SERVICE_ROLE_KEY` never goes into a `NEXT_PUBLIC_` variable or browser code. It bypasses everything in this step.
 
 ---
 
 ## 2.4 Extensions
 
-Supabase installs extensions into the `extensions` schema. We need:
+Supabase installs extensions into the `extensions` schema, which is on the default search path (verify at build).
 
 | Extension | Why |
 |---|---|
-| `pgcrypto` | `digest()` for hashes (`gen_random_uuid()` is built into Postgres 13+) |
-| `pg_trgm` | Fuzzy name matching for dedupe (`similarity()`, trigram index) |
+| `pgcrypto` | `digest()` for hashes (`gen_random_uuid()` is built into Postgres 13 and later) |
+| `pg_trgm` | Fuzzy name matching for dedupe (Step 6): `similarity()` and a trigram index |
+| `unaccent` | Accent-free name normalisation for dedupe (Step 6) |
 
-Both are created at the top of `0001_core.sql`.
+All three are created at the top of `0001_core.sql`.
 
 ---
 
 ## 2.5 Schema design rules
-1. Primary keys are `uuid default gen_random_uuid()`, except `settings`, `segments` and `source_health` (natural text keys) and `sheet_snapshots` (composite key).
-2. Every timestamp is `timestamptz not null default now()` unless it can be empty.
-3. Enumerations are `text` with a `check` constraint, not Postgres enum types (easier to change with a migration).
+1. Primary keys are `uuid default gen_random_uuid()`, except `settings`, `segments` and `source_health` (natural text keys), `llm_cache` (text key), `llm_batch_reservations` (bigserial) and `sheet_snapshots` (composite key).
+2. Timestamps are `timestamptz not null default now()` unless they can be empty.
+3. Enumerations are `text` with a named or column `check`, not Postgres enum types (easier to change).
 4. Flexible data is `jsonb not null default '{}'::jsonb`.
-5. `updated_at` is maintained by one trigger function, `set_updated_at()`.
-6. Businesses are never deleted. They change `status`. Leads keep history through `activities`.
-7. Every table has RLS enabled (0003). The `anon` role gets nothing.
-8. Money lives only in `leads.deal_value_inr`. App users never read it from `leads`; admins read it through `v_leads_admin`; it is written only by admin server actions using the service role (Step 15).
+5. `updated_at` is kept right by one trigger function, `set_updated_at()`.
+6. Businesses are not deleted in normal work; they change `status`. The only deletion path is a "forget me" request (Step 18.2.3).
+7. RLS is on for every table (0003). The `anon` role gets nothing.
+8. Money lives only in `leads.deal_value_inr`. App users never read it from `leads`. Admins read it through `v_leads_admin`. It is written only by admin server actions with the service role (Step 15).
+9. **Triggers own four activity types:** `lead_created`, `stage_change`, `grade_change`, `message_edited`. Code never inserts these four, or the timeline gets duplicates. Code logs every other type.
+10. **Nothing new is exposed by default.** After 0003, a new table or view is invisible to app users until its migration grants access on purpose (2.8.4).
 
 ---
 
@@ -2374,13 +2346,14 @@ Create `supabase/migrations/0001_core.sql` with exactly this content.
 
 ```sql
 -- 0001_core.sql : core schema for nument-leads
--- Apply with: npx supabase db push
+-- Apply with: npx supabase db push (dev in Step 2, prod in Step 21)
 
 create extension if not exists pgcrypto with schema extensions;
-create extension if not exists pg_trgm with schema extensions;
+create extension if not exists pg_trgm  with schema extensions;
+create extension if not exists unaccent with schema extensions;
 
 -- =========================================================================
--- Helper functions
+-- Helper
 -- =========================================================================
 create or replace function public.set_updated_at() returns trigger
 language plpgsql as $$
@@ -2390,7 +2363,7 @@ begin
 end $$;
 
 -- =========================================================================
--- settings: key/value configuration read by engine and app
+-- settings: key/value configuration read by engine and app (keys in 0004)
 -- =========================================================================
 create table public.settings (
   key        text primary key,
@@ -2401,7 +2374,7 @@ create trigger settings_updated_at before update on public.settings
   for each row execute function public.set_updated_at();
 
 -- =========================================================================
--- segments: one row per domain x country, config copied from YAML (Step 3)
+-- segments: one row per domain x country; config is a copy of the YAML (Step 3)
 -- =========================================================================
 create table public.segments (
   id             text primary key check (id ~ '^[a-z0-9]+-[a-z]{2}$'),
@@ -2438,22 +2411,22 @@ create table public.businesses (
   address           text,
   lat               double precision check (lat between -90 and 90),
   lng               double precision check (lng between -180 and 180),
-  category          text,
-  subcategory       text,
+  category          text,                 -- raw source category (Overture code or Places type)
+  subcategory       text,                 -- our class: a ticket_class key of the segment (Step 3)
   place_id          text,
   overture_id       text,
   branches_count    integer check (branches_count >= 0),
   staff_count       integer check (staff_count >= 0),
-  review_count      integer check (review_count >= 0),   -- Places content: max 30 days (A.4.4)
-  rating            numeric(2,1) check (rating between 0 and 5), -- Places content: max 30 days
+  review_count      integer check (review_count >= 0),            -- Places content: 30 days max (A.4.4)
+  rating            numeric(2,1) check (rating between 0 and 5),   -- Places content: 30 days max
   places_fetched_at timestamptz,
   status            text not null default 'candidate' check (status in
                       ('candidate','queued','researched','qualified',
                        'rejected','suppressed','dormant')),
   reject_reason     text,
-  queued_at         timestamptz,           -- set by the pre-filter (Step 8)
-  queue_priority    real,                  -- higher is researched first (Step 8)
-  extra             jsonb not null default '{}'::jsonb,  -- registry ids, busy band, practo data
+  queued_at         timestamptz,          -- set by the pre-filter (Step 8)
+  queue_priority    real,                 -- higher is researched first (Step 8.7)
+  extra             jsonb not null default '{}'::jsonb,   -- small extras (registry ids and similar)
   first_seen_at     timestamptz not null default now(),
   last_seen_at      timestamptz not null default now(),
   researched_at     timestamptz,
@@ -2465,25 +2438,27 @@ create unique index businesses_overture_id_uq on public.businesses (overture_id)
 create unique index businesses_seg_domain_uq  on public.businesses (segment_id, web_domain) where web_domain is not null;
 create index businesses_seg_status_idx        on public.businesses (segment_id, status);
 create index businesses_seg_city_idx          on public.businesses (segment_id, city);
-create index businesses_queue_idx             on public.businesses (status, queue_priority desc) where status = 'queued';
+create index businesses_queue_idx             on public.businesses (queue_priority desc) where status = 'queued';
 create index businesses_norm_name_trgm        on public.businesses using gin (norm_name extensions.gin_trgm_ops);
 create trigger businesses_updated_at before update on public.businesses
   for each row execute function public.set_updated_at();
 
 -- =========================================================================
--- source_records: raw records from each source, mapped to a business
--- Known sources: overture, places, art_registry, osm, apna, grounded_search,
--- gdelt, careers_watch, adzuna, practo. Registry adapters added later use their
--- registry key (for example rera_haryana, dld_brokers); legacy import uses 'legacy'.
+-- source_records: raw records from each source, linked to a business
 -- =========================================================================
 create table public.source_records (
   id          uuid primary key default gen_random_uuid(),
-  source      text not null check (source ~ '^[a-z0-9_]+$'),
-  source_key  text not null,          -- id inside that source
+  source      text not null,
+  source_key  text not null,              -- the id inside that source
   business_id uuid references public.businesses(id) on delete set null,
-  payload     jsonb not null default '{}'::jsonb,  -- keep slim: only fields we use
+  payload     jsonb not null default '{}'::jsonb,   -- keep slim: only fields we use
   fetched_at  timestamptz not null default now(),
-  constraint source_records_uq unique (source, source_key)
+  constraint source_records_uq unique (source, source_key),
+  -- A new registry adapter adds its key here in a new migration on the day it goes live (2.6.1).
+  -- legacy and legacy_skip are written once by `nlead migrate-legacy` (Step 20).
+  constraint source_records_source_known check (source in
+    ('overture','places','art_registry','osm','apna','grounded_search',
+     'gdelt','careers_watch','adzuna','practo','legacy','legacy_skip'))
 );
 create index source_records_business_idx on public.source_records (business_id);
 
@@ -2498,14 +2473,14 @@ create table public.signals (
                  'review_pain','ads_running','no_booking','slow_site',
                  'new_place','new_branch','news','funding')),
   category    text not null check (category in ('stated_need','visible_pain','growth','money')),
-  points      numeric(5,2) not null default 0,
+  points      numeric(5,2) not null default 0,   -- effective points (segment override applied, Step 7)
   observed_at timestamptz not null,
   expires_at  timestamptz not null,
-  source      text not null,
+  source      text not null,                     -- watcher name, or 'manual' for ads_running from the app
   url         text,
   quote       text,
   details     jsonb not null default '{}'::jsonb,
-  dedupe_key  text not null unique,   -- e.g. 'apna:job:123456' or 'review_pain:<place_id>:2026-11'
+  dedupe_key  text not null unique,              -- for example 'apna:job:123456'
   created_at  timestamptz not null default now(),
   constraint signals_expiry_after_observed check (expires_at > observed_at)
 );
@@ -2513,7 +2488,7 @@ create index signals_business_active_idx on public.signals (business_id, expires
 create index signals_type_idx on public.signals (type, observed_at desc);
 
 -- =========================================================================
--- pages: fetched web pages (text kept short-term, see 2.12)
+-- pages: fetched web pages (retention in Step 18.2.2)
 -- =========================================================================
 create table public.pages (
   id             uuid primary key default gen_random_uuid(),
@@ -2523,27 +2498,27 @@ create table public.pages (
   http_status    integer,
   render_mode    text not null default 'http' check (render_mode in ('http','browser')),
   title          text,
-  text           text,                 -- cleaned main text, max 12,000 chars per page
-  text_hash      text,                 -- sha256 of text, kept after text is pruned
+  text           text,                  -- cleaned main text, max 20,000 characters (Step 9)
+  text_hash      text,                  -- sha256 of text, kept after text is deleted
   robots_allowed boolean not null default true
 );
 create index pages_business_idx on public.pages (business_id);
-create index pages_fetched_idx on public.pages (fetched_at);
+create index pages_fetched_idx  on public.pages (fetched_at);
 
 -- =========================================================================
--- facts: extracted facts, always with quote + url, verified by code (Step 10)
+-- facts: extracted facts, each with quote and url, verified by code (Step 10)
 -- =========================================================================
 create table public.facts (
   id           uuid primary key default gen_random_uuid(),
   business_id  uuid not null references public.businesses(id) on delete cascade,
-  field        text not null,          -- e.g. decision_maker, branches_count, price_point_inr, paid_tool
+  field        text not null,           -- for example decision_maker, staff_or_doctors, price_point
   value        jsonb not null,
   quote        text,
   url          text,
   page_id      uuid references public.pages(id) on delete set null,
-  model        text,                   -- model that extracted it, or 'rule' / 'legacy'
+  model        text,                    -- model that extracted it, or 'rule'
   verified     boolean not null default false,
-  verify_score numeric(5,2),           -- 0 to 100 fuzzy match score
+  verify_score numeric(5,2),            -- 0 to 100 match score; -1 = lost a conflict (Step 10)
   verified_at  timestamptz,
   created_at   timestamptz not null default now()
 );
@@ -2558,14 +2533,15 @@ create table public.contacts (
   name              text,
   role              text,
   phone_e164        text check (phone_e164 ~ '^\+[1-9][0-9]{6,14}$'),
-  phone_type        text not null default 'unknown' check (phone_type in ('mobile','landline','tollfree','unknown')),
+  phone_type        text not null default 'unknown'
+                      check (phone_type in ('mobile','landline','tollfree','unknown')),
   email             text,
   source            text not null check (source in ('website','google_listing','registry','other')),
   source_url        text,
   quote             text,
   is_decision_maker boolean not null default false,
   verified          boolean not null default false,
-  verified_at       timestamptz,
+  verified_at       timestamptz,          -- the 30-day Google listing rule (Step 10)
   do_not_contact    boolean not null default false,
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now(),
@@ -2578,12 +2554,12 @@ create trigger contacts_updated_at before update on public.contacts
   for each row execute function public.set_updated_at();
 
 -- =========================================================================
--- scores: every scoring run is kept (versioned)
+-- scores: every scoring run is kept
 -- =========================================================================
 create table public.scores (
   id          uuid primary key default gen_random_uuid(),
   business_id uuid not null references public.businesses(id) on delete cascade,
-  version     text not null,            -- scoring rules version, e.g. 'v1.0' (engine/config/scoring.yaml)
+  version     text not null,             -- SCORE_VERSION from score.py, for example 's1.0' (Step 11)
   fit         smallint not null check (fit between 0 and 3),
   can_pay     numeric(5,2) not null default 0 check (can_pay between 0 and 30),
   intent      numeric(5,2) not null default 0 check (intent between 0 and 40),
@@ -2591,7 +2567,7 @@ create table public.scores (
   total       numeric(5,2) not null check (total between 0 and 100),
   grade       char(1) not null check (grade in ('A','B','C','D')),
   pitch_mode  text not null check (pitch_mode in ('stated_need','visible_pain','fit_only')),
-  reasons     jsonb not null default '[]'::jsonb,  -- list of {key, points, text, fact_id|signal_id}
+  reasons     jsonb not null default '{}'::jsonb,
   judge_grade char(1) check (judge_grade in ('A','B','C','D')),
   judge_note  text,
   judge_model text,
@@ -2609,7 +2585,7 @@ create table public.profiles (
   created_at timestamptz not null default now()
 );
 
--- Every new auth user gets a 'viewer' profile; an admin then upgrades the role.
+-- Every new auth user gets a 'viewer' profile. An admin then sets the role (Step 15).
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
@@ -2623,7 +2599,7 @@ end $$;
 create trigger on_auth_user_created after insert on auth.users
   for each row execute function public.handle_new_user();
 
--- Role of the logged-in user ('none' when not logged in or no profile).
+-- Role of the logged-in user ('none' when not logged in or no profile). Used by every policy.
 create or replace function public.auth_role() returns text
 language sql stable security definer set search_path = public as $$
   select coalesce((select role from public.profiles where user_id = auth.uid()), 'none')
@@ -2639,45 +2615,45 @@ create table public.leads (
   score_id            uuid references public.scores(id) on delete set null,
   grade               char(1) not null check (grade in ('A','B','C','D')),
   pitch_mode          text not null check (pitch_mode in ('stated_need','visible_pain','fit_only')),
-  test_group          text,            -- '{segment_id}:{pitch_mode}:{angle}'
+  test_group          text,              -- '{segment_id}:{pitch_mode}:{angle}' (A.12.4)
   angle               text,
   channel             text not null default 'whatsapp' check (channel in ('whatsapp','email','form')),
-  message             text,            -- WhatsApp or form text
+  message             text,              -- WhatsApp or contact-form text
   message_alt         text,
-  email_subject       text,            -- only when channel = 'email'
+  email_subject       text,              -- only when channel = 'email' (Step 12)
   email_body          text,
   followup_d3         text,
   followup_d7         text,
   message_model       text,
-  message_check_score numeric(4,1),
+  message_check_score numeric(4,1),      -- 0 to 10 from the critic (Step 12)
   stage               text not null default 'new' check (stage in
                         ('new','contacted','talking','discovery_booked','discovery_done',
                          'proposal_sent','won','retainer','lost','not_now','not_a_fit','wrong_contact')),
   owner_id            uuid references public.profiles(user_id) on delete set null,
-  wa_at               date,             -- first message sent (IST date)
+  wa_at               date,              -- first message sent (IST date)
   call_at             date,
   d3_at               date,
   d7_at               date,
   meeting_at          timestamptz,
   next_step           text,
   due_at              date,
-  skipped_until       timestamptz,      -- "skip for now" in the app hides it from Today until then
-  regen_requested_at  timestamptz,      -- app asks the engine to rewrite the message next morning
-  deal_value_inr      numeric(12,2) check (deal_value_inr >= 0),   -- admin only (0003)
+  skipped_until       timestamptz,       -- "Skip" in the app hides the lead from Today until then
+  regen_requested_at  timestamptz,       -- the app asks the engine for a new message
+  deal_value_inr      numeric(12,2) check (deal_value_inr >= 0),   -- money: see 2.8.3
   notes               text,
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now(),
   last_activity_at    timestamptz not null default now()
 );
--- One open lead per business. Closed stages may repeat later (new cycle).
+-- One open lead per business. Closed stages may repeat later (a new cycle).
 create unique index leads_one_open_per_business on public.leads (business_id)
   where stage not in ('won','retainer','lost','not_now','not_a_fit','wrong_contact');
-create index leads_stage_idx on public.leads (stage);
+create index leads_stage_idx         on public.leads (stage);
 create index leads_segment_grade_idx on public.leads (segment_id, grade);
-create index leads_due_idx on public.leads (due_at) where due_at is not null;
-create index leads_regen_idx on public.leads (regen_requested_at) where regen_requested_at is not null;
+create index leads_due_idx           on public.leads (due_at) where due_at is not null;
+create index leads_regen_idx         on public.leads (regen_requested_at) where regen_requested_at is not null;
 
--- Keep updated_at, last_activity_at and the first-message date right.
+-- Keep updated_at and last_activity_at right, and fill the first-message date.
 create or replace function public.leads_before_write() returns trigger
 language plpgsql as $$
 begin
@@ -2687,7 +2663,7 @@ begin
       new.last_activity_at := now();
     end if;
   end if;
-  -- Marking Contacted without a date means "sent today" (lesson from 17 Oct 2026).
+  -- Marking Contacted without a date means "sent today" (the 17 Oct 2026 sheet bug).
   if new.stage = 'contacted' and new.wa_at is null then
     new.wa_at := (now() at time zone 'Asia/Kolkata')::date;
   end if;
@@ -2702,44 +2678,50 @@ create trigger leads_before_write before insert or update on public.leads
 create table public.activities (
   id      uuid primary key default gen_random_uuid(),
   lead_id uuid not null references public.leads(id) on delete cascade,
-  user_id uuid references public.profiles(user_id) on delete set null,
+  user_id uuid default auth.uid() references public.profiles(user_id) on delete set null,
   source  text not null check (source in ('app','sheet','engine')),
-  type    text not null check (type in
-            ('lead_created','stage_change','grade_change','message_flagged','message_edited',
-             'message_regenerated','regen_request','sent','followup_sent','reply','call','meeting',
-             'proposal','proposal_upload','note','edit','feedback','skip','wrong_contact','undo','merge')),
+  type    text not null check (type in (
+            -- written by the lead triggers only (rule 2.5.9)
+            'lead_created','stage_change','grade_change','message_edited',
+            -- written by code
+            'message_flagged','regen_request','sent','followup_sent','reply','call','meeting',
+            'proposal','proposal_upload','note','edit','feedback','skip','wrong_contact','undo',
+            'merge','ai_output','conflict_overridden','unknown_stage')),
   at      timestamptz not null default now(),
   payload jsonb not null default '{}'::jsonb
 );
 create index activities_lead_time_idx on public.activities (lead_id, at desc);
+create index activities_type_time_idx on public.activities (type, at desc);
 
--- Log creation, stage changes, grade changes and message edits automatically.
+-- Log creation, stage changes, grade changes and app edits of the message.
 create or replace function public.leads_after_write() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare
   v_source text := coalesce(nullif(current_setting('app.source', true), ''),
                             case when auth.uid() is null then 'engine' else 'app' end);
+  v_ctx    jsonb := coalesce(nullif(current_setting('app.context', true), '')::jsonb, '{}'::jsonb);
 begin
   if tg_op = 'INSERT' then
     insert into public.activities (lead_id, user_id, source, type, payload)
     values (new.id, auth.uid(), v_source, 'lead_created',
-            jsonb_build_object('grade', new.grade, 'pitch_mode', new.pitch_mode, 'channel', new.channel));
+            jsonb_build_object('grade', new.grade, 'pitch_mode', new.pitch_mode,
+                               'channel', new.channel, 'test_group', new.test_group) || v_ctx);
     return new;
   end if;
   if new.stage is distinct from old.stage then
     insert into public.activities (lead_id, user_id, source, type, payload)
     values (new.id, auth.uid(), v_source, 'stage_change',
-            jsonb_build_object('from', old.stage, 'to', new.stage));
+            jsonb_build_object('from', old.stage, 'to', new.stage) || v_ctx);
   end if;
   if new.grade is distinct from old.grade then
     insert into public.activities (lead_id, user_id, source, type, payload)
     values (new.id, auth.uid(), v_source, 'grade_change',
-            jsonb_build_object('from', old.grade, 'to', new.grade));
+            jsonb_build_object('from', old.grade, 'to', new.grade) || v_ctx);
   end if;
   if auth.uid() is not null and (new.message is distinct from old.message
                                  or new.message_alt is distinct from old.message_alt) then
     insert into public.activities (lead_id, user_id, source, type, payload)
-    values (new.id, auth.uid(), v_source, 'message_edited', '{}'::jsonb);
+    values (new.id, auth.uid(), v_source, 'message_edited', v_ctx);
   end if;
   return new;
 end $$;
@@ -2747,12 +2729,12 @@ create trigger leads_after_write after insert or update on public.leads
   for each row execute function public.leads_after_write();
 
 -- =========================================================================
--- feedback: thumbs up/down on lead quality (trains scoring, Step 16)
+-- feedback: thumbs up or down on lead quality (Step 16)
 -- =========================================================================
 create table public.feedback (
   id      uuid primary key default gen_random_uuid(),
   lead_id uuid not null references public.leads(id) on delete cascade,
-  user_id uuid references public.profiles(user_id) on delete set null,
+  user_id uuid default auth.uid() references public.profiles(user_id) on delete set null,
   rating  smallint not null check (rating in (-1, 1)),
   reason  text,
   at      timestamptz not null default now(),
@@ -2760,7 +2742,7 @@ create table public.feedback (
 );
 
 -- =========================================================================
--- suppression: never contact these again
+-- suppression: never contact these again (kept forever, Step 18)
 -- =========================================================================
 create table public.suppression (
   id         uuid primary key default gen_random_uuid(),
@@ -2768,7 +2750,7 @@ create table public.suppression (
   email      text,
   web_domain text,
   reason     text not null,      -- opt_out, wrong_contact, competitor, founder_skip, legal
-  added_by   uuid references public.profiles(user_id) on delete set null,
+  added_by   uuid default auth.uid() references public.profiles(user_id) on delete set null,
   added_at   timestamptz not null default now(),
   constraint suppression_has_key check (phone_e164 is not null or email is not null or web_domain is not null)
 );
@@ -2777,7 +2759,7 @@ create unique index suppression_email_uq  on public.suppression (lower(email)) w
 create unique index suppression_domain_uq on public.suppression (web_domain)   where web_domain is not null;
 
 -- =========================================================================
--- runs, costs, llm_batches, source_health: operations
+-- Operations: runs, costs, AI batches, AI cache, source health
 -- =========================================================================
 create table public.runs (
   id          uuid primary key default gen_random_uuid(),
@@ -2793,7 +2775,8 @@ create index runs_kind_time_idx on public.runs (kind, started_at desc);
 create table public.costs (
   id            uuid primary key default gen_random_uuid(),
   run_id        uuid references public.runs(id) on delete set null,
-  provider      text not null check (provider in ('gemini','openai','google_maps','other')),
+  provider      text not null check (provider in
+                  ('gemini','openai','cache','google_places','google_search','pagespeed','other')),
   model         text,
   task          text not null,
   input_tokens  bigint not null default 0,
@@ -2801,6 +2784,7 @@ create table public.costs (
   calls         integer not null default 1,
   usd           numeric(12,6) not null default 0,
   inr           numeric(12,2) not null default 0,
+  fallback_from text,             -- the planned provider when a fallback answered (Step 4)
   at            timestamptz not null default now()
 );
 create index costs_at_idx on public.costs (at);
@@ -2811,14 +2795,35 @@ create table public.llm_batches (
   provider_batch_id text not null,
   task              text not null,
   status            text not null default 'submitted' check (status in
-                      ('submitted','running','succeeded','failed','expired','cancelled','ingested')),
+                      ('submitted','running','completed','failed','expired','cancelled')),
   item_count        integer not null default 0,
   submitted_at      timestamptz not null default now(),
   completed_at      timestamptz,
-  result_ref        text,          -- provider file name or local path of results
+  result_ref        text,          -- provider file name or local path of the results
   constraint llm_batches_uq unique (provider, provider_batch_id)
 );
 
+-- Money held for a submitted batch until its results are collected (Step 4).
+create table public.llm_batch_reservations (
+  id           bigserial primary key,
+  llm_batch_id uuid references public.llm_batches(id) on delete cascade,
+  reserved_inr numeric not null,
+  released     boolean not null default false,
+  created_at   timestamptz not null default now()
+);
+
+-- Cached AI answers (Step 4). The night run deletes expired rows.
+create table public.llm_cache (
+  key        text primary key,
+  task       text not null,
+  model      text not null,
+  response   jsonb not null,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null
+);
+create index llm_cache_expires_idx on public.llm_cache (expires_at);
+
+-- One row per source, plus 'llm:gemini' and 'llm:openai' for the AI circuit breakers (Step 4).
 create table public.source_health (
   source         text primary key,
   enabled        boolean not null default true,
@@ -2826,8 +2831,9 @@ create table public.source_health (
   last_error_at  timestamptz,
   last_error     text,
   blocked_until  timestamptz,
+  recent_blocks  timestamptz[] not null default '{}',   -- newest first, keep 10 (Steps 5 and 18 count them)
   requests_today integer not null default 0,
-  requests_day   date not null default ((now() at time zone 'Asia/Kolkata')::date)  -- resets the counter
+  requests_day   date not null default ((now() at time zone 'Asia/Kolkata')::date)  -- day of requests_today
 );
 
 -- =========================================================================
@@ -2849,7 +2855,7 @@ create table public.golden_labels (
   business_id uuid not null references public.businesses(id) on delete cascade,
   label       text not null check (label in ('good','bad')),
   reasons     text,
-  labeled_by  uuid references public.profiles(user_id) on delete set null,
+  labeled_by  uuid default auth.uid() references public.profiles(user_id) on delete set null,
   at          timestamptz not null default now(),
   constraint golden_one_per_labeler unique (business_id, labeled_by)
 );
@@ -2858,8 +2864,8 @@ create table public.custom_queries (
   id         uuid primary key default gen_random_uuid(),
   segment_id text not null references public.segments(id) on update cascade,
   query      text not null,
-  status     text not null default 'pending' check (status in ('pending','running','done','failed')),
-  created_by uuid references public.profiles(user_id) on delete set null,
+  status     text not null default 'new' check (status in ('new','running','done','failed')),
+  created_by uuid default auth.uid() references public.profiles(user_id) on delete set null,
   created_at timestamptz not null default now()
 );
 
@@ -2868,16 +2874,18 @@ create table public.inbox_posts (
   url        text,
   text       text not null,
   segment_id text references public.segments(id) on update cascade,
-  status     text not null default 'pending' check (status in ('pending','processed','rejected')),
-  created_by uuid references public.profiles(user_id) on delete set null,
+  status     text not null default 'new' check (status in
+               ('new','processed','researched','lead_created','rejected')),
+  lead_id    uuid references public.leads(id) on delete set null,   -- the lead made from this post
+  created_by uuid default auth.uid() references public.profiles(user_id) on delete set null,
   created_at timestamptz not null default now()
 );
 
 create table public.saved_views (
   id         uuid primary key default gen_random_uuid(),
-  user_id    uuid not null references public.profiles(user_id) on delete cascade,
+  user_id    uuid not null default auth.uid() references public.profiles(user_id) on delete cascade,
   name       text not null,
-  query      jsonb not null default '{}'::jsonb,   -- filters, sort, columns of the Leads page
+  query      jsonb not null default '{}'::jsonb,   -- filters, sort and columns of the Leads page
   shared     boolean not null default false,
   created_at timestamptz not null default now()
 );
@@ -2885,23 +2893,36 @@ create index saved_views_user_idx on public.saved_views (user_id);
 ```
 
 ### 2.6.1 Notes on 0001
-- `gin_trgm_ops` is qualified with `extensions.` because Supabase installs `pg_trgm` there.
-- The **one open lead per business** index stops the engine from creating a second live lead for the same company. When a lead closes (for example `not_now`), a new cycle can start later.
-- `leads_before_write` fills `wa_at` when a lead is marked `contacted` without a date. This fixes the old sheet bug where "Contacted" did nothing without a WA date.
-- `leads_after_write` reads `app.source`. The engine sets it with `tx(source="engine")` or `tx(source="sheet")` (2.3.2). App edits come through supabase-js with a user session, so `auth.uid()` is set and the source becomes `app`.
-- `source_records.source` uses a pattern check instead of a fixed list, so new registry adapters (for example `rera_haryana`, `dld_brokers`) do not need a migration. The known list is in the table comment.
-- `channel` is `whatsapp` for leads with a mobile number, `email` when only an email was found, `form` when only a contact form exists. Step 12 writes `email_subject` and `email_body` for email leads.
+- `gin_trgm_ops` is written as `extensions.gin_trgm_ops` because Supabase installs `pg_trgm` in that schema.
+- **One open lead per business:** the partial unique index stops a second live lead for the same company. After a lead closes (for example `not_now`), a new cycle can start.
+- **`wa_at` auto-fill:** marking a lead `contacted` without a date fills today's IST date.
+- **Trigger-owned activities:** `leads_after_write` writes `lead_created`, `stage_change`, `grade_change` and (for app edits) `message_edited`. It reads `app.source` and `app.context` from `db.tx()` (2.3.1). App edits arrive with a user session, so `auth.uid()` is set and the source is `app`.
+- **User columns default to `auth.uid()`** (`activities.user_id`, `feedback.user_id`, `suppression.added_by`, `golden_labels.labeled_by`, `custom_queries.created_by`, `inbox_posts.created_by`, `saved_views.user_id`). The app does not need to send them; engine inserts leave them empty.
+- **Adding a registry source later** (for example `rera_maharashtra` in Step 5): new migration, same constraint name.
+  ```sql
+  alter table public.source_records
+    drop constraint source_records_source_known,
+    add constraint source_records_source_known check (source in
+      ('overture','places','art_registry','osm','apna','grounded_search','gdelt',
+       'careers_watch','adzuna','practo','legacy','legacy_skip','rera_maharashtra'));
+  ```
+- `channel` is `whatsapp` when a mobile number exists, `email` when only an email was found, `form` when only a contact form exists (Step 12).
 
 ---
 
 ## 2.7 Migration 0002: views and helper functions
 
-Create `supabase/migrations/0002_views.sql`. Every view uses `security_invoker = true` so the caller's RLS rules apply. The single exception is `v_leads_admin`, which deliberately runs with its owner's rights and filters rows to admins (explained in 2.8.3).
+Create `supabase/migrations/0002_views.sql`. Every view uses `security_invoker = true`, so the RLS rules of the person asking apply. The one exception is `v_leads_admin` (2.8.3).
+
+Two naming rules the app relies on (Step 15.5.1):
+- `v_leads_caller`, `v_leads_admin` and `v_pipeline` call the lead id `id`, like the `leads` table.
+- `v_today`, `v_followups_due` and `v_funnel` call it `lead_id`.
 
 ```sql
--- 0002_views.sql : read models for the app, the sheet and reports
+-- 0002_views.sql : read models for the app, the sheets and reports
 
--- Best contact per business: phone first, decision maker first, mobile first, verified first, own website first.
+-- Best contact per business: has a phone, decision maker, mobile, verified, own website.
+-- Skips do-not-contact rows and anything in suppression.
 create or replace view public.v_primary_contact with (security_invoker = true) as
 select distinct on (c.business_id)
   c.business_id, c.id as contact_id, c.name, c.role, c.phone_e164, c.phone_type,
@@ -2909,6 +2930,8 @@ select distinct on (c.business_id)
 from public.contacts c
 where not c.do_not_contact
   and (c.phone_e164 is not null or c.email is not null)
+  and not exists (select 1 from public.suppression su
+                  where su.phone_e164 = c.phone_e164 or lower(su.email) = lower(c.email))
 order by c.business_id,
          (c.phone_e164 is not null) desc,
          c.is_decision_maker desc,
@@ -2917,96 +2940,117 @@ order by c.business_id,
          (c.source = 'website') desc,
          c.created_at;
 
--- Latest verified fact per business and field (evidence shown in the app and used by the message writer).
+-- Strongest active signal per business (same order as the sheet view in Step 13).
+create or replace view public.v_top_signal with (security_invoker = true) as
+select distinct on (g.business_id)
+  g.business_id, g.id as signal_id, g.type, g.category, g.points,
+  g.quote, g.url, g.observed_at, g.expires_at
+from public.signals g
+where g.expires_at > now()
+order by g.business_id, g.points desc, g.observed_at desc;
+
+-- Latest verified fact per business and field (lead page evidence, message writer).
 create or replace view public.v_verified_facts with (security_invoker = true) as
 select distinct on (f.business_id, f.field) f.*
 from public.facts f
 where f.verified
 order by f.business_id, f.field, f.created_at desc;
 
--- Full pipeline INCLUDING money. Engine (service role) only. Not granted to app users (0003).
-create or replace view public.v_pipeline with (security_invoker = true) as
-select
-  l.id as lead_id, l.business_id, l.segment_id, s.domain, s.country,
-  b.name as business_name, b.city, b.locality, b.website, b.category, b.subcategory,
-  l.grade, sc.total as score_total, sc.judge_note, l.pitch_mode, l.test_group, l.angle, l.channel,
-  l.stage, l.owner_id, l.wa_at, l.call_at, l.d3_at, l.d7_at, l.meeting_at,
-  l.next_step, l.due_at, l.skipped_until, l.regen_requested_at,
-  l.message, l.message_alt, l.email_subject, l.email_body, l.followup_d3, l.followup_d7,
-  l.notes, l.deal_value_inr,
-  l.created_at, l.updated_at, l.last_activity_at,
-  pc.name as contact_name, pc.role as contact_role, pc.phone_e164, pc.phone_type,
-  pc.email, pc.source as contact_source
-from public.leads l
-join public.businesses b on b.id = l.business_id
-join public.segments  s on s.id = l.segment_id
-left join public.scores sc on sc.id = l.score_id
-left join public.v_primary_contact pc on pc.business_id = l.business_id;
-
--- Same as v_pipeline WITHOUT money. Every app user reads leads through this view.
+-- Every lead column except deal_value_inr, plus business, score, top signal and best contact.
+-- Callers and viewers read leads only through this view.
 create or replace view public.v_leads_caller with (security_invoker = true) as
 select
-  l.id as lead_id, l.business_id, l.segment_id, s.domain, s.country,
-  b.name as business_name, b.city, b.locality, b.website, b.category, b.subcategory,
-  l.grade, sc.total as score_total, sc.judge_note, l.pitch_mode, l.test_group, l.angle, l.channel,
-  l.stage, l.owner_id, l.wa_at, l.call_at, l.d3_at, l.d7_at, l.meeting_at,
-  l.next_step, l.due_at, l.skipped_until, l.regen_requested_at,
-  l.message, l.message_alt, l.email_subject, l.email_body, l.followup_d3, l.followup_d7,
-  l.notes, l.created_at, l.updated_at, l.last_activity_at,
+  l.id, l.business_id, l.segment_id, l.score_id, l.grade, l.pitch_mode, l.test_group, l.angle,
+  l.channel, l.message, l.message_alt, l.email_subject, l.email_body, l.followup_d3, l.followup_d7,
+  l.message_model, l.message_check_score, l.stage, l.owner_id, l.wa_at, l.call_at, l.d3_at, l.d7_at,
+  l.meeting_at, l.next_step, l.due_at, l.skipped_until, l.regen_requested_at, l.notes,
+  l.created_at, l.updated_at, l.last_activity_at,
+  b.name, b.city, b.locality, b.country, b.website, b.web_domain, b.category, b.subcategory,
+  sc.total, sc.judge_note,
+  ts.type as top_signal_type, ts.quote as top_signal_quote, ts.url as top_signal_url,
+  ts.observed_at as top_signal_at,
   pc.name as contact_name, pc.role as contact_role, pc.phone_e164, pc.phone_type,
-  pc.email, pc.source as contact_source
+  pc.source as phone_source, pc.email
 from public.leads l
 join public.businesses b on b.id = l.business_id
-join public.segments  s on s.id = l.segment_id
 left join public.scores sc on sc.id = l.score_id
+left join public.v_top_signal ts on ts.business_id = l.business_id
 left join public.v_primary_contact pc on pc.business_id = l.business_id;
 
--- Admin view WITH money. Runs with the owner's rights (no security_invoker),
--- and returns rows only when the logged-in user is an admin.
+-- The same plus money, for admins. NOT security_invoker: it runs with its owner's rights so it
+-- can read deal_value_inr, and it returns rows only when the person asking is an admin.
 create or replace view public.v_leads_admin as
 select v.*, l.deal_value_inr
 from public.v_leads_caller v
-join public.leads l on l.id = v.lead_id
+join public.leads l on l.id = v.id
 where public.auth_role() = 'admin';
 
--- Today's send list: new A and B leads, best first, not skipped, reachable.
+-- The same plus money, for the engine (service role) only. Revoked from app users in 0003.
+create or replace view public.v_pipeline with (security_invoker = true) as
+select v.*, l.deal_value_inr
+from public.v_leads_caller v
+join public.leads l on l.id = v.id;
+
+-- Today's send list (Step 15 Today page): new A and B leads, reachable, not skipped, best first.
 create or replace view public.v_today with (security_invoker = true) as
-select v.*
+select v.id as lead_id, v.business_id, v.name as company, v.city, v.country, v.segment_id,
+       v.grade, v.total, v.pitch_mode, v.angle, v.test_group, v.channel,
+       v.top_signal_type, v.top_signal_quote, v.top_signal_url, v.top_signal_at,
+       v.contact_name, v.contact_role, v.phone_e164, v.phone_type, v.phone_source, v.email,
+       v.message, v.message_alt, v.email_subject, v.email_body, v.created_at
 from public.v_leads_caller v
 where v.stage = 'new'
   and v.grade in ('A','B')
-  and (v.skipped_until is null or v.skipped_until < now())
+  and (v.skipped_until is null or v.skipped_until <= now())
   and (v.phone_e164 is not null or v.channel <> 'whatsapp')
-order by v.grade, v.score_total desc nulls last, v.created_at;
+  and not exists (select 1 from public.suppression su where su.web_domain = v.web_domain)
+order by v.grade, v.total desc nulls last, v.created_at;
 
--- Contract alias (A.12): older code may still read v_today_queue.
-create or replace view public.v_today_queue with (security_invoker = true) as
-select * from public.v_today;
-
--- Follow-ups and next steps due today or earlier (open leads only).
+-- Day 3 and day 7 follow-ups due today or earlier (Step 15 Today page).
+-- Only leads still at 'contacted' (no reply yet). Day 7 waits until day 3 was sent.
 create or replace view public.v_followups_due with (security_invoker = true) as
-select v.*
+select v.id as lead_id, v.name as company, v.segment_id, v.grade, v.contact_name, v.phone_e164,
+       f.which, f.followup_text, f.due_on
 from public.v_leads_caller v
-where v.due_at <= (now() at time zone 'Asia/Kolkata')::date
-  and v.stage not in ('won','retainer','lost','not_now','not_a_fit','wrong_contact')
-  and (v.skipped_until is null or v.skipped_until < now())
-order by v.due_at, v.score_total desc nulls last;
+cross join lateral (values
+    ('d3', v.followup_d3, v.wa_at + 3, v.d3_at is null),
+    ('d7', v.followup_d7, greatest(v.wa_at + 7, v.d3_at + 3), v.d3_at is not null and v.d7_at is null)
+  ) as f(which, followup_text, due_on, is_open)
+where v.stage = 'contacted'
+  and v.wa_at is not null
+  and f.is_open
+  and f.due_on <= (now() at time zone 'Asia/Kolkata')::date
+  and (v.skipped_until is null or v.skipped_until <= now())
+order by f.due_on, v.grade, v.total desc nulls last;
 
--- Funnel by segment, pitch mode, test group and grade (Insights page, weekly report).
+-- One row per lead with the furthest stage it ever reached (Step 15 Insights).
+-- History comes from stage_change activities, so a lead that later closed still counts.
 create or replace view public.v_funnel with (security_invoker = true) as
-select l.segment_id, s.domain, s.country, l.pitch_mode, l.test_group, l.angle, l.grade,
-  count(*)                                                                         as leads,
-  count(*) filter (where l.stage <> 'new')                                          as contacted,
-  count(*) filter (where l.stage in ('talking','discovery_booked','discovery_done',
-                                     'proposal_sent','won','retainer'))              as replied,
-  count(*) filter (where l.stage in ('discovery_booked','discovery_done',
-                                     'proposal_sent','won','retainer'))              as meetings,
-  count(*) filter (where l.stage in ('proposal_sent','won','retainer'))              as proposals,
-  count(*) filter (where l.stage in ('won','retainer'))                              as won,
-  count(*) filter (where l.stage = 'wrong_contact')                                 as wrong_contact
+with ranks(stage, rnk) as (
+  values ('new', 0), ('contacted', 1), ('talking', 2), ('discovery_booked', 3),
+         ('discovery_done', 3), ('proposal_sent', 4), ('won', 5), ('retainer', 5)
+),
+reached as (
+  select l.id as lead_id,
+         greatest(coalesce(max(r_now.rnk), 0), coalesce(max(r_hist.rnk), 0)) as max_rnk
+  from public.leads l
+  left join ranks r_now on r_now.stage = l.stage
+  left join public.activities a on a.lead_id = l.id and a.type = 'stage_change'
+  left join ranks r_hist on r_hist.stage = a.payload ->> 'to'
+  group by l.id
+)
+select l.id as lead_id, l.segment_id, b.country, l.pitch_mode, l.angle, l.test_group, l.grade,
+       ts.type as top_signal_type,
+       (l.created_at at time zone 'Asia/Kolkata')::date as created_on,
+       (r.max_rnk >= 1 or l.wa_at is not null) as reached_contacted,
+       r.max_rnk >= 2 as reached_talking,
+       r.max_rnk >= 3 as reached_discovery,
+       r.max_rnk >= 4 as reached_proposal,
+       r.max_rnk >= 5 as reached_won
 from public.leads l
-join public.segments s on s.id = l.segment_id
-group by 1, 2, 3, 4, 5, 6, 7;
+join public.businesses b on b.id = l.business_id
+join reached r on r.lead_id = l.id
+left join public.v_top_signal ts on ts.business_id = l.business_id;
 
 -- This week's numbers (week starts Monday, IST). No money here.
 create or replace view public.v_kpis_week with (security_invoker = true) as
@@ -3027,13 +3071,13 @@ select
   count(*) filter (where l.stage = 'new')                                           as new_waiting
 from public.leads l cross join b;
 
--- Daily AI and API spend in IST days.
+-- Daily AI and API spend in IST days. Same columns as Step 19.4.
 create or replace view public.v_costs_daily with (security_invoker = true) as
-select (c.at at time zone 'Asia/Kolkata')::date as day, c.provider, c.task, c.model,
-       sum(c.calls) as calls, sum(c.input_tokens) as input_tokens, sum(c.output_tokens) as output_tokens,
-       round(sum(c.usd), 4) as usd, round(sum(c.inr), 2) as inr
-from public.costs c
-group by 1, 2, 3, 4;
+select (at at time zone 'Asia/Kolkata')::date as day, provider, task,
+       sum(calls) as calls, sum(input_tokens) as input_tokens, sum(output_tokens) as output_tokens,
+       sum(usd)::numeric(12,4) as usd, sum(inr)::numeric(12,2) as inr
+from public.costs
+group by 1, 2, 3;
 
 -- Source health with a computed status for the Engine page.
 create or replace view public.v_source_health with (security_invoker = true) as
@@ -3047,84 +3091,78 @@ select h.*,
   end as health
 from public.source_health h;
 
--- Spend today in INR (used by the budget guard, Step 19).
-create or replace function public.spend_today_inr() returns numeric
-language sql stable as $$
-  select coalesce(sum(inr), 0)
-  from public.costs
-  where (at at time zone 'Asia/Kolkata')::date = (now() at time zone 'Asia/Kolkata')::date
-$$;
-
--- Database size in MB (used by `nlead health`, 2.13).
+-- Database size in MB (`nlead health` and the Engine page, 2.13).
 create or replace function public.db_size_mb() returns numeric
 language sql stable security definer set search_path = public as $$
   select round(pg_database_size(current_database()) / 1024.0 / 1024.0, 1)
 $$;
 ```
 
-The pruning function `prune_data()` (2.12.2) is also appended to the end of `0002_views.sql`.
-
 ---
 
-## 2.8 Migration 0003: Row Level Security, grants, storage and RPCs
+## 2.8 Migration 0003: Row Level Security, grants and storage
 
 ### 2.8.1 Access matrix
 | Data | admin (founder) | caller (Aditya) | viewer | engine (service role) |
 |---|---|---|---|---|
-| Leads (no money) via `v_leads_caller`, `v_today`, `v_followups_due` | read, edit allowed columns | read, edit allowed columns | read | all |
-| `deal_value_inr` | read via `v_leads_admin`; write via admin server action (service role) | no | no | all |
-| Businesses, contacts, signals, facts, scores, `v_verified_facts` | read | read | read | all |
-| Pages (raw text), source records | read | no | no | all |
+| Leads without money: `v_leads_caller`, `v_today`, `v_followups_due`, `v_funnel`, `v_kpis_week` | read; edit allowed columns | read; edit allowed columns | read | all |
+| `deal_value_inr` | read via `v_leads_admin`; write via admin server action | no | no | all |
+| Businesses, contacts, signals, facts, scores, `v_verified_facts`, `v_top_signal` | read | read | read | all |
+| Contacts `do_not_contact` (Wrong contact, Do not contact) | edit | edit | no | all |
+| Manual `ads_running` signal | add | add | no | all |
+| Pages: titles and links only (no text) | read | read | read | all |
+| Source records | read | no | no | all |
 | Activities | read, add | read, add | read | all |
 | Feedback | read, add own | read, add own | read, add own | all |
 | Suppression | read, add, delete | read, add | no | all |
 | Settings | read, edit | no | no | all |
 | Segments | read, edit | read | read | all |
-| Runs, costs, batches, source health | read (edit source kill switch) | no | no | all |
-| Golden labels, custom queries, inbox | read, add | no | no | all |
-| Saved views | own + shared | own + shared | own + shared | all |
-| `proposals` storage bucket | read, upload, delete | read, upload | no | all |
-| Sheet snapshots | no | no | no | all |
+| Runs, costs, batches, source health | read (plus source on/off) | no | no | all |
+| Golden labels, custom queries, inbox | read, add, edit | no | no | all |
+| Saved views | own and shared | own and shared | own and shared | all |
+| `proposals` bucket | read, upload, delete | read, upload | no | all |
+| `backups` bucket, sheet snapshots, AI cache and reservations | no | no | no | all |
 
 ### 2.8.2 The migration
 Create `supabase/migrations/0003_rls.sql`:
 
 ```sql
--- 0003_rls.sql : Row Level Security, column grants, storage policies and RPCs
+-- 0003_rls.sql : Row Level Security, grants and storage
 
--- 1. Enable RLS everywhere ------------------------------------------------
+-- 1. RLS on every table -------------------------------------------------------
 do $$
 declare t text;
 begin
   foreach t in array array[
-    'settings','segments','businesses','source_records','signals','pages','facts',
-    'contacts','scores','profiles','leads','activities','feedback','suppression',
-    'runs','costs','llm_batches','source_health','sheet_snapshots','golden_labels',
-    'custom_queries','inbox_posts','saved_views']
+    'settings','segments','businesses','source_records','signals','pages','facts','contacts',
+    'scores','profiles','leads','activities','feedback','suppression','runs','costs',
+    'llm_batches','llm_batch_reservations','llm_cache','source_health','sheet_snapshots',
+    'golden_labels','custom_queries','inbox_posts','saved_views']
   loop
     execute format('alter table public.%I enable row level security', t);
   end loop;
 end $$;
 
--- 2. Nothing for anonymous visitors ---------------------------------------
-revoke all on all tables in schema public from anon;
+-- 2. Nothing for anonymous visitors; nothing new for anyone by default ---------
+revoke all on all tables    in schema public from anon;
+revoke all on all sequences in schema public from anon;
+alter default privileges for role postgres in schema public revoke all on tables    from anon, authenticated;
+alter default privileges for role postgres in schema public revoke all on sequences from anon, authenticated;
 
--- 3. Policies --------------------------------------------------------------
--- profiles
+-- 3. Policies -------------------------------------------------------------------
+-- profiles: own row; admins see all. Roles change only through the admin client (Step 15).
 create policy profiles_select on public.profiles for select to authenticated
   using (user_id = auth.uid() or public.auth_role() = 'admin');
 create policy profiles_update_self on public.profiles for update to authenticated
   using (user_id = auth.uid()) with check (user_id = auth.uid());
-revoke update on public.profiles from authenticated;
-grant update (full_name) on public.profiles to authenticated;   -- role changes go through set_user_role()
+revoke insert, update, delete on public.profiles from authenticated;
+grant update (full_name) on public.profiles to authenticated;
 
--- settings
+-- settings and segments
 create policy settings_admin_select on public.settings for select to authenticated
   using (public.auth_role() = 'admin');
 create policy settings_admin_update on public.settings for update to authenticated
   using (public.auth_role() = 'admin') with check (public.auth_role() = 'admin');
-
--- segments
 create policy segments_read on public.segments for select to authenticated
   using (public.auth_role() in ('admin','caller','viewer'));
 create policy segments_admin_update on public.segments for update to authenticated
@@ -3143,16 +3181,31 @@ create policy scores_read on public.scores for select to authenticated
   using (public.auth_role() in ('admin','caller','viewer'));
 create policy source_records_admin on public.source_records for select to authenticated
   using (public.auth_role() = 'admin');
-create policy pages_admin on public.pages for select to authenticated
-  using (public.auth_role() = 'admin');
 
--- leads: rows readable by app roles, editable by admin and caller
+-- pages: titles and links for everyone in the app; the raw text stays with the engine
+create policy pages_read on public.pages for select to authenticated
+  using (public.auth_role() in ('admin','caller','viewer'));
+revoke select on public.pages from authenticated;
+grant select (id, business_id, url, fetched_at, http_status, render_mode, title, robots_allowed)
+  on public.pages to authenticated;
+
+-- contacts: Wrong contact and Do not contact set one flag (Step 15)
+create policy contacts_flag on public.contacts for update to authenticated
+  using (public.auth_role() in ('admin','caller'))
+  with check (public.auth_role() in ('admin','caller'));
+revoke update on public.contacts from authenticated;
+grant update (do_not_contact, updated_at) on public.contacts to authenticated;
+
+-- signals: ads_running is entered by hand on the lead page (Step 7.5.6)
+create policy signals_manual_ads on public.signals for insert to authenticated
+  with check (public.auth_role() in ('admin','caller') and type = 'ads_running' and source = 'manual');
+
+-- leads: rows readable by app roles, editable by admin and caller; money hidden by column grants
 create policy leads_read on public.leads for select to authenticated
   using (public.auth_role() in ('admin','caller','viewer'));
 create policy leads_edit on public.leads for update to authenticated
   using (public.auth_role() in ('admin','caller'))
   with check (public.auth_role() in ('admin','caller'));
--- Column grants: hide money from every app user, allow only safe edits.
 revoke select, insert, update, delete on public.leads from authenticated;
 grant select (id, business_id, segment_id, score_id, grade, pitch_mode, test_group, angle, channel,
               message, message_alt, email_subject, email_body, followup_d3, followup_d7,
@@ -3167,11 +3220,11 @@ grant update (stage, wa_at, call_at, d3_at, d7_at, meeting_at, next_step, due_at
 -- deal_value_inr: no grant at all. Admin server actions write it with the service role (Step 15).
 
 -- views
-revoke all on public.v_pipeline from authenticated, anon;              -- has money; engine only
-grant select on public.v_leads_caller, public.v_leads_admin, public.v_today, public.v_today_queue,
-                public.v_followups_due, public.v_funnel, public.v_kpis_week, public.v_primary_contact,
+revoke all on public.v_pipeline from authenticated;            -- has money; engine only
+grant select on public.v_leads_caller, public.v_leads_admin, public.v_today, public.v_followups_due,
+                public.v_funnel, public.v_kpis_week, public.v_primary_contact, public.v_top_signal,
                 public.v_verified_facts, public.v_costs_daily, public.v_source_health
-  to authenticated;   -- base-table RLS keeps costs and source health admin-only
+  to authenticated;   -- base-table RLS still applies: costs and source health stay admin-only
 
 -- activities
 create policy activities_read on public.activities for select to authenticated
@@ -3182,7 +3235,7 @@ create policy activities_insert on public.activities for insert to authenticated
 -- feedback
 create policy feedback_read on public.feedback for select to authenticated
   using (public.auth_role() in ('admin','caller','viewer'));
-create policy feedback_write on public.feedback for insert to authenticated
+create policy feedback_insert on public.feedback for insert to authenticated
   with check (user_id = auth.uid() and public.auth_role() in ('admin','caller','viewer'));
 create policy feedback_update_own on public.feedback for update to authenticated
   using (user_id = auth.uid()) with check (user_id = auth.uid());
@@ -3195,35 +3248,40 @@ create policy suppression_insert on public.suppression for insert to authenticat
 create policy suppression_delete on public.suppression for delete to authenticated
   using (public.auth_role() = 'admin');
 
--- operations: admin read only (plus the source kill switch)
-create policy runs_admin on public.runs for select to authenticated using (public.auth_role() = 'admin');
-create policy costs_admin on public.costs for select to authenticated using (public.auth_role() = 'admin');
+-- operations: admin read; admin can switch a source on or off
+create policy runs_admin    on public.runs        for select to authenticated using (public.auth_role() = 'admin');
+create policy costs_admin   on public.costs       for select to authenticated using (public.auth_role() = 'admin');
 create policy batches_admin on public.llm_batches for select to authenticated using (public.auth_role() = 'admin');
-create policy health_admin on public.source_health for select to authenticated using (public.auth_role() = 'admin');
+create policy health_admin  on public.source_health for select to authenticated using (public.auth_role() = 'admin');
 create policy health_admin_update on public.source_health for update to authenticated
   using (public.auth_role() = 'admin') with check (public.auth_role() = 'admin');
 
 -- golden labels, custom queries, inbox: admin
-create policy golden_admin_all on public.golden_labels for all to authenticated
+create policy golden_admin on public.golden_labels for all to authenticated
   using (public.auth_role() = 'admin') with check (public.auth_role() = 'admin');
 create policy custom_queries_admin on public.custom_queries for all to authenticated
   using (public.auth_role() = 'admin') with check (public.auth_role() = 'admin');
 create policy inbox_admin on public.inbox_posts for all to authenticated
   using (public.auth_role() = 'admin') with check (public.auth_role() = 'admin');
 
--- saved views: own and shared
+-- saved views: your own, plus any marked shared
 create policy saved_views_read on public.saved_views for select to authenticated
   using (user_id = auth.uid() or shared);
 create policy saved_views_own on public.saved_views for all to authenticated
   using (user_id = auth.uid()) with check (user_id = auth.uid());
 
--- sheet_snapshots: no policies at all, so app users get nothing (engine bypasses RLS).
+-- No policies at all (engine only): sheet_snapshots, llm_cache, llm_batch_reservations.
 
--- 4. Storage: private 'proposals' bucket ------------------------------------
-insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('proposals', 'proposals', false, 20971520,
-        array['application/pdf','image/png','image/jpeg',
-              'application/vnd.openxmlformats-officedocument.wordprocessingml.document'])
+-- 4. Functions ------------------------------------------------------------------
+revoke all on function public.db_size_mb() from public, anon;
+grant execute on function public.db_size_mb() to authenticated, service_role;
+
+-- 5. Storage: private buckets -----------------------------------------------------
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values
+  ('proposals', 'proposals', false, 20971520,          -- 20 MB
+   array['application/pdf','image/png','image/jpeg',
+         'application/vnd.openxmlformats-officedocument.wordprocessingml.document']),
+  ('backups', 'backups', false, 52428800, null)        -- 50 MB, the free-plan upload limit (verify at build)
 on conflict (id) do nothing;
 
 create policy proposals_read on storage.objects for select to authenticated
@@ -3232,46 +3290,21 @@ create policy proposals_upload on storage.objects for insert to authenticated
   with check (bucket_id = 'proposals' and public.auth_role() in ('admin','caller'));
 create policy proposals_delete on storage.objects for delete to authenticated
   using (bucket_id = 'proposals' and public.auth_role() = 'admin');
-
--- 5. Optional helper RPCs (security definer, each checks the role itself) ---
--- The web app may use these or do the same work in server actions (Step 15).
-create or replace function public.mark_wrong_contact(p_lead_id uuid, p_reason text default 'wrong_contact')
-returns void language plpgsql security definer set search_path = public as $$
-declare v_phone text;
-begin
-  if public.auth_role() not in ('admin','caller') then raise exception 'not allowed'; end if;
-  select pc.phone_e164 into v_phone
-  from public.leads l join public.v_primary_contact pc on pc.business_id = l.business_id
-  where l.id = p_lead_id;
-  update public.leads set stage = 'wrong_contact' where id = p_lead_id;
-  if v_phone is not null then
-    update public.contacts set do_not_contact = true where phone_e164 = v_phone;
-    insert into public.suppression (phone_e164, reason, added_by)
-      values (v_phone, coalesce(p_reason, 'wrong_contact'), auth.uid())
-      on conflict do nothing;
-  end if;
-  insert into public.activities (lead_id, user_id, source, type, payload)
-  values (p_lead_id, auth.uid(), 'app', 'wrong_contact', jsonb_build_object('phone', v_phone, 'reason', p_reason));
-end $$;
-
-create or replace function public.set_user_role(p_user_id uuid, p_role text)
-returns void language plpgsql security definer set search_path = public as $$
-begin
-  if public.auth_role() <> 'admin' then raise exception 'admin only'; end if;
-  if p_role not in ('admin','caller','viewer') then raise exception 'bad role'; end if;
-  update public.profiles set role = p_role where user_id = p_user_id;
-end $$;
-
-revoke all on function public.mark_wrong_contact(uuid, text), public.set_user_role(uuid, text) from public, anon;
-grant execute on function public.mark_wrong_contact(uuid, text), public.set_user_role(uuid, text) to authenticated;
+-- 'backups' has no policies: only the service role (nlead backup, Step 14) can use it.
 ```
 
 ### 2.8.3 Why money is protected this way
-- Every app user connects as the same Postgres role, `authenticated`. Column grants apply to that role, so not granting `deal_value_inr` hides it from **everyone in the app**, including admins.
-- Admins read money through `v_leads_admin`. That view runs with its owner's rights (so it can see the column) and returns rows only when `auth_role() = 'admin'`. The Supabase linter flags it as a "security definer view"; that is intended and documented here.
+- Every app user connects as the same Postgres role, `authenticated`. Column grants apply to that role, so not granting `deal_value_inr` hides it from **everyone in the app**, admins included.
+- Admins read money through `v_leads_admin`. That view runs with its owner's rights (so it can see the column) and returns rows only when `auth_role() = 'admin'`. The Supabase linter flags it as a "security definer view"; that is intended.
 - Writes to `deal_value_inr` happen only in admin server actions that check the role and then use the service role key on the server (Step 15).
-- The engine connects as `postgres` (service role), which bypasses RLS and grants. That is how the master sheet gets deal values.
-- **Never** put `SUPABASE_SERVICE_ROLE_KEY` in a `NEXT_PUBLIC_` variable or in browser code. It bypasses all of this.
+- The engine connects as `postgres`, which bypasses RLS and grants. That is how the master sheet gets deal values.
+
+### 2.8.4 Rules for every later migration
+Section 2 of 0003 removes default access for anything created later. So when a later step adds a database object:
+1. **Table:** enable RLS in the same migration. If the app must read it, add a policy and `grant select on public.<table> to authenticated;`.
+2. **View:** always write `with (security_invoker = true)`, including on `create or replace view`. Postgres replaces a view's options on `create or replace`, so leaving the option out silently turns it off. Grant `select` to `authenticated` only if the app reads it.
+3. **Money or raw page text in a view:** engine only. Never grant it to `authenticated`.
+4. **Function the app calls:** `revoke all ... from public, anon;` then grant `execute` to `authenticated`.
 
 ---
 
@@ -3283,6 +3316,7 @@ Create `supabase/migrations/0004_seed.sql`:
 -- 0004_seed.sql : defaults. Safe to re-run (only inserts missing rows).
 
 insert into public.settings (key, value) values
+  -- A.12.1
   ('daily_cap_inr',                  '750'::jsonb),
   ('alert_pct',                      '80'::jsonb),
   ('research_per_day',               '300'::jsonb),
@@ -3290,81 +3324,128 @@ insert into public.settings (key, value) values
   ('tier',                           '"balanced"'::jsonb),
   ('sheet_sync_enabled',             'true'::jsonb),
   ('providers_enabled',              '{"gemini": true, "openai": false}'::jsonb),
-  ('pages_keep_days',                '{"default": 14, "qualified": 30}'::jsonb),
-  ('segment_weights',                '{"clinics-in": 1.0, "realestate-in": 1.0, "education-in": 1.0,
-                                       "clinics-ae": 1.0, "realestate-ae": 1.0, "education-ae": 1.0}'::jsonb),
-  ('careers_watch.pages_per_day',    '300'::jsonb),
-  ('grounded_search.per_day',        '160'::jsonb),
-  ('gdelt.queries_per_day',          '50'::jsonb),
-  ('ai.classify_per_day',            '300'::jsonb),
-  ('research.browser_pages_per_run', '120'::jsonb),
-  ('practo.pages_per_day',           '200'::jsonb),
-  ('sources_enabled',                '{"overture": true, "places": true, "art_registry": true, "practo": true,
-                                       "apna": true, "careers_watch": true, "gdelt": true, "grounded_search": true,
-                                       "osm": true, "adzuna": false}'::jsonb),
+  ('sources_enabled',                '{"overture": true, "places": true, "art_registry": true, "osm": true,
+                                       "apna": true, "grounded_search": true, "gdelt": true,
+                                       "careers_watch": true, "adzuna": false, "practo": false}'::jsonb),
   ('segments_enabled',               '{"clinics-in": true, "realestate-in": true, "education-in": true,
-                                       "clinics-ae": true, "realestate-ae": true, "education-ae": true}'::jsonb)
+                                       "clinics-ae": true, "realestate-ae": true, "education-ae": true}'::jsonb),
+  -- per-source and per-task daily caps (Steps 5, 7, 9)
+  ('careers_watch.pages_per_day',    '500'::jsonb),
+  ('grounded_search.per_day',        '160'::jsonb),
+  ('gdelt.queries_per_day',          '30'::jsonb),
+  ('ai.classify_per_day',            '1500'::jsonb),
+  ('research.browser_pages_per_run', '40'::jsonb),
+  ('practo.pages_per_day',           '150'::jsonb),
+  ('places_details_cap_in',          '230'::jsonb),
+  ('places_details_cap_global',      '30'::jsonb),
+  -- queue priority bonus per segment (Step 8.7; Step 16 may change it)
+  ('segment_weights',                '{"clinics-in": 0, "realestate-in": 0, "education-in": 0,
+                                       "clinics-ae": 0, "realestate-ae": 0, "education-ae": 0}'::jsonb),
+  -- state kept by later steps (seeded so plain updates work)
+  ('overture_release',               'null'::jsonb),
+  ('sheet_state',                    '{"master": {"state": "ok"}, "caller": {"state": "ok"}}'::jsonb),
+  ('budget_alert_day',               'null'::jsonb),
+  ('score_weights',                  '{}'::jsonb),
+  ('score_weights_frozen',           'false'::jsonb)
 on conflict (key) do nothing;
 
 insert into public.segments (id, domain, country, display_name, enabled, daily_quota) values
-  ('clinics-in',    'clinics',    'in', 'Clinics, India',      true, 80),
-  ('realestate-in', 'realestate', 'in', 'Real estate, India',  true, 60),
-  ('education-in',  'education',  'in', 'Education, India',    true, 50),
-  ('clinics-ae',    'clinics',    'ae', 'Clinics, UAE',        true, 40),
-  ('realestate-ae', 'realestate', 'ae', 'Real estate, UAE',    true, 40),
-  ('education-ae',  'education',  'ae', 'Education, UAE',      true, 30)
+  ('clinics-in',    'clinics',    'in', 'Clinics, India',     true, 80),
+  ('realestate-in', 'realestate', 'in', 'Real estate, India', true, 60),
+  ('education-in',  'education',  'in', 'Education, India',   true, 50),
+  ('clinics-ae',    'clinics',    'ae', 'Clinics, UAE',       true, 40),
+  ('realestate-ae', 'realestate', 'ae', 'Real estate, UAE',   true, 40),
+  ('education-ae',  'education',  'ae', 'Education, UAE',     true, 30)
 on conflict (id) do nothing;
--- Quotas add up to 300 = research_per_day. The full YAML config is synced into segments.config by the engine (Step 3.2).
+-- Quotas add up to 300 = research_per_day. The engine copies each YAML into segments.config (Step 3.2).
 
 insert into public.source_health (source, enabled) values
-  ('overture', true), ('places', true), ('art_registry', true), ('practo', true),
-  ('apna', true), ('careers_watch', true), ('gdelt', true), ('grounded_search', true),
-  ('osm', true), ('adzuna', false)
+  ('overture', true), ('places', true), ('art_registry', true), ('osm', true), ('apna', true),
+  ('grounded_search', true), ('gdelt', true), ('careers_watch', true), ('adzuna', false),
+  ('practo', false), ('llm:gemini', true), ('llm:openai', false)
 on conflict (source) do nothing;
 ```
 
-`providers_enabled` starts with OpenAI off. Turn it on in the app's Engine page (or with an `update public.settings` statement) once the OpenAI key and billing are confirmed in Step 0.
+Two switches start off on purpose:
+- OpenAI (`providers_enabled.openai`, `llm:openai`): on only after the founder adds a working OpenAI key (Appendix C).
+- Practo (`sources_enabled.practo`): on only after the founder reads Practo's terms (Step 5).
 
-### 2.9.1 Create the first users (by hand, not in a migration)
+### 2.9.1 Create the first user (by hand, never in a migration)
 Emails are personal data, so they never go into migrations.
-1. Supabase dashboard > **Authentication > Users > Add user > Create new user**.
-2. Founder: email + a strong password, tick **Auto Confirm User**.
-3. Run in the **SQL editor** (replace the email):
+1. Dev project, **Authentication > Users > Add user > Create new user**: the founder's email, a strong password, tick **Auto Confirm User**.
+2. In the dev **SQL editor** (replace the email):
    ```sql
    update public.profiles set role = 'admin', full_name = 'Founder'
    where user_id = (select id from auth.users where email = 'FOUNDER_EMAIL_HERE');
    ```
-4. Aditya: add the user the same way, then:
-   ```sql
-   update public.profiles set role = 'caller', full_name = 'Aditya'
-   where user_id = (select id from auth.users where email = 'ADITYA_EMAIL_HERE');
-   ```
-5. Later users are invited from the app's Settings page (Step 15).
+3. Step 21 does the same in prod for the founder (`admin`) and Aditya (`caller`). Later users are invited from the app (Step 15).
 
 ---
 
-## 2.10 RLS tests
+## 2.10 Tests
 
-### 2.10.1 Test users in dev only
-In the **dev** project create three users: `test-admin@example.com`, `test-caller@example.com`, `test-viewer@example.com`. Set their roles in the SQL editor as in 2.9.1 (`admin`, `caller`, `viewer`). Put their user ids in `engine/.env.dev` as `RLS_ADMIN_ID`, `RLS_CALLER_ID`, `RLS_VIEWER_ID`, plus `DATABASE_URL_DEV` (the dev session pooler string). These four are test-only names, not part of the A.12.7 runtime contract.
+### 2.10.1 Test users (dev only)
+In the **dev** project create three users the same way as 2.9.1: `rls-admin@test.local`, `rls-caller@test.local`, `rls-viewer@test.local`, with roles `admin`, `caller` and `viewer`. Put their user ids in `engine/.env.dev` as `RLS_ADMIN_ID`, `RLS_CALLER_ID`, `RLS_VIEWER_ID`, and the dev session pooler string as `DATABASE_URL_DEV`. These four names are test-only, not part of A.12.7.
 
-### 2.10.2 SQL test file
-`supabase/tests/rls_test.sql` impersonates each user inside a transaction and raises an error if a rule is broken. Run it against **dev only**. It needs at least one lead in dev (any test lead).
+### 2.10.2 `supabase/tests/rls_test.sql`
+The test adds one business and one lead, runs every check, then **rolls everything back**, so dev stays clean. Any broken rule raises an error.
 
 ```sql
--- rls_test.sql
--- Run: psql "$DATABASE_URL_DEV" -v ON_ERROR_STOP=1 -v caller=<uuid> -v viewer=<uuid> -v admin=<uuid> -f supabase/tests/rls_test.sql
+-- rls_test.sql : run against DEV only
+-- psql "$DATABASE_URL_DEV" -v ON_ERROR_STOP=1 -v admin=<uuid> -v caller=<uuid> -v viewer=<uuid> -f supabase/tests/rls_test.sql
 begin;
-set local role authenticated;
 
--- Caller cannot see money ----------------------------------------------------
+-- Fixture (as the engine) -------------------------------------------------------
+insert into public.businesses (id, segment_id, name, norm_name, country, city, status)
+values ('00000000-0000-4000-8000-000000000001', 'clinics-in', 'Test Skin Clinic',
+        'test skin clinic', 'in', 'Pune', 'qualified');
+insert into public.leads (id, business_id, segment_id, grade, pitch_mode, deal_value_inr)
+values ('00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000001',
+        'clinics-in', 'A', 'fit_only', 50000);
+
+-- Triggers ------------------------------------------------------------------------
+update public.leads set stage = 'contacted' where id = '00000000-0000-4000-8000-000000000002';
+do $$
+begin
+  if (select wa_at from public.leads where id = '00000000-0000-4000-8000-000000000002') is null then
+    raise exception 'FAIL: contacted without a date did not fill wa_at';
+  end if;
+  if (select count(*) from public.activities
+      where lead_id = '00000000-0000-4000-8000-000000000002'
+        and type in ('lead_created','stage_change')) <> 2 then
+    raise exception 'FAIL: triggers did not log lead_created and stage_change';
+  end if;
+  begin
+    insert into public.leads (business_id, segment_id, grade, pitch_mode)
+    values ('00000000-0000-4000-8000-000000000001', 'clinics-in', 'B', 'fit_only');
+    raise exception 'FAIL: a second open lead for one business was allowed';
+  exception when unique_violation then null;   -- expected
+  end;
+end $$;
+
+-- Anonymous visitors get nothing ----------------------------------------------------
+set local role anon;
+do $$
+begin
+  perform 1 from public.v_today limit 1;
+  raise exception 'FAIL: anon can read v_today';
+exception when insufficient_privilege then null;   -- expected
+end $$;
+
+-- Caller: no money, no costs, can read leads -----------------------------------------
+set local role authenticated;
 select set_config('request.jwt.claims', json_build_object('sub', :'caller', 'role', 'authenticated')::text, true);
 do $$
 begin
   begin
     perform deal_value_inr from public.leads limit 1;
     raise exception 'FAIL: caller can read leads.deal_value_inr';
-  exception when insufficient_privilege then null;  -- expected
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform 1 from public.v_pipeline limit 1;
+    raise exception 'FAIL: caller can read v_pipeline';
+  exception when insufficient_privilege then null;
   end;
   if exists (select 1 from public.v_leads_admin) then
     raise exception 'FAIL: caller got rows from v_leads_admin';
@@ -3372,47 +3453,53 @@ begin
   if exists (select 1 from public.costs) then
     raise exception 'FAIL: caller can read costs';
   end if;
-  if not exists (select 1 from public.v_leads_caller) then
-    raise exception 'FAIL: caller cannot read leads at all';
+  if not exists (select 1 from public.v_leads_caller where id = '00000000-0000-4000-8000-000000000002') then
+    raise exception 'FAIL: caller cannot read leads';
   end if;
 end $$;
 
--- Viewer cannot edit a lead --------------------------------------------------
+-- Viewer: cannot edit a lead --------------------------------------------------------
 select set_config('request.jwt.claims', json_build_object('sub', :'viewer', 'role', 'authenticated')::text, true);
 do $$
 declare n int;
 begin
-  update public.leads set notes = 'x' where id = (select lead_id from public.v_leads_caller limit 1);
+  update public.leads set notes = 'x' where id = '00000000-0000-4000-8000-000000000002';
   get diagnostics n = row_count;
   if n > 0 then raise exception 'FAIL: viewer updated a lead'; end if;
 end $$;
 
--- Admin sees money through v_leads_admin -------------------------------------
+-- Admin: sees money through v_leads_admin ----------------------------------------------
 select set_config('request.jwt.claims', json_build_object('sub', :'admin', 'role', 'authenticated')::text, true);
 do $$
 begin
-  if not exists (select 1 from public.v_leads_admin) then
-    raise exception 'FAIL: admin got no rows from v_leads_admin';
+  if (select deal_value_inr from public.v_leads_admin
+      where id = '00000000-0000-4000-8000-000000000002') is distinct from 50000 then
+    raise exception 'FAIL: admin cannot read money through v_leads_admin';
   end if;
 end $$;
 
 rollback;
 ```
 
-### 2.10.3 Python wrapper
-`engine/tests/test_rls.py` runs the SQL file against `DATABASE_URL_DEV` and skips when that variable is missing, so CI without dev access still passes:
+### 2.10.3 `engine/tests/test_rls.py`
+Runs the SQL file against dev. It skips when `DATABASE_URL_DEV` is missing, so CI without dev access still passes.
 
 ```python
-import os, pathlib, subprocess, pytest
+import os
+import pathlib
+import subprocess
+
+import pytest
 
 SQL = pathlib.Path(__file__).parents[2] / "supabase/tests/rls_test.sql"
+
 
 @pytest.mark.skipif(not os.getenv("DATABASE_URL_DEV"), reason="needs the dev database")
 def test_rls_rules():
     env = os.environ
     cmd = ["psql", env["DATABASE_URL_DEV"], "-v", "ON_ERROR_STOP=1",
-           "-v", f"caller={env['RLS_CALLER_ID']}", "-v", f"viewer={env['RLS_VIEWER_ID']}",
-           "-v", f"admin={env['RLS_ADMIN_ID']}", "-f", str(SQL)]
+           "-v", f"admin={env['RLS_ADMIN_ID']}", "-v", f"caller={env['RLS_CALLER_ID']}",
+           "-v", f"viewer={env['RLS_VIEWER_ID']}", "-f", str(SQL)]
     out = subprocess.run(cmd, capture_output=True, text=True)
     assert out.returncode == 0, out.stderr
 ```
@@ -3421,174 +3508,95 @@ def test_rls_rules():
 
 ## 2.11 Migration workflow
 
-### 2.11.1 First time
+### 2.11.1 Push to dev
+The CLI is already linked to dev (Step 1.6).
 ```
 $ cd nument-leads
-$ npx supabase@latest --version          # pin this version in README after the first run
-$ npx supabase login                     # founder logs in once in the browser
-$ npx supabase link --project-ref <DEV_REF>
-$ npx supabase db push --dry-run         # shows 0001 to 0004 will be applied
-$ npx supabase db push
-$ npx supabase gen types typescript --linked > web/src/lib/database.types.ts
+$ npx supabase@latest db push --dry-run    # lists 0001 to 0004
+$ npx supabase@latest db push
+$ cd engine && uv run pytest tests/test_rls.py -q
 ```
-Then link prod and push:
-```
-$ npx supabase link --project-ref <PROD_REF>
-$ npx supabase db push --dry-run
-$ npx supabase db push
-```
+Pin the CLI version that worked in the README. Prod is pushed in Step 21, never earlier.
 
 ### 2.11.2 Rules
-1. Migration files are named `NNNN_description.sql` with a 4-digit number. The CLI applies files in numeric order. Verify at build that your CLI version accepts the short prefix; if not, rename to the CLI's timestamp format before the first push and never rename again.
-2. **Never edit a migration that has been pushed.** Create the next number (`0005_add_x.sql`).
-3. Always push to **dev first**, run `nlead health --env dev` and the tests, then push to prod.
-4. Regenerate `web/src/lib/database.types.ts` after every schema change and commit it.
-5. `supabase/.temp/` (link state) is in `.gitignore`.
+1. Files are named `NNNN_description.sql` and applied in number order. Verify at build that your CLI version accepts 4-digit prefixes; if not, rename to its timestamp format **before** the first push and never rename again.
+2. Step 2 owns 0001 to 0004. Later steps add their own files (Step 13 sheet views, Step 16 learning tables, Step 19 cost views) and each takes **the next free number** on the day you build it. Two files must never share a number.
+3. **Never edit a pushed migration.** Add the next number instead.
+4. Dev first, run the tests, then prod (Step 21).
+5. After every schema change, regenerate the web types with the command in Step 15.2.4.
+6. Every new table and view follows 2.8.4.
 
 ---
 
-## 2.12 Data retention and pruning
+## 2.12 Retention
 
-### 2.12.1 Policy
-| Data | Keep | Why |
-|---|---|---|
-| `pages.text` for businesses not qualified | 14 days (`pages_keep_days.default`) | Enough to re-verify quotes. The original target was 90 days for rejected businesses, but at 300 businesses a day that does not fit the 500 MB free tier (2.13). Raise it only after moving to a bigger database plan |
-| `pages.text` for qualified businesses | 30 days (`pages_keep_days.qualified`) | Lets the app show evidence for a month |
-| `pages.text_hash`, `url`, `title` | Forever | Change detection and audit |
-| Facts and their quotes | Forever (see 2.13 for rejected businesses) | Small, they are the evidence |
-| `businesses.rating`, `review_count` (Places content) | 30 days | Google Places terms (A.4.4). A derived `extra.busy_band` (`"100+"`, `"300+"`, `"1000+"`) stays |
-| `source_records.payload` | 120 days, then slimmed to `{"slimmed": true}` | Only the key matters long term |
-| `costs`, `runs`, `activities` | Forever | Small, needed for reports |
-
-### 2.12.2 Pruning function
-Append to the end of `0002_views.sql`:
-
-```sql
-create or replace function public.prune_data() returns jsonb
-language plpgsql security definer set search_path = public as $$
-declare
-  v_keep jsonb := coalesce((select value from public.settings where key = 'pages_keep_days'),
-                           '{"default": 14, "qualified": 30}'::jsonb);
-  v_pages_default int; v_pages_qualified int; v_places int; v_sr int;
-begin
-  update public.pages p set text = null
-  where p.text is not null
-    and p.fetched_at < now() - make_interval(days => (v_keep ->> 'default')::int)
-    and not exists (select 1 from public.businesses b where b.id = p.business_id and b.status = 'qualified');
-  get diagnostics v_pages_default = row_count;
-
-  update public.pages p set text = null
-  where p.text is not null
-    and p.fetched_at < now() - make_interval(days => (v_keep ->> 'qualified')::int);
-  get diagnostics v_pages_qualified = row_count;
-
-  update public.businesses
-  set extra = extra || jsonb_build_object('busy_band',
-                 case when review_count >= 1000 then '1000+' when review_count >= 300 then '300+'
-                      when review_count >= 100 then '100+' else 'under_100' end),
-      rating = null, review_count = null, places_fetched_at = null
-  where places_fetched_at < now() - interval '30 days';
-  get diagnostics v_places = row_count;
-
-  update public.source_records set payload = '{"slimmed": true}'::jsonb
-  where fetched_at < now() - interval '120 days' and payload <> '{"slimmed": true}'::jsonb;
-  get diagnostics v_sr = row_count;
-
-  return jsonb_build_object('pages_default', v_pages_default, 'pages_qualified', v_pages_qualified,
-                            'places_cleared', v_places, 'source_records_slimmed', v_sr);
-end $$;
-revoke all on function public.prune_data() from public, anon, authenticated;
-```
-
-`nlead run morning` calls `select public.prune_data()` at the end and stores the result in `runs.stats`.
+Step 18.2.2 owns the retention table, and the monthly workflow runs `nlead health --prune` (Step 14). Step 2 only makes it cheap: `pages_fetched_idx`, `places_fetched_at` and the `costs` and `runs` time indexes are there for those deletes. One rule matters here because of the schema: Places content (`rating`, `review_count`) must be nulled after 30 days (A.4.4); the business row stays.
 
 ---
 
 ## 2.13 Size budget against the 500 MB free tier
 
-Estimates at full volume (300 researched per day). Postgres compresses large text about 2 to 3 times.
+`nlead health` prints `select public.db_size_mb()` every morning: a **warning at 300 MB** (decide) and an **alert at 400 MB** (act now).
 
-| Table | Rows | Average stored size | Steady size |
-|---|---|---|---|
-| `businesses` | 60,000 (wave 1 universe) | 1 KB | 60 MB |
-| `source_records` | 120,000 | 0.5 KB (slim payloads) | 60 MB |
-| `pages` with text (14 to 30 day window) | about 30,000 | 4 KB | 120 MB |
-| `pages` without text | grows about 54,000 a month | 0.3 KB | 16 MB a month |
-| `facts` | grows about 9,000 a day | 0.4 KB | about 108 MB a month if nothing is pruned |
-| `signals`, `contacts`, `scores`, `leads`, `activities` | | | under 50 MB in year one |
-| Indexes | | about 30% of data | |
+Estimate at full volume, 300 businesses researched a day. Assumptions: about 5 pages per business; about 3 KB stored per page after Postgres compression; about 20 facts per business at 0.5 KB each. **Measure real sizes after week 1** and redo this table.
 
-**Facts will dominate.** Rules to stay under 500 MB:
-1. Store facts only for businesses that pass the pre-filter (already the design).
-2. For businesses that end up `rejected`, keep at most 10 facts (the ones that explain the rejection) and delete the rest after 30 days. Add this as `0005_prune_facts.sql` once real sizes are known.
-3. `nlead health` prints `db_size_mb()` every morning. **Alert at 400 MB.**
-4. Check sizes by table:
-   ```sql
-   select relname, pg_size_pretty(pg_total_relation_size(relid)) as size
-   from pg_catalog.pg_statio_user_tables order by pg_total_relation_size(relid) desc;
-   ```
-5. If the database passes 450 MB, the founder decides: Supabase Pro (about $25 a month, 8 GB; verify at build) or shorter retention.
+| Data (retention from Step 18.2.2) | Volume | Stored size |
+|---|---|---|
+| `pages.text` of non-leads, 90 days | about 1,500 pages a day, 135,000 in the window | 250 to 400 MB |
+| `pages.text` of leads, 180 days | about 150 pages a day | 40 to 80 MB |
+| `facts`, kept while the business exists | about 6,000 a day | grows 60 to 100 MB a month |
+| `businesses` and `source_records` | about 60,000 and 120,000 rows | about 100 MB |
+| Everything else | | under 50 MB in year one |
+
+**What this means:** with the current retention, the free tier is likely full within 2 to 3 months at full volume. The founder picks one of two levers when the 300 MB warning appears:
+1. **Shorter text retention:** keep page text 30 days for businesses that did not become leads (verification runs within a day of fetching, Step 10, and facts keep the quotes), and delete facts of rejected businesses after 90 days except the ones that explain the rejection.
+2. **Supabase Pro:** about $25 a month for 8 GB (verify at build).
+
+Size by table:
+```sql
+select relname, pg_size_pretty(pg_total_relation_size(relid)) as size
+from pg_catalog.pg_statio_user_tables order by pg_total_relation_size(relid) desc;
+```
 
 ---
 
 ## 2.14 Backups
 
-The free plan has no downloadable backups or point-in-time restore (verify at build). We make our own.
-
-### 2.14.1 Weekly encrypted dump
-`.github/workflows/backup.yml` (full YAML in Step 14) runs every Sunday 03:30 IST in the GitHub environment `prod`:
-1. Install the Postgres client that **matches the server major version**. Check the version in the SQL editor with `select version();` and install `postgresql-client-<major>` on the runner.
-2. Dump:
-   ```
-   pg_dump "$DATABASE_URL" --format=custom --no-owner --no-privileges \
-     --schema=public --file=nument-leads-$(date +%F).dump
-   ```
-   Auth users are not dumped; in a disaster they are recreated by hand (2.14.2).
-3. Encrypt:
-   ```
-   gpg --batch --yes --symmetric --cipher-algo AES256 \
-     --passphrase "$BACKUP_PASSPHRASE" nument-leads-$(date +%F).dump
-   ```
-4. Upload `*.dump.gpg` as a workflow artifact with `retention-days: 90`. Delete the unencrypted file in the same step.
-
-### 2.14.2 Restore drill (do it once before go-live)
-1. Download the latest artifact from GitHub Actions.
-2. `gpg --batch --decrypt --passphrase "$BACKUP_PASSPHRASE" file.dump.gpg > file.dump`
-3. Restore into the **dev** project: `pg_restore --no-owner --no-privileges --clean --if-exists -d "$DATABASE_URL_DEV" file.dump`
-4. Recreate users in Auth and re-run the role updates from 2.9.1.
-5. Run `nlead health --env dev` and open the app against dev.
+The free plan has no downloadable backups or point-in-time recovery (verify at build), so we make our own:
+- **Workflow and command:** `.github/workflows/backup.yml` and `nlead backup` (Step 14.5.6): weekly, encrypted with `BACKUP_PASSPHRASE`, uploaded to the private `backups` bucket and kept as a workflow artifact.
+- **Bucket:** `backups` is created by 0003 with no policies, so only the service role can read or write it. Its 50 MB file limit matches the free-plan upload limit (verify at build). When a dump outgrows it, the workflow artifact is the copy that remains.
+- **Restore drill:** once, on dev, in Step 21.
+- **Not in the dump:** Auth users live in Supabase's `auth` schema. After a restore, recreate users and their roles as in 2.9.1.
 
 ---
 
 ## 2.15 Pitfalls
 | Pitfall | What happens | Fix |
 |---|---|---|
-| Using the direct connection in CI | "Network is unreachable" (IPv6) | Use the session pooler (2.3) |
-| Using port 6543 for the engine | Prepared statement errors, `set_config` lost between statements | Use port 5432 (session mode) |
-| A new view without `security_invoker = true` | RLS is bypassed, callers see everything | Every view except `v_leads_admin` sets it; check new views in review |
-| Selecting `*` from `leads` in the app | `permission denied for column deal_value_inr` | Read through `v_leads_caller`; admins use `v_leads_admin` |
-| Service role key in browser code | Anyone can read everything | Only in server code, engine env files and GitHub environment secrets |
-| Dev project paused | Engine runs fail with connection errors | Resume in the dashboard; `nlead health` warns |
-| "Today" computed in UTC | Leads show the wrong day between 00:00 and 05:30 IST | Always use `now() at time zone 'Asia/Kolkata'` |
+| Direct connection in CI | "Network is unreachable" (IPv6) | Session pooler, port 5432 |
+| Port 6543 for the engine | Prepared statement errors; `app.source` lost | Port 5432 |
+| A view without `security_invoker = true`, or recreated without it | RLS bypassed; everyone sees everything | 2.8.4 rule 2 |
+| `select *` from `leads` in the app | `permission denied for column deal_value_inr` | Read `v_leads_caller` (or `v_leads_admin` for admins) |
+| `.update(...).select()` on `leads` in supabase-js | Same error: RETURNING includes money | Update without `.select()`, then read the view |
+| Code inserts `stage_change`, `grade_change`, `lead_created` or `message_edited` | Every change shows twice on the timeline | Only the triggers write these four (2.5.9) |
+| `v_leads_caller` changes | `v_leads_admin` and `v_pipeline` still have the old column list | Recreate both in the same migration |
+| A later table the app needs | `permission denied for table` | Grant it on purpose (2.8.4) |
+| A new activity type, source or cost provider used by code but not in the checks | Insert fails | Add it to the check in a new migration first |
+| Service role key in browser code | Anyone can read everything | Server code, engine env files and GitHub environment secrets only |
+| Dev project paused | Engine runs fail to connect | Resume it in the dashboard; `nlead health` warns |
+| "Today" computed in UTC | Wrong day between 00:00 and 05:30 IST | `now() at time zone 'Asia/Kolkata'` |
 | Editing a pushed migration | Dev and prod drift apart silently | Always add a new numbered file |
-| Forgetting to regenerate types | Web app builds against old columns | Regenerate after every push (2.11.2) |
-| A new activity type written by code but not in the check list | Insert fails | Add it to the `activities.type` check in a new migration first |
 
 ## 2.16 Done when
-- [ ] Dev and prod projects exist in Mumbai, with sign-ups disabled and a 12-character password rule.
-- [ ] `DATABASE_URL` uses the session pooler (port 5432) and `nlead health --env dev` connects from the laptop and from a GitHub Actions run in the `dev` environment.
-- [ ] Migrations 0001 to 0004 are applied to dev and prod with `npx supabase db push`, with no errors.
-- [ ] The `proposals` bucket exists, is private, and a caller can upload while a viewer cannot.
-- [ ] `select count(*) from public.segments` returns 6 and quotas add up to 300.
-- [ ] All settings keys from 0004 exist, including `providers_enabled`, `segment_weights` and the per-source daily limits.
-- [ ] Founder is `admin` and Aditya is `caller` in prod `profiles`.
-- [ ] `supabase/tests/rls_test.sql` passes on dev for caller, viewer and admin.
-- [ ] Updating a lead's stage to `contacted` with no date fills `wa_at` with today's IST date and writes a `stage_change` activity; inserting a lead writes `lead_created`.
-- [ ] Inserting a second open lead for the same business fails on `leads_one_open_per_business`.
-- [ ] `v_today`, `v_followups_due`, `v_funnel`, `v_verified_facts` and `v_leads_admin` return rows as expected on dev test data.
-- [ ] `web/src/lib/database.types.ts` is generated and committed.
-- [ ] A backup was created, decrypted and restored into dev once (restore drill).
-- [ ] `select public.db_size_mb()` works and `nlead health` prints it.
+- [ ] The six checks in 2.2 pass.
+- [ ] `db.tx()` takes `source` and `context` (2.3.1).
+- [ ] 0001 to 0004 are applied to **dev** with `npx supabase db push`, without errors.
+- [ ] `select count(*) from public.segments` returns 6 and the quotas add up to 300.
+- [ ] Every settings key in 0004 exists, with OpenAI and Practo off.
+- [ ] The `proposals` and `backups` buckets exist and are private.
+- [ ] The founder is `admin` in dev `profiles`.
+- [ ] `supabase/tests/rls_test.sql` passes on dev (`uv run pytest tests/test_rls.py`).
+- [ ] `select public.db_size_mb()` returns a number.
 
 ---
 
@@ -3598,75 +3606,82 @@ The free plan has no downloadable backups or point-in-time restore (verify at bu
 
 ## 3.1 Goal and outputs
 
-**Goal:** describe each market (one domain in one country) in a YAML file, so the engine knows where to look, what counts as a buying signal, how to judge fit and "can pay", what to skip and how to pitch. **Adding a new market means adding a file, not changing code** (principle A.6.3.5).
+**Goal:** describe each market (one domain in one country) in one YAML file, so the engine knows where to look, what counts as a buying signal, how to judge fit and ability to pay, and how to pitch. **Adding a market means adding a file, not changing code** (A.6.3.5).
 
-**You need first:** Step 1 (engine package exists), Step 2 (the `segments` table exists).
+**You need first:** Step 1 (engine package), Step 2 (`segments` table).
 
 **Outputs:**
 
 | Output | Path |
 |---|---|
-| Segment model, loader, DB sync | `engine/src/nument_engine/segments.py` |
-| Six wave-1 segment files | `engine/segments/*.yaml` |
-| Scoring defaults | `engine/config/scoring.yaml` |
+| Segment models, loader, helpers, DB sync | `engine/src/nument_engine/segments.py` |
+| Six wave-1 segment files | `engine/segments/{segment_id}.yaml` |
+| Default scoring numbers | `engine/config/scoring.yaml` |
 | Global exclusions | `engine/config/exclusions.yaml` |
 | Tests | `engine/tests/test_segments.py` |
 | Guide for new segments | `docs/segments-guide.md` (copy of 3.9) |
 
 ## 3.2 How segments are used
-1. Every engine run starts with `load_segments()`. It reads all `engine/segments/*.yaml`, validates them against the model in 3.4, and stops the run with a clear error if any file is invalid.
-2. `sync_segments_to_db()` upserts each segment into the `segments` table: `config` (the whole file as JSON), `config_version` (a hash of the file), `daily_quota`. The database `enabled` flag is `file.enabled AND settings.segments_enabled[id]`, so the founder can switch a segment off from the app without a code change.
-3. `engine/config/scoring.yaml` holds the default numbers for scoring. A segment's `signal_points` and `scoring` keys override them for that segment only. Step 11 is the authority on the formula; these files hold its parameters.
-4. `engine/config/exclusions.yaml` is merged with each segment's `exclusions` by the pre-filter (Step 8).
+1. Every engine run starts with `load_segments()`. It validates every `engine/segments/*.yaml` against the models in 3.4 and stops the run with a clear error if a file is wrong.
+2. `sync_segments_to_db()` upserts each segment into `public.segments`:
+   - `config` (the whole file as JSON) and `config_version` (a hash of the file), every run.
+   - `enabled` = the file's `enabled` **and** `settings.segments_enabled[id]`, every run. The app's toggle writes both (Step 15), so they stay in step.
+   - `daily_quota`: from the YAML on the **first** insert only. After that the founder changes it in the app (Step 15), and the engine reads the database value.
+3. `engine/config/scoring.yaml` holds the default scoring numbers. A segment's `scoring:` block overrides any of them for that segment only. `scoring_config(seg)` returns the merged result (Step 11 reads it).
+4. `engine/config/exclusions.yaml` applies to every segment (Step 8 rule R3, Step 10 competitor check).
+
+Who reads what:
+
+| Step | Keys |
+|---|---|
+| 5 Sources | `overture.categories`, `registries`, `osm.enabled`, `apna.pages_per_day`, `adzuna_enabled`, and `subcategory_for()` |
+| 6 Universe | `cities`, `places.queries`, `places.details_per_day` |
+| 7 Signals | `job_keywords`, `public_ask_queries`, `news_queries`, `signal_points`, `places.reviews_per_day` |
+| 8 Pre-filter | `fit.categories` and `ticket_class` (R2, through `is_type_match()`), `size_rules` (R9) |
+| 11 Scoring | `fit`, `ticket_class`, `can_pay.premium_price`, `scoring`, `angles` |
+| 12 Messages | `angles` (each angle's `idea`), `packaged_outcome` |
 
 ## 3.3 The segment file, key by key
 
-These key names are fixed. Steps 5 to 12 read them.
+These key names are fixed. Change one only together with every step that reads it.
 
 | Key | Type | Meaning |
 |---|---|---|
-| `id` | string | `{domain}-{country}`, for example `clinics-in` |
+| `id` | string | `{domain}-{country}`, for example `clinics-in`. The file is named `{id}.yaml` |
 | `domain` | enum | `clinics`, `realestate`, `education`, `d2c`, `hospitality`, `auto`, `finance`, `wellness`, `firms` |
-| `country` | string | ISO alpha-2 in lowercase: `in`, `ae`, `sa`, `qa`, `gb`, `sg`, `us`, `au` |
+| `country` | string | ISO alpha-2, lowercase: `in`, `ae`, later `sa`, `qa`, `gb`, `sg`, `us`, `au` |
 | `display_name` | string | Shown in the app |
 | `enabled` | bool | Master switch in the file |
-| `timezone`, `currency` | string | `Asia/Kolkata` / `INR`, `Asia/Dubai` / `AED` |
-| `quota.daily_research` | int | Businesses researched per day from this segment. All enabled segments together must not exceed `settings.research_per_day` |
-| `quota.fit_only_max_pct` | int | Max share of fit-only leads per day (10) |
-| `cities[]` | list | `name`, `aliases` (other spellings that appear in addresses), `bbox` as `[min_lng, min_lat, max_lng, max_lat]`, `localities` (for Places text search) |
-| `overture.categories` | list | Overture taxonomy codes. Codes marked `# verify at build` are unconfirmed |
-| `overture.min_confidence` | float | Optional, default 0.6. Ignore Overture places below it |
-| `places.queries` | list | Text Search templates with `{locality}` and `{city}` |
-| `places.details_per_day` | int | Daily cap for Place Details (rating, reviews count, website, phone) |
-| `places.reviews_per_day` | int | Daily cap for Place Details with reviews (review pain signal) |
-| `places.region_code`, `places.language_code` | string | Places request settings |
-| `registries[]` | list | `key` (adapter name), `name`, `url`, `status` (`ready` or `verify_at_build`), `subcategory`, `notes` |
-| `osm.enabled` | bool | Use OpenStreetMap to fill gaps (Step 5) |
-| `apna.pages_per_day` | int | Apna job pages per day (India only; 0 elsewhere) |
-| `adzuna_enabled` | bool | Use the Adzuna jobs API for this country (only after its coverage is verified) |
+| `timezone`, `currency` | string | `Asia/Kolkata` and `INR`; `Asia/Dubai` and `AED`. Prices in `can_pay` use this currency |
+| `quota.daily_research` | int | Starting daily research quota (see 3.2). Enabled segments must add up to at most `research_per_day` (300) |
+| `cities[]` | list | `name`, `aliases` (other spellings in addresses), `bbox` as `[min_lng, min_lat, max_lng, max_lat]` (at most 2 degrees each way), `localities` (Places text search rotates through them, Step 6) |
+| `overture.categories` | list | Overture taxonomy codes to pull. Codes marked `# verify at build` are not confirmed yet |
+| `places.queries` | list | Text Search templates; `{city}` is required, `{locality}` optional |
+| `places.details_per_day` | int | Daily Place Details calls for this segment. All India segments together at most 230, all others together at most 30 (3.7.7) |
+| `places.reviews_per_day` | int | Daily Place Details calls with reviews (review pain, Step 7). Same totals |
+| `registries[]` | list | `key` (adapter and `source_records.source` name), `name`, `url`, `status` (`ready` or `verify_at_build`), `subcategory` (set on every business from it), `notes` |
+| `osm.enabled` | bool | OpenStreetMap gap fill (Step 6). Tags per domain live in the adapter (Step 5) |
+| `apna.pages_per_day` | int | Apna job pages a day. India only; 0 elsewhere |
+| `adzuna_enabled` | bool | Adzuna jobs API for this country, only after its coverage is checked |
 | `job_keywords.frontdesk` | list | Job title words that create `hiring_frontdesk` signals |
 | `job_keywords.builder` | list | Job title words that create `hiring_builder` signals |
-| `job_keywords.exclude` | list | Titles to ignore even when a keyword matches |
-| `public_ask_queries` | list | Queries for grounded web search to find public asks for vendors (Step 7) |
-| `news_queries` | list | GDELT queries for new branch, launch and expansion news (Step 7) |
-| `size_rules.any_of[]` | list | Pre-filter size rule: the business passes if any rule is true |
-| `signal_points` | map | Per-type overrides of default points, for example `review_pain: 7` |
-| `signal_fresh_days` | map | Optional per-type overrides of freshness windows |
-| `fit` | object | `required` (minimum fit points out of 3) and `checks` (which 3 checks count) |
-| `ticket_class` | map | Our subcategories: `match` (codes or words) and `points` (can-pay points for ticket size) |
-| `can_pay.cap` | int | Maximum can-pay points (30) |
-| `can_pay.premium_price` | object | `fact` (fact field holding a price), `min` (local currency), `points` |
-| `can_pay.proxies[]` | list | `key`, `points`, `rule` (`source`: `business` / `fact` / `signal`, `key`, `op`, `value`), optional `unless` (skip if that proxy already matched) |
-| `exclusions` | object | Same shape as `config/exclusions.yaml` (3.6): `chains`, `hospital_keywords`, `agency_keywords`, `competitors`, `max_branches` |
-| `packaged_outcome` | string | The packaged offer name for this domain (A.2.2). The loader enforces it |
-| `agency_hint` | string | How to pitch a stated need |
-| `angles[]` | list | `key`, `label`, `signals` (signal types, or `fit_only`, that trigger it), `idea` (hint for the message writer) |
-| `scoring` | object | Optional overrides of `config/scoring.yaml` for this segment, for example `grades` |
-| `message` | object | `language`, `greeting` (`first_name` or `dr_surname_if_doctor`), `examples` (1 to 3) |
-| `phone` | object | `region` (`IN`, `AE`), `country_code` (`+91`, `+971`), `whatsapp_needs_mobile` |
-| `compliance` | object | `data_law`, `contact_hours`, `notes` |
+| `job_keywords.exclude` | list | Titles to skip even when a keyword matches (for example `nurse`) |
+| `public_ask_queries` | list | Grounded search queries for public asks for a vendor (Step 7) |
+| `news_queries` | list | GDELT queries for launches, new branches and expansion (Step 7) |
+| `size_rules.any_of[]` | list | Rule R9 passes if any rule is true (an active stated need also passes, Step 8). A rule is `source` (`business`, `fact`, `signal`, `registry`), `key`, optional `field` (the number inside a fact's value), `op`, `value` |
+| `signal_points` | map | Per-type overrides of A.12.3 default points, for example `review_pain: 7` |
+| `fit.categories` | list | Raw categories (Overture codes, Places types) that count as a type match |
+| `fit.service_keywords` | list | Words in a verified `services` fact that count as a type match |
+| `fit.min_reviews`, `fit.min_staff` | int | The size point of the fit gate (defaults 100 and 2) |
+| `ticket_class` | map | Our subcategories in match order. Each has `match` (category codes, or lowercase words found as whole words in the name) and `points` (0 to 6, added to can-pay) |
+| `can_pay.premium_price` | object | Thresholds in the segment currency: `consultation` (price items that mention "consult", optional) and `other` (every other price item) |
+| `scoring` | map | Overrides of `config/scoring.yaml` for this segment only (deep merge; lists are replaced) |
+| `packaged_outcome` | string | The packaged offer for this domain (A.2.2). The loader checks it |
+| `angles[]` | list | `key`, `label`, `signals` (signal types, or `fit_only`), `idea` (one line the message writer receives) |
 
-Rule operators (`op`): `>=`, `<=`, `==`, `!=`, `in`, `not_in`, `any` (the fact exists with any value), `exists` (the signal or fact exists).
+Rule operators (`op`): `>=`, `<=`, `==`, `!=`, `in`, `not_in`, `exists`.
+
+**Angle rules (Step 11.8.2 picks them):** every segment has the six fixed codes `build_what_they_asked`, `frontdesk_load`, `missed_calls`, `ad_leads_cold`, `no_online_booking`, `slow_site`; exactly one angle listing `fit_only` (the segment default); and at least one listing a growth signal (`new_place`, `new_branch` or `news`).
 
 ## 3.4 Loader code
 
@@ -3675,11 +3690,14 @@ Create `engine/src/nument_engine/segments.py`:
 ```python
 """Segment configuration: one YAML file per domain x country (Step 3).
 
-load_segments()        -> validated Segment objects, keyed by id
-sync_segments_to_db()  -> upsert into public.segments (config, version, quota, enabled)
+load_segments()         validated Segment objects, keyed by id
+sync_segments_to_db()   upsert into public.segments
+scoring_config(seg)     config/scoring.yaml with the segment's `scoring` overrides applied
+load_yaml_config(name)  engine/config/<name>.yaml
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import re
@@ -3691,16 +3709,16 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 ENGINE_DIR = Path(__file__).resolve().parents[2]
 SEGMENTS_DIR = ENGINE_DIR / "segments"
+CONFIG_DIR = ENGINE_DIR / "config"
 
 Domain = Literal["clinics", "realestate", "education", "d2c", "hospitality",
                  "auto", "finance", "wellness", "firms"]
 SignalType = Literal["public_ask", "tender", "hiring_builder", "hiring_frontdesk", "review_pain",
                      "ads_running", "no_booking", "slow_site", "new_place", "new_branch",
                      "news", "funding"]
-Op = Literal[">=", "<=", "==", "!=", "in", "not_in", "any", "exists"]
-FitCheck = Literal["category_match", "size_ok", "independent"]
+Op = Literal[">=", "<=", "==", "!=", "in", "not_in", "exists"]
 
-PACKAGED_OUTCOME = {   # A.2.2, must match
+PACKAGED_OUTCOME = {   # A.2.2; must match
     "clinics": "AI front desk",
     "realestate": "AI lead qualifier and site-visit booking",
     "education": "AI admissions counsellor",
@@ -3711,12 +3729,16 @@ PACKAGED_OUTCOME = {   # A.2.2, must match
     "wellness": "AI bookings and renewals",
     "firms": "Custom AI workflows",
 }
+# Angle codes Step 11 picks by signal type (11.8.2). Every segment must define all of them.
+REQUIRED_ANGLES = {"build_what_they_asked", "frontdesk_load", "missed_calls",
+                   "ad_leads_cold", "no_online_booking", "slow_site"}
+GROWTH_SIGNALS = {"new_place", "new_branch", "news"}
 
 
 class City(BaseModel):
     name: str
     aliases: list[str] = Field(default_factory=list)
-    bbox: tuple[float, float, float, float]   # min_lng, min_lat, max_lng, max_lat
+    bbox: tuple[float, float, float, float]          # min_lng, min_lat, max_lng, max_lat
     localities: list[str] = Field(min_length=1)
 
     @field_validator("bbox")
@@ -3724,35 +3746,31 @@ class City(BaseModel):
     def _bbox_ok(cls, v):
         min_lng, min_lat, max_lng, max_lat = v
         if not (-180 <= min_lng < max_lng <= 180 and -90 <= min_lat < max_lat <= 90):
-            raise ValueError(f"bad bbox {v}")
-        if (max_lng - min_lng) > 2 or (max_lat - min_lat) > 2:
-            raise ValueError(f"bbox {v} is larger than 2 degrees: split the city")
+            raise ValueError(f"bad bbox {v}: use [min_lng, min_lat, max_lng, max_lat]")
+        if max_lng - min_lng > 2 or max_lat - min_lat > 2:
+            raise ValueError(f"bbox {v} is wider than 2 degrees: split the city")
         return v
 
 
 class Quota(BaseModel):
     daily_research: int = Field(ge=0, le=300)
-    fit_only_max_pct: int = Field(10, ge=0, le=50)
 
 
 class Overture(BaseModel):
     categories: list[str] = Field(min_length=1)
-    min_confidence: float = Field(0.6, ge=0, le=1)
 
 
 class Places(BaseModel):
     queries: list[str] = Field(min_length=1)
-    details_per_day: int = Field(ge=0, le=2000)
-    reviews_per_day: int = Field(ge=0, le=2000)
-    region_code: str = Field(pattern=r"^[A-Z]{2}$")
-    language_code: str = "en"
+    details_per_day: int = Field(ge=0, le=230)
+    reviews_per_day: int = Field(ge=0, le=230)
 
     @field_validator("queries")
     @classmethod
-    def _placeholders(cls, v):
-        for q in v:
-            if "{city}" not in q:
-                raise ValueError(f"query needs {{city}}: {q}")
+    def _has_city(cls, v):
+        bad = [q for q in v if "{city}" not in q]
+        if bad:
+            raise ValueError(f"every query needs {{city}}: {bad}")
         return v
 
 
@@ -3765,7 +3783,7 @@ class Registry(BaseModel):
     notes: str | None = None
 
 
-class Toggle(BaseModel):
+class Osm(BaseModel):
     enabled: bool = False
 
 
@@ -3780,8 +3798,11 @@ class JobKeywords(BaseModel):
 
 
 class Rule(BaseModel):
-    source: Literal["business", "fact", "signal"]
+    """business: a businesses column. fact: a verified fact (`field` = the number inside its value).
+    signal: an active signal of type `key`. registry: a source record from registry `key` ('*' = any)."""
+    source: Literal["business", "fact", "signal", "registry"]
     key: str
+    field: str | None = None
     op: Op
     value: Any = None
 
@@ -3791,81 +3812,31 @@ class SizeRules(BaseModel):
 
 
 class Fit(BaseModel):
-    required: int = Field(2, ge=1, le=3)
-    checks: list[FitCheck] = Field(default=["category_match", "size_ok", "independent"], min_length=3, max_length=3)
+    categories: list[str] = Field(min_length=1)
+    service_keywords: list[str] = Field(default_factory=list)
+    min_reviews: int = Field(100, ge=0)
+    min_staff: int = Field(2, ge=0)
 
 
 class TicketClass(BaseModel):
     match: list[str] = Field(min_length=1)
-    points: int = Field(ge=0, le=8)
+    points: int = Field(ge=0, le=6)
 
 
 class PremiumPrice(BaseModel):
-    fact: str
-    min: float = Field(gt=0)
-    points: int = Field(ge=1, le=8)
-
-
-class Proxy(BaseModel):
-    key: str
-    points: int = Field(ge=1, le=12)
-    rule: Rule
-    unless: str | None = None
+    consultation: float | None = Field(None, gt=0)
+    other: float = Field(gt=0)
 
 
 class CanPay(BaseModel):
-    cap: int = Field(30, ge=1, le=30)
     premium_price: PremiumPrice
-    proxies: list[Proxy] = Field(min_length=3)
-
-
-class Chain(BaseModel):
-    name: str
-    domains: list[str] = Field(default_factory=list)
-
-
-class Exclusions(BaseModel):
-    chains: list[Chain] = Field(default_factory=list)
-    hospital_keywords: list[str] = Field(default_factory=list)
-    agency_keywords: list[str] = Field(default_factory=list)
-    competitors: list[str] = Field(default_factory=list)   # names or domains of AI/software agencies
-    max_branches: int | None = None
 
 
 class Angle(BaseModel):
     key: str = Field(pattern=r"^[a-z0-9_]+$")
     label: str
-    signals: list[SignalType | Literal["fit_only"]]
+    signals: list[SignalType | Literal["fit_only"]] = Field(min_length=1)
     idea: str
-
-
-class Message(BaseModel):
-    language: Literal["en", "ar", "hi"] = "en"
-    greeting: Literal["first_name", "dr_surname_if_doctor"] = "first_name"
-    examples: list[str] = Field(min_length=1, max_length=3)
-
-    @field_validator("examples")
-    @classmethod
-    def _voice_rules(cls, v):
-        for m in v:
-            words = len(m.split())
-            if not 25 <= words <= 70:
-                raise ValueError(f"example must be 25 to 70 words, got {words}")
-            if re.search("[\u2013\u2014]", m) or m.count("?") != 1 or "http" in m:
-                raise ValueError("example breaks the voice rules (dash, link, or not exactly one question)")
-        return v
-
-
-class Phone(BaseModel):
-    region: str = Field(pattern=r"^[A-Z]{2}$")
-    country_code: str = Field(pattern=r"^\+[1-9][0-9]{0,3}$")
-    whatsapp_needs_mobile: bool = True
-
-
-class Compliance(BaseModel):
-    data_law: str
-    contact_hours: str
-    notes: list[str] = Field(default_factory=list)
 
 
 class Segment(BaseModel):
@@ -3881,47 +3852,95 @@ class Segment(BaseModel):
     overture: Overture
     places: Places
     registries: list[Registry] = Field(default_factory=list)
-    osm: Toggle = Toggle()
-    apna: Apna = Apna()
+    osm: Osm = Field(default_factory=Osm)
+    apna: Apna = Field(default_factory=Apna)
     adzuna_enabled: bool = False
     job_keywords: JobKeywords
     public_ask_queries: list[str] = Field(default_factory=list)
     news_queries: list[str] = Field(default_factory=list)
     size_rules: SizeRules
     signal_points: dict[SignalType, float] = Field(default_factory=dict)
-    signal_fresh_days: dict[SignalType, int] = Field(default_factory=dict)
-    fit: Fit = Fit()
-    ticket_class: dict[str, TicketClass]
+    fit: Fit
+    ticket_class: dict[str, TicketClass] = Field(min_length=1)
     can_pay: CanPay
-    exclusions: Exclusions = Exclusions()
-    packaged_outcome: str
-    agency_hint: str
-    angles: list[Angle] = Field(min_length=3)
     scoring: dict[str, Any] = Field(default_factory=dict)
-    message: Message
-    phone: Phone
-    compliance: Compliance
+    packaged_outcome: str
+    angles: list[Angle] = Field(min_length=8)
 
     @model_validator(mode="after")
     def _consistency(self):
         if self.id != f"{self.domain}-{self.country}":
-            raise ValueError(f"id {self.id} must be {self.domain}-{self.country}")
+            raise ValueError(f"id must be {self.domain}-{self.country}")
         if self.packaged_outcome != PACKAGED_OUTCOME[self.domain]:
             raise ValueError(f"packaged_outcome must be '{PACKAGED_OUTCOME[self.domain]}' (A.2.2)")
-        keys = [p.key for p in self.can_pay.proxies]
-        if len(keys) != len(set(keys)) or "premium_price" in keys:
-            raise ValueError("duplicate can_pay proxy keys (premium_price lives in can_pay.premium_price)")
-        for p in self.can_pay.proxies:
-            if p.unless and p.unless not in keys:
-                raise ValueError(f"unless refers to unknown proxy {p.unless}")
-        triggers = {s for a in self.angles for s in a.signals}
-        if "fit_only" not in triggers:
-            raise ValueError("needs an angle for fit_only leads")
-        if not ({"hiring_builder", "public_ask", "tender"} & triggers):
-            raise ValueError("needs an angle for stated needs (hiring_builder, public_ask or tender)")
+        keys = [a.key for a in self.angles]
+        if len(keys) != len(set(keys)):
+            raise ValueError("duplicate angle keys")
+        missing = REQUIRED_ANGLES - set(keys)
+        if missing:
+            raise ValueError(f"missing angles that Step 11 picks: {sorted(missing)}")
+        if sum("fit_only" in a.signals for a in self.angles) != 1:
+            raise ValueError("exactly one angle must list fit_only")
+        if not any(GROWTH_SIGNALS & set(a.signals) for a in self.angles):
+            raise ValueError("one angle must list a growth signal (new_place, new_branch or news)")
         if self.country != "in" and self.apna.pages_per_day:
             raise ValueError("apna is India only")
+        for sub in self.ticket_class:
+            if not re.fullmatch(r"[a-z0-9_]+", sub):
+                raise ValueError(f"ticket_class key {sub} must be lowercase snake_case")
         return self
+
+    # ---- helpers for Steps 5, 6, 8 and 11 -------------------------------------
+    def subcategory_for(self, category: str | None, name: str = "") -> str | None:
+        """Our subcategory from a source category code or the business name.
+        The first ticket class in file order with a matching entry wins."""
+        cat, text = (category or "").lower(), name.lower()
+        for sub, tc in self.ticket_class.items():
+            for m in tc.match:
+                if m == cat or re.search(rf"\b{re.escape(m)}\b", text):
+                    return sub
+        return None
+
+    def is_type_match(self, category: str | None, subcategory: str | None) -> bool:
+        """Rule R2 (Step 8) and the first half of the Step 11 type point."""
+        return (category or "") in self.fit.categories or (subcategory or "") in self.ticket_class
+
+    def ticket_points(self, subcategory: str | None) -> int:
+        tc = self.ticket_class.get(subcategory or "")
+        return tc.points if tc else 0
+
+    def premium_threshold(self, item: str) -> float:
+        """A verified price_point at or above this, in the segment currency, is premium evidence."""
+        pp = self.can_pay.premium_price
+        if pp.consultation is not None and "consult" in item.lower():
+            return pp.consultation
+        return pp.other
+
+    def angle(self, key: str) -> Angle:
+        return {a.key: a for a in self.angles}[key]
+
+    def fit_only_angle(self) -> str:
+        return next(a.key for a in self.angles if "fit_only" in a.signals)
+
+    def growth_angle(self) -> str:
+        return next(a.key for a in self.angles if GROWTH_SIGNALS & set(a.signals))
+
+
+def load_yaml_config(name: str) -> dict:
+    """engine/config/<name>.yaml (scoring, exclusions)."""
+    return yaml.safe_load((CONFIG_DIR / f"{name}.yaml").read_text())
+
+
+def _deep_merge(base: dict, over: dict) -> dict:
+    out = copy.deepcopy(base)
+    for k, v in over.items():
+        out[k] = _deep_merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+    return out
+
+
+def scoring_config(seg: Segment) -> dict:
+    """Default scoring numbers with this segment's overrides applied (Step 11 reads this)."""
+    return _deep_merge(load_yaml_config("scoring"), seg.scoring)
 
 
 def _file_hash(path: Path) -> str:
@@ -3931,10 +3950,9 @@ def _file_hash(path: Path) -> str:
 def load_segments(directory: Path = SEGMENTS_DIR, research_per_day: int = 300) -> dict[str, Segment]:
     segments: dict[str, Segment] = {}
     for path in sorted(directory.glob("*.yaml")):
-        data = yaml.safe_load(path.read_text())
         try:
-            seg = Segment.model_validate(data)
-        except Exception as exc:  # noqa: BLE001
+            seg = Segment.model_validate(yaml.safe_load(path.read_text()))
+        except Exception as exc:  # noqa: BLE001  (show every problem in one message)
             raise SystemExit(f"Invalid segment file {path.name}: {exc}") from exc
         if path.stem != seg.id:
             raise SystemExit(f"File {path.name} must be named {seg.id}.yaml")
@@ -3947,24 +3965,20 @@ def load_segments(directory: Path = SEGMENTS_DIR, research_per_day: int = 300) -
     return segments
 
 
-def load_yaml_config(name: str) -> dict:
-    """engine/config/<name>.yaml, for scoring.yaml and exclusions.yaml."""
-    return yaml.safe_load((ENGINE_DIR / "config" / f"{name}.yaml").read_text())
-
-
 def sync_segments_to_db(conn, segments: dict[str, Segment], directory: Path = SEGMENTS_DIR) -> None:
-    """Upsert every segment. DB enabled = file enabled AND settings.segments_enabled[id]."""
+    """Upsert every segment. daily_quota is written on the first insert only (the app owns it after)."""
     row = conn.execute("select value from public.settings where key = 'segments_enabled'").fetchone()
     switches = (row or {}).get("value") or {}
     for seg in segments.values():
         enabled = seg.enabled and bool(switches.get(seg.id, True))
         conn.execute(
             """
-            insert into public.segments (id, domain, country, display_name, enabled, daily_quota, config, config_version)
+            insert into public.segments (id, domain, country, display_name, enabled, daily_quota,
+                                         config, config_version)
             values (%s, %s, %s, %s, %s, %s, %s::jsonb, %s)
             on conflict (id) do update set
-              domain = excluded.domain, country = excluded.country, display_name = excluded.display_name,
-              enabled = excluded.enabled, daily_quota = excluded.daily_quota,
+              domain = excluded.domain, country = excluded.country,
+              display_name = excluded.display_name, enabled = excluded.enabled,
               config = excluded.config, config_version = excluded.config_version
             """,
             (seg.id, seg.domain, seg.country, seg.display_name, enabled, seg.quota.daily_research,
@@ -3972,113 +3986,210 @@ def sync_segments_to_db(conn, segments: dict[str, Segment], directory: Path = SE
         )
 ```
 
-## 3.5 Scoring defaults: `engine/config/scoring.yaml`
+## 3.5 Default scoring numbers: `engine/config/scoring.yaml`
 
-Step 11 implements the formula. This file holds its default parameters so they can be tuned without code changes. A segment's `signal_points`, `signal_fresh_days` and `scoring` keys override these for that segment only. When the learning loop (Step 16) changes a number, it writes a new `version`.
+Step 11 owns the formula (11.1 to 11.5). This file holds its numbers so they can be tuned without code changes; Step 11 reads them through `scoring_config(seg)`. The defaults below are exactly the numbers in Step 11.
 
 ```yaml
-# engine/config/scoring.yaml : default scoring parameters (Step 11 is the authority on the formula)
-version: v1.0
-
-caps:
-  can_pay: 30
-  intent: 40
+# engine/config/scoring.yaml : default scoring numbers (Step 11 owns the formula)
+# A segment's `scoring:` block overrides any value here for that segment (lists are replaced).
+# Fixed in score.py, not here: grade cut-offs (A.12.9), signal decay steps, SCORE_VERSION.
 
 fit:
-  required: 2            # out of 3 checks: category_match, size_ok, independent
-  bonus: {"3": 10, "2": 5, "1": 0, "0": 0}
+  gate: 2                       # fit below 2 = grade D (reason fit_gate)
+  bonus: {3: 10, 2: 5, 1: 0, 0: 0}
 
-signals:                 # A.12.3 defaults
-  public_ask:       {category: stated_need,  points: 10, fresh_days: 14}
-  tender:           {category: stated_need,  points: 10, fresh_days: 60}    # details.deadline wins if earlier
-  hiring_builder:   {category: stated_need,  points: 8,  fresh_days: 30}
-  hiring_frontdesk: {category: visible_pain, points: 8,  fresh_days: 30}
-  review_pain:      {category: visible_pain, points: 6,  fresh_days: 90}
-  ads_running:      {category: visible_pain, points: 4,  fresh_days: 30}
-  no_booking:       {category: visible_pain, points: 3,  fresh_days: 60}
-  slow_site:        {category: visible_pain, points: 2,  fresh_days: 60}
-  new_place:        {category: growth,       points: 5,  fresh_days: 60}
-  new_branch:       {category: growth,       points: 5,  fresh_days: 60}
-  news:             {category: growth,       points: 3,  fresh_days: 30}
-  funding:          {category: money,        points: 0,  fresh_days: 120, can_pay_points: 6}
+can_pay:
+  cap: 30
+  branches: [{min: 4, points: 8}, {min: 2, points: 6}]     # tiers: the first that matches counts
+  staff:    [{min: 8, points: 6}, {min: 3, points: 4}]
+  reviews:  [{min: 300, points: 6}, {min: 100, points: 4}]
+  premium_price: 5              # a verified price_point at or above the segment's threshold
+  pays_for_software: 3          # booking system, CRM, live chat, WhatsApp API provider, claimed Practo
+  custom_website: 2             # live site on its own domain, not a free builder sub-domain
+  funding: 6                    # an active funding signal
+  # ticket class points (0 to 6) come from the segment's ticket_class
 
-decay:                   # share of the fresh window already used -> multiplier
-  - {upto: 0.3, factor: 1.0}
-  - {upto: 0.6, factor: 0.7}
-  - {upto: 1.0, factor: 0.4}
+intent:
+  cap: 40
+  stack_bonus_per_type: 2       # for each signal type after the first
+  stack_bonus_max: 4
 
-stacking:                # bonus for independent signal types beyond the first
-  per_extra_type: 2
-  max: 4
-
-reach:                   # multiplier on the total
-  decision_maker_mobile: 1.0
-  business_mobile: 0.8
-  landline: 0.6
-  email: 0.5
-  form: 0.4
-  none: 0.0
+reach:
+  decision_maker_mobile: 1.00
+  business_mobile: 0.85
+  landline: 0.65
+  email: 0.45
+  form: 0.30
+  none: 0.00
 
 total:
-  scale: 1.25            # (can_pay + intent + fit bonus) * reach * scale, capped at 100
-  max: 100
+  raw_max: 80                   # total = round(raw / raw_max * 100 * reach)
 
-grades: {A: 70, B: 55, C: 40}   # below C threshold is D
-
-fit_only_max_pct: 10
-
-judge:
-  top_share: 0.5         # only the best half (by total) goes to the top model
-  max_grade_shift: 1     # the judge may move a grade by at most one step
+fit_only_max_pct: 10            # A.12.4
+judge_top_share: 0.5            # the best half by total (and every A) goes to the top model
 ```
 
 ## 3.6 Global exclusions: `engine/config/exclusions.yaml`
 
-Skipped in **every** segment, merged with each segment's own `exclusions` by the pre-filter (Step 8). The lists are starting points; extend them as you find more, and verify at build that the domains are current.
+Skipped in **every** segment: Step 8 rule R3 (`chains`, `hospital_keywords`, `max_branches`), R4 (`agency_keywords`) and the Step 10 competitor check (`competitors`). Names are matched case-insensitively as whole words in `norm_name`; domains exactly on `web_domain`. Verify the domains at build and extend the lists whenever the founder marks a lead "Not a fit" for being a chain, a hospital or an agency.
 
 ```yaml
 # engine/config/exclusions.yaml : skipped in every segment
-chains:                       # big corporate chains and platforms (procurement-driven, not owner-led)
-  - {name: Apollo, domains: [apollohospitals.com, apolloclinic.com]}
-  - {name: Fortis, domains: [fortishealthcare.com]}
-  - {name: Max Healthcare, domains: [maxhealthcare.in]}
-  - {name: Justdial, domains: [justdial.com]}
-  - {name: IndiaMART, domains: [indiamart.com]}
-  - {name: Practo, domains: [practo.com]}
-hospital_keywords:            # matched as whole words in the name (case-insensitive)
-  - hospital
+# Use full names. Short names that independents share (for example "max", "allen", "aster", "dlf")
+# wrongly reject real clinics: "DLF Phase 4" is a Gurugram locality that appears in many names.
+chains:
+  # Healthcare, India
+  - {name: apollo hospitals, domains: [apollohospitals.com, apollo247.com]}
+  - {name: apollo clinic, domains: [apolloclinic.com]}
+  - {name: apollo cradle, domains: []}
+  - {name: apollo fertility, domains: []}
+  - {name: fortis, domains: [fortishealthcare.com]}
+  - {name: max healthcare, domains: [maxhealthcare.in]}
+  - {name: manipal hospital, domains: [manipalhospitals.com]}
+  - {name: narayana health, domains: [narayanahealth.org]}
+  - {name: medanta, domains: []}
+  - {name: motherhood hospital, domains: []}
+  - {name: rainbow children, domains: []}
+  - {name: cloudnine, domains: [cloudninecare.com]}
+  - {name: indira ivf, domains: [indiraivf.com]}
+  - {name: nova ivf, domains: [novaivffertility.com]}
+  - {name: birla fertility, domains: [birlafertility.com]}
+  - {name: ferty9, domains: []}
+  - {name: oasis fertility, domains: []}
+  - {name: milann, domains: []}
+  - {name: kaya skin clinic, domains: [kaya.in]}
+  - {name: kaya clinic, domains: [kaya.in]}
+  - {name: vlcc, domains: [vlccwellness.com]}
+  - {name: oliva skin, domains: [olivaclinic.com]}
+  - {name: kolors, domains: []}
+  - {name: dr batra, domains: []}
+  - {name: clove dental, domains: [clovedental.in]}
+  - {name: sabka dentist, domains: [sabkadentist.com]}
+  # Healthcare, UAE
+  - {name: aster dm, domains: [asterdmhealthcare.com]}
+  - {name: aster clinic, domains: [asterclinic.ae]}
+  - {name: aster hospital, domains: [asterhospitals.in]}
+  - {name: nmc healthcare, domains: [nmc.ae]}
+  - {name: mediclinic, domains: [mediclinic.ae]}
+  - {name: burjeel, domains: [burjeel.com]}
+  - {name: thumbay, domains: [thumbay.com]}
+  - {name: cleveland clinic abu dhabi, domains: []}
+  - {name: king's college hospital, domains: []}
+  - {name: american hospital dubai, domains: []}
+  - {name: prime hospital, domains: []}
+  - {name: saudi german hospital, domains: []}
+  # Real estate developers, big brokers and portals, India
+  - {name: dlf limited, domains: [dlf.in]}
+  - {name: godrej properties, domains: [godrejproperties.com]}
+  - {name: lodha group, domains: [lodhagroup.in, lodhagroup.com]}
+  - {name: macrotech developers, domains: []}
+  - {name: prestige group, domains: [prestigeconstructions.com]}
+  - {name: sobha limited, domains: [sobha.com]}
+  - {name: brigade group, domains: [brigadegroup.com]}
+  - {name: tata housing, domains: []}
+  - {name: mahindra lifespaces, domains: []}
+  - {name: oberoi realty, domains: []}
+  - {name: puravankara, domains: []}
+  - {name: anarock, domains: []}
+  - {name: jll, domains: []}
+  - {name: cbre, domains: []}
+  - {name: knight frank, domains: []}
+  - {name: colliers, domains: []}
+  - {name: nobroker, domains: [nobroker.in]}
+  - {name: square yards, domains: [squareyards.com]}
+  - {name: housing.com, domains: [housing.com]}
+  - {name: magicbricks, domains: [magicbricks.com]}
+  - {name: 99acres, domains: [99acres.com]}
+  - {name: proptiger, domains: [proptiger.com]}
+  # Real estate developers and portals, UAE
+  - {name: emaar properties, domains: [emaar.com]}
+  - {name: damac properties, domains: [damacproperties.com]}
+  - {name: nakheel, domains: [nakheel.com]}
+  - {name: meraas, domains: []}
+  - {name: aldar properties, domains: [aldar.com]}
+  - {name: sobha realty, domains: [sobharealty.com]}
+  - {name: azizi developments, domains: [azizidevelopments.com]}
+  - {name: property finder, domains: [propertyfinder.ae]}
+  - {name: bayut, domains: [bayut.com]}
+  - {name: dubizzle, domains: [dubizzle.com]}
+  # Education companies
+  - {name: byju's, domains: [byjus.com]}
+  - {name: unacademy, domains: [unacademy.com]}
+  - {name: physics wallah, domains: [pw.live]}
+  - {name: physicswallah, domains: [pw.live]}
+  - {name: allen career institute, domains: [allen.ac.in]}
+  - {name: aakash institute, domains: [aakash.ac.in]}
+  - {name: fiitjee, domains: [fiitjee.com]}
+  - {name: vedantu, domains: [vedantu.com]}
+  - {name: upgrad, domains: [upgrad.com]}
+  - {name: leverage edu, domains: [leverageedu.com]}
+  - {name: idp education, domains: [idp.com]}
+  - {name: leap scholar, domains: [leapscholar.com]}
+  - {name: yocket, domains: []}
+  - {name: gems education, domains: [gemseducation.com]}
+  - {name: taaleem, domains: [taaleem.ae]}
+  - {name: aldar academies, domains: [aldaracademies.com]}
+
+hospital_keywords:            # whole words in the name. Small Indian clinics sometimes call themselves
+  - hospital                  # a "hospital" (for example "dental hospital"): check R3 rejects in week 1
   - hospitals
   - medical college
+  - institute of medical sciences
+  - super speciality hospital
   - multispeciality hospital
   - nursing home
-agency_keywords:              # businesses that sell what we sell (competitors) or resell it
-  - digital marketing agency
+
+agency_keywords:              # in name, category or site title: they sell what we sell
+  - digital marketing
+  - marketing agency
+  - seo agency
+  - seo services
   - web design
   - web development
+  - web solutions
   - app development
   - software development
-  - it solutions
+  - software solutions
   - it services
-  - seo services
+  - it solutions
+  - infotech
+  - technologies pvt
   - ai solutions
   - automation agency
-competitors:                  # named competitors (names or domains)
-  - aisensy.com
-  - interakt.shop
-  - gallabox.com
-  - wati.io
-max_branches: 15              # more branches than this = a big chain (the sweet spot is 3 to 15)
+  - placement consultancy
+  - staffing
+  - recruitment agency
+
+competitors:                  # software vendors and platforms in our space: never leads (names or domains)
+  - aisensy
+  - interakt
+  - gallabox
+  - wati
+  - leadsquared
+  - zoho
+  - freshworks
+  - haptik
+  - yellow.ai
+  - gupshup
+  - kaleyra
+  - exotel
+  - knowlarity
+  - practo
+
+max_branches: 10              # 10 or more branches = a big chain (Steps 6 and 8)
 ```
 
-> Note on `competitors`: WhatsApp API providers (AiSensy, Interakt, Gallabox, Wati) are listed so they are never treated as leads. They are also planned **partners** (A.2, customer plan), which is handled outside the engine.
+> WhatsApp API providers (AiSensy, Interakt, Gallabox, Wati) are listed so they never become leads. They are also planned **partners**, which is handled outside the engine.
 
 ## 3.7 Wave-1 segment files
 
-Bounding boxes are approximate city boxes in `[min_lng, min_lat, max_lng, max_lat]` order. **Verify at build** on a map and split any box larger than 2 degrees. Locality lists drive Places text search (free ID-only searches, still throttled).
+Bounding boxes are approximate city boxes in `[min_lng, min_lat, max_lng, max_lat]` order. **Verify at build** on a map. `clinics-in` is written out in full as the reference; the other five use the same keys in a compact style.
 
 ### 3.7.1 `engine/segments/clinics-in.yaml`
 
 ```yaml
+# engine/segments/clinics-in.yaml : the reference segment (keys explained in Step 3.3)
 id: clinics-in
 domain: clinics
 country: in
@@ -4088,8 +4199,7 @@ timezone: Asia/Kolkata
 currency: INR
 
 quota:
-  daily_research: 80
-  fit_only_max_pct: 10
+  daily_research: 80            # first-sync value; afterwards the app owns it (Step 15)
 
 cities:
   - name: Delhi
@@ -4146,9 +4256,8 @@ overture:
     - counseling
     - behavioral_or_mental_health_clinic
     - hair_loss_center
-    - physical_therapy        # verify at build
-    - medical_skin_care       # verify at build
-  min_confidence: 0.6
+    - physical_therapy          # verify at build
+    - medical_skin_care         # verify at build
 
 places:
   queries:
@@ -4163,21 +4272,19 @@ places:
     - "psychologist clinic in {locality}, {city}"
   details_per_day: 90
   reviews_per_day: 90
-  region_code: IN
-  language_code: en
 
 registries:
   - key: art_registry
     name: ART and Surrogacy Registry (registered IVF clinics)
     url: https://registry.artsurrogacy.gov.in/clinic/list?type=register-clinic
     status: ready
-    subcategory: ivf
-    notes: 4,767 clinics on one public page (checked 12 Nov 2026). Emails are written with [at] and [dot].
+    subcategory: ivf_fertility
+    notes: About 4,767 clinics on one public page (checked 12 Nov 2026). Emails are written with [at] and [dot].
   - key: nabh
     name: NABH accredited small healthcare organisations
     url: https://nabh.co
     status: verify_at_build
-    notes: Use only a public, robots-allowed list. Skip if CAPTCHA or login.
+    notes: Use only a public, robots-allowed list. Skip on a login or CAPTCHA.
 
 osm:
   enabled: true
@@ -4202,116 +4309,61 @@ news_queries:
   - '("new clinic" OR "opens" OR "inaugurates" OR "launches") (dermatology OR "skin clinic" OR IVF OR fertility OR dental) sourcecountry:IN'
   - '("new branch" OR "second centre" OR "expands") (clinic OR IVF OR "hair transplant") sourcecountry:IN'
 
-size_rules:
+size_rules:                     # Step 8.6; an active stated need also passes
   any_of:
     - {source: business, key: review_count, op: ">=", value: 100}
-    - {source: business, key: staff_count, op: ">=", value: 2}
     - {source: business, key: branches_count, op: ">=", value: 2}
-    - {source: signal, key: hiring_frontdesk, op: exists}
+    - {source: registry, key: art_registry, op: exists}
+    - {source: fact, key: staff_or_doctors, field: count, op: ">=", value: 2}
 
-signal_points:
+signal_points:                  # overrides of the A.12.3 defaults
   review_pain: 7
-  hiring_frontdesk: 8
   no_booking: 4
-signal_fresh_days:
-  no_booking: 60
 
 fit:
-  required: 2
-  checks: [category_match, size_ok, independent]
+  categories: [dental_clinic, dermatology, aesthetic_medicine, fertility_clinic, psychology,
+               psychotherapy, counseling, behavioral_or_mental_health_clinic, hair_loss_center,
+               physical_therapy, medical_skin_care,
+               dentist, doctor, skin_care_clinic, physiotherapist]   # last four: Places types, verify at build
+  service_keywords: [ivf, iui, fertility, dermatology, skin, laser, hair transplant, botox, fillers,
+                     dental implants, aligners, root canal, physiotherapy, counselling, therapy]
+  min_reviews: 100
+  min_staff: 2
 
-ticket_class:
-  ivf:       {match: [fertility_clinic, ivf, fertility, infertility, test tube baby], points: 6}
-  aesthetic: {match: [aesthetic_medicine, cosmetic, laser, hair_loss_center, hair transplant, botox], points: 5}
-  derma:     {match: [dermatology, dermatologist, skin], points: 4}
-  dental:    {match: [dental_clinic, dentist, dental, orthodont], points: 3}
-  physio:    {match: [physical_therapy, physiotherapy, physio], points: 2}
-  therapy:   {match: [psychology, psychotherapy, counseling, behavioral_or_mental_health_clinic, psychiatr], points: 2}
+ticket_class:                   # match order matters: the first class that matches wins
+  ivf_fertility:   {match: [fertility_clinic, ivf, fertility, infertility, test tube baby], points: 6}
+  hair_transplant: {match: [hair_loss_center, hair transplant, hair restoration], points: 5}
+  aesthetic:       {match: [aesthetic_medicine, medical_skin_care, aesthetic, cosmetic, laser, botox], points: 5}
+  dermatology:     {match: [dermatology, skin_care_clinic, dermatologist, skin clinic, skin], points: 4}
+  dental:          {match: [dental_clinic, dentist, dental, orthodontic], points: 3}
+  physio:          {match: [physical_therapy, physiotherapist, physiotherapy, physio], points: 2}
+  therapy_group:   {match: [psychology, psychotherapy, counseling, behavioral_or_mental_health_clinic,
+                            psychologist, counselling, therapy], points: 2}
 
 can_pay:
-  cap: 30
-  premium_price: {fact: price_point_inr, min: 800, points: 5}   # consultation fee or treatment price
-  proxies:
-    - {key: branches, points: 8, rule: {source: business, key: branches_count, op: ">=", value: 2}}
-    - {key: staff, points: 6, rule: {source: business, key: staff_count, op: ">=", value: 3}}
-    - {key: busy_300, points: 8, rule: {source: business, key: review_count, op: ">=", value: 300}}
-    - {key: busy_100, points: 5, rule: {source: business, key: review_count, op: ">=", value: 100}, unless: busy_300}
-    - {key: pays_for_software, points: 4, rule: {source: fact, key: paid_tool, op: any}}
-    - {key: practo_claimed, points: 2, rule: {source: fact, key: practo_claimed, op: "==", value: true}}
-    - {key: custom_website, points: 2, rule: {source: fact, key: site_builder, op: not_in, value: [wix, godaddy_builder, google_sites]}}
-    - {key: funded, points: 6, rule: {source: signal, key: funding, op: exists}}
+  premium_price: {consultation: 800, other: 20000}    # INR (Step 11.3)
 
-exclusions:
-  chains:
-    - {name: Manipal Hospitals, domains: [manipalhospitals.com]}
-    - {name: Narayana Health, domains: [narayanahealth.org]}
-    - {name: Cloudnine, domains: [cloudninecare.com]}
-    - {name: Indira IVF, domains: [indiraivf.com]}
-    - {name: Nova IVF, domains: [novaivffertility.com]}
-    - {name: Birla Fertility, domains: [birlafertility.com]}
-    - {name: Kaya, domains: [kaya.in]}
-    - {name: VLCC, domains: [vlccwellness.com]}
-    - {name: Oliva, domains: [olivaclinic.com]}
-    - {name: Clove Dental, domains: [clovedental.in]}
-    - {name: Sabka Dentist, domains: [sabkadentist.com]}
-  hospital_keywords: [medical centre and hospital, super speciality]
-  agency_keywords: []
-  competitors: []
-  max_branches: 15
+scoring: {}                     # no overrides of config/scoring.yaml
 
 packaged_outcome: AI front desk
-agency_hint: "For a stated need, pitch building exactly what they asked for, in their own words, and mention one detail from their post."
+
 angles:
-  - key: missed_calls
-    label: Calls missed after hours
-    signals: [review_pain, hiring_frontdesk]
-    idea: "A WhatsApp assistant that answers patient questions and books slots 24/7, so nobody is lost after hours."
-  - key: ad_leads_cold
-    label: Ad enquiries going cold
-    signals: [ads_running]
-    idea: "Every ad enquiry answered in 5 seconds and followed up until it books a consultation."
-  - key: booking_friction
-    label: No easy booking
-    signals: [no_booking, slow_site]
-    idea: "Patients book on WhatsApp in under a minute, with reminders that cut no-shows."
-  - key: new_branch_setup
-    label: New branch setup
-    signals: [new_branch, new_place, news]
-    idea: "One front desk assistant for every branch from day one."
-  - key: stated_build
-    label: Their own stated need
-    signals: [hiring_builder, public_ask, tender]
-    idea: "Build exactly what the post asks for, fast, and let their team run it."
-  - key: fit_only_frontdesk
-    label: Front desk load (no signal)
-    signals: [fit_only]
-    idea: "Take routine patient questions off the front desk with a WhatsApp assistant."
-
-scoring: {}
-
-message:
-  language: en
-  greeting: dr_surname_if_doctor
-  examples:
-    - |
-      Hi Dr. Mehta, came across your clinic's post for a front desk executive in Baner.
-
-      We're Nument, a small dev team. A WhatsApp assistant that answers patients and books slots after hours could take a lot off that role.
-
-      Is the front desk getting more calls than it can handle?
-
-phone:
-  region: IN
-  country_code: "+91"
-  whatsapp_needs_mobile: true
-
-compliance:
-  data_law: India DPDP Act 2023 (keep business contact data minimal and purposeful)
-  contact_hours: Tue to Thu, 10:00 to 12:00 and 15:00 to 17:00 IST
-  notes:
-    - "Call only after the clinic replies. TRAI 2025 rules treat promotional calls from ordinary 10-digit numbers as unregistered telemarketing."
-    - "Never collect patient data. Only clinic business details."
-    - "WhatsApp is sent by hand, one at a time. Start at 30 new chats a day per number."
+  - {key: build_what_they_asked, label: Their own stated need, signals: [public_ask, tender, hiring_builder],
+     idea: "Build exactly what they asked for, in their words, and mention one detail from their post."}
+  - {key: frontdesk_load, label: Front desk overloaded, signals: [hiring_frontdesk],
+     idea: "A WhatsApp assistant answers routine patient questions and books slots, so the front desk handles only real work."}
+  - {key: missed_calls, label: Calls and messages missed, signals: [review_pain],
+     idea: "Every call and WhatsApp answered in seconds, day and night, with a booking link."}
+  - {key: ad_leads_cold, label: Ad enquiries going cold, signals: [ads_running],
+     idea: "Every ad enquiry answered in 5 seconds and followed up until it books a consultation."}
+  - {key: no_online_booking, label: No easy online booking, signals: [no_booking],
+     idea: "Patients book on WhatsApp in under a minute, with reminders that cut no-shows."}
+  - {key: slow_site, label: Slow mobile site, signals: [slow_site],
+     idea: "A fast booking page with a WhatsApp button, so mobile visitors book instead of leaving."}
+  - {key: new_branch_setup, label: New branch or clinic, signals: [new_branch, new_place, news],
+     idea: "One front desk assistant for every branch from day one."}
+  - {key: after_hours_enquiries, label: After-hours enquiries (no signal), signals: [fit_only],
+     idea: "Answer patient questions and book slots after hours on WhatsApp."}
 ```
 
 ### 3.7.2 `engine/segments/realestate-in.yaml`
@@ -4324,16 +4376,14 @@ display_name: Real estate, India
 enabled: true
 timezone: Asia/Kolkata
 currency: INR
-
-quota:
-  daily_research: 60
-  fit_only_max_pct: 10
+quota: {daily_research: 60}
 
 cities:
   - {name: Delhi, aliases: [New Delhi], bbox: [76.84, 28.40, 77.35, 28.88],
      localities: [Saket, Dwarka, Rohini, Janakpuri, Vasant Kunj, Greater Kailash, Rajouri Garden, Preet Vihar]}
   - {name: Gurugram, aliases: [Gurgaon], bbox: [76.95, 28.38, 77.12, 28.53],
-     localities: [Golf Course Road, Golf Course Extension Road, Sohna Road, MG Road, Dwarka Expressway, Sector 49, Sector 65, Sector 82]}
+     localities: [Golf Course Road, Golf Course Extension Road, Sohna Road, MG Road, Dwarka Expressway,
+                  Sector 49, Sector 65, Sector 82]}
   - {name: Noida, aliases: [Greater Noida], bbox: [77.29, 28.45, 77.50, 28.64],
      localities: [Sector 18, Sector 62, Sector 75, Sector 137, Sector 150, Greater Noida West]}
   - {name: Mumbai, aliases: [Bombay], bbox: [72.77, 18.89, 72.99, 19.30],
@@ -4341,20 +4391,20 @@ cities:
   - {name: Thane and Navi Mumbai, aliases: [Thane, Navi Mumbai, Panvel], bbox: [72.95, 18.98, 73.10, 19.30],
      localities: [Thane West, Vashi, Kharghar, Panvel, Belapur]}
   - {name: Bengaluru, aliases: [Bangalore], bbox: [77.46, 12.83, 77.78, 13.14],
-     localities: [Whitefield, Sarjapur Road, Hebbal, Yelahanka, Electronic City, HSR Layout, Koramangala, Bannerghatta Road]}
+     localities: [Whitefield, Sarjapur Road, Hebbal, Yelahanka, Electronic City, HSR Layout, Koramangala,
+                  Bannerghatta Road]}
   - {name: Pune, aliases: [Pimpri Chinchwad], bbox: [73.70, 18.40, 74.05, 18.70],
      localities: [Baner, Wakad, Hinjewadi, Kharadi, Viman Nagar, Hadapsar, Kothrud, Undri]}
   - {name: Hyderabad, aliases: [Secunderabad], bbox: [78.30, 17.28, 78.62, 17.56],
      localities: [Gachibowli, Kondapur, Kokapet, Madhapur, Kukatpally, Miyapur, Banjara Hills, Kompally]}
 
 overture:
-  categories:                    # none confirmed yet: all verify at build against taxonomy.csv
-    - real_estate                # verify at build
-    - real_estate_agent          # verify at build
-    - real_estate_service        # verify at build
-    - real_estate_developer      # verify at build
-    - property_management        # verify at build
-  min_confidence: 0.6
+  categories:                   # none confirmed yet (Appendix F item 1)
+    - real_estate               # verify at build
+    - real_estate_agent         # verify at build
+    - real_estate_service       # verify at build
+    - real_estate_developer     # verify at build
+    - property_management       # verify at build
 
 places:
   queries:
@@ -4363,23 +4413,19 @@ places:
     - "property consultant in {locality}, {city}"
     - "real estate channel partner in {locality}, {city}"
   details_per_day: 60
-  reviews_per_day: 40
-  region_code: IN
-  language_code: en
+  reviews_per_day: 60
 
 registries:
-  - {key: rera_maharashtra, name: MahaRERA (agents and projects), url: "https://maharera.maharashtra.gov.in",
-     status: verify_at_build, notes: "Mumbai and Pune. Stop if CAPTCHA."}
+  - {key: rera_maharashtra, name: MahaRERA agents and projects, url: "https://maharera.maharashtra.gov.in",
+     status: verify_at_build, notes: "Mumbai and Pune. Stop on a CAPTCHA."}
   - {key: rera_haryana, name: HRERA (Gurugram), url: "https://haryanarera.gov.in", status: verify_at_build}
   - {key: rera_up, name: UP RERA (Noida), url: "https://www.up-rera.in", status: verify_at_build}
   - {key: rera_karnataka, name: Karnataka RERA (Bengaluru), url: "https://rera.karnataka.gov.in", status: verify_at_build}
   - {key: rera_telangana, name: Telangana RERA (Hyderabad), url: "https://rera.telangana.gov.in", status: verify_at_build}
   - {key: rera_delhi, name: Delhi RERA, url: "https://rera.delhi.gov.in", status: verify_at_build}
 
-osm:
-  enabled: true
-apna:
-  pages_per_day: 100
+osm: {enabled: true}
+apna: {pages_per_day: 100}
 adzuna_enabled: false
 
 job_keywords:
@@ -4399,104 +4445,52 @@ news_queries:
 
 size_rules:
   any_of:
-    - {source: business, key: staff_count, op: ">=", value: 5}
-    - {source: business, key: review_count, op: ">=", value: 50}
+    - {source: business, key: review_count, op: ">=", value: 30}
     - {source: business, key: branches_count, op: ">=", value: 2}
-    - {source: signal, key: hiring_frontdesk, op: exists}
+    - {source: registry, key: "*", op: exists}
 
-signal_points:
-  hiring_frontdesk: 9
-  ads_running: 6
-  review_pain: 5
+signal_points: {hiring_frontdesk: 9, ads_running: 6}
 
 fit:
-  required: 2
-  checks: [category_match, size_ok, independent]
+  categories: [real_estate, real_estate_agent, real_estate_service, real_estate_developer,
+               property_management, real_estate_agency]          # last one: Places type, verify at build
+  service_keywords: [residential projects, commercial projects, plots, villas, apartments, resale,
+                     rentals, property management, channel partner]
+  min_reviews: 30
+  min_staff: 2
 
 ticket_class:
-  developer: {match: [real_estate_developer, builders, developer, constructions, infra], points: 6}
-  brokerage: {match: [real_estate_agent, broker, brokerage, realty, property consultant, channel partner], points: 4}
-  services:  {match: [property_management, real_estate_service], points: 2}
+  developer:         {match: [real_estate_developer, developers, builders, constructions, infra, buildcon], points: 6}
+  broker:            {match: [real_estate_agent, real_estate_agency, realty, realtors, broker, brokerage,
+                              property consultant, property consultants, channel partner], points: 2}
+  property_services: {match: [property_management, real_estate_service, property management], points: 2}
 
 can_pay:
-  cap: 30
-  premium_price: {fact: avg_unit_price_inr, min: 5000000, points: 5}   # projects at 50 lakh and above
-  proxies:
-    - {key: multiple_projects, points: 8, rule: {source: fact, key: projects_count, op: ">=", value: 2}}
-    - {key: team_10, points: 6, rule: {source: business, key: staff_count, op: ">=", value: 10}}
-    - {key: ads_live, points: 5, rule: {source: signal, key: ads_running, op: exists}}
-    - {key: busy_50, points: 3, rule: {source: business, key: review_count, op: ">=", value: 50}}
-    - {key: pays_for_software, points: 4, rule: {source: fact, key: paid_tool, op: any}}
-    - {key: rera_registered, points: 3, rule: {source: fact, key: rera_number, op: exists}}
-    - {key: funded, points: 6, rule: {source: signal, key: funding, op: exists}}
+  premium_price: {other: 7500000}      # INR 75 lakh, any listed property
 
-exclusions:
-  chains:
-    - {name: DLF, domains: [dlf.in]}
-    - {name: Godrej Properties, domains: [godrejproperties.com]}
-    - {name: Lodha, domains: [lodhagroup.in]}
-    - {name: Prestige, domains: [prestigeconstructions.com]}
-    - {name: Sobha, domains: [sobha.com]}
-    - {name: Brigade, domains: [brigadegroup.com]}
-    - {name: NoBroker, domains: [nobroker.in]}
-    - {name: Square Yards, domains: [squareyards.com]}
-    - {name: Housing.com, domains: [housing.com]}
-    - {name: MagicBricks, domains: [magicbricks.com]}
-    - {name: 99acres, domains: [99acres.com]}
-    - {name: PropTiger, domains: [proptiger.com]}
-  hospital_keywords: []
-  agency_keywords: [real estate marketing agency, proptech]
-  competitors: []
-  max_branches: 15
+scoring:
+  can_pay:
+    reviews: [{min: 100, points: 6}, {min: 30, points: 4}]     # brokers rarely reach 100 reviews
 
 packaged_outcome: AI lead qualifier and site-visit booking
-agency_hint: "For a stated need, pitch building exactly that, and connect it to faster lead response."
+
 angles:
-  - key: lead_speed
-    label: Leads answered too late
-    signals: [hiring_frontdesk, ads_running, review_pain]
-    idea: "Every portal and ad lead gets a WhatsApp reply in seconds, is qualified, and is offered a site visit slot."
-  - key: site_visit_booking
-    label: Site visits not booked
-    signals: [no_booking, new_place, news]
-    idea: "Leads pick a site visit slot on WhatsApp, with reminders the day before."
-  - key: crm_followup
-    label: Follow-up falls through
-    signals: [slow_site, new_branch]
-    idea: "Automatic follow-ups until each lead visits, logged in their CRM or sheet."
-  - key: stated_build
-    label: Their own stated need
-    signals: [hiring_builder, public_ask, tender]
-    idea: "Build exactly what they asked for, fast."
-  - key: fit_only_leads
-    label: Lead handling (no signal)
-    signals: [fit_only]
-    idea: "Qualify and book every enquiry automatically."
-
-scoring: {}
-
-message:
-  language: en
-  greeting: first_name
-  examples:
-    - |
-      Hi Rahul, came across your post for two telecallers to handle site visit leads.
-
-      We're Nument, a small dev team. A WhatsApp assistant that replies to every portal lead in seconds and books the site visit could take the first round off their plate.
-
-      How many leads a day are you getting right now?
-
-phone:
-  region: IN
-  country_code: "+91"
-  whatsapp_needs_mobile: true
-
-compliance:
-  data_law: India DPDP Act 2023
-  contact_hours: Tue to Sat, 10:30 to 12:30 and 16:00 to 18:00 IST
-  notes:
-    - "Call only after a reply (TRAI 2025)."
-    - "RERA numbers are public by law; store the number, not personal data of agents."
+  - {key: build_what_they_asked, label: Their own stated need, signals: [public_ask, tender, hiring_builder],
+     idea: "Build exactly what they asked for, in their words, tied to faster lead response."}
+  - {key: frontdesk_load, label: Telecallers overloaded, signals: [hiring_frontdesk],
+     idea: "A WhatsApp assistant replies to every portal and ad lead in seconds, qualifies it and books the site visit, so telecallers call only warm leads."}
+  - {key: missed_calls, label: Leads not answered, signals: [review_pain],
+     idea: "Every enquiry answered in seconds, day and night, and offered a site visit slot."}
+  - {key: ad_leads_cold, label: Ad leads going cold, signals: [ads_running],
+     idea: "Every ad lead gets an instant WhatsApp reply and follow-ups until it books a visit."}
+  - {key: no_online_booking, label: Site visits not booked online, signals: [no_booking],
+     idea: "Leads pick a site visit slot on WhatsApp, with a reminder the day before."}
+  - {key: slow_site, label: Slow project pages, signals: [slow_site],
+     idea: "A fast project page with WhatsApp booking, so mobile visitors book a visit instead of leaving."}
+  - {key: new_branch_setup, label: New project or office, signals: [new_branch, new_place, news],
+     idea: "Handle the launch rush: every enquiry for the new project answered and qualified automatically."}
+  - {key: site_visit_followup, label: Site visit follow-up (no signal), signals: [fit_only],
+     idea: "Follow up every enquiry until it books a site visit."}
 ```
 
 ### 3.7.3 `engine/segments/education-in.yaml`
@@ -4509,14 +4503,12 @@ display_name: Education, India
 enabled: true
 timezone: Asia/Kolkata
 currency: INR
-
-quota:
-  daily_research: 50
-  fit_only_max_pct: 10
+quota: {daily_research: 50}
 
 cities:
   - {name: Delhi, aliases: [New Delhi], bbox: [76.84, 28.40, 77.35, 28.88],
-     localities: [Mukherjee Nagar, Rajendra Nagar, Laxmi Nagar, Kalu Sarai, Karol Bagh, Dwarka, Rohini, Saket, Lajpat Nagar]}
+     localities: [Mukherjee Nagar, Rajendra Nagar, Laxmi Nagar, Kalu Sarai, Karol Bagh, Dwarka, Rohini,
+                  Saket, Lajpat Nagar]}
   - {name: Gurugram, aliases: [Gurgaon], bbox: [76.95, 28.38, 77.12, 28.53],
      localities: [Sector 14, Sushant Lok, Sohna Road, DLF Phase 4, Sector 56]}
   - {name: Noida, aliases: [Greater Noida], bbox: [77.29, 28.45, 77.50, 28.64],
@@ -4531,14 +4523,13 @@ cities:
      localities: [Ameerpet, Dilsukhnagar, Kukatpally, Madhapur, Himayatnagar, Ashok Nagar]}
 
 overture:
-  categories:                    # none confirmed yet: all verify at build
-    - educational_services       # verify at build
-    - tutoring_center            # verify at build
-    - test_preparation           # verify at build
-    - language_school            # verify at build
+  categories:                   # none confirmed yet (Appendix F item 1)
+    - educational_services      # verify at build
+    - tutoring_center           # verify at build
+    - test_preparation          # verify at build
+    - language_school           # verify at build
     - vocational_and_technical_school   # verify at build
-    - educational_consultant     # verify at build
-  min_confidence: 0.6
+    - educational_consultant    # verify at build
 
 places:
   queries:
@@ -4551,17 +4542,11 @@ places:
     - "training institute in {locality}, {city}"
   details_per_day: 50
   reviews_per_day: 40
-  region_code: IN
-  language_code: en
 
-registries:
-  - {key: coaching_register, name: State coaching centre registers, url: "https://example.invalid/verify",
-     status: verify_at_build, notes: "Some states publish coaching registrations. Use only public, robots-allowed lists; otherwise delete this entry."}
+registries: []                  # none known yet; research public lists at build (Appendix F)
 
-osm:
-  enabled: true
-apna:
-  pages_per_day: 80
+osm: {enabled: true}
+apna: {pages_per_day: 80}
 adzuna_enabled: false
 
 job_keywords:
@@ -4581,104 +4566,52 @@ news_queries:
 
 size_rules:
   any_of:
-    - {source: business, key: review_count, op: ">=", value: 100}
+    - {source: business, key: review_count, op: ">=", value: 50}
     - {source: business, key: branches_count, op: ">=", value: 2}
-    - {source: business, key: staff_count, op: ">=", value: 5}
-    - {source: signal, key: hiring_frontdesk, op: exists}
 
-signal_points:
-  hiring_frontdesk: 9
-  ads_running: 5
-  review_pain: 5
+signal_points: {hiring_frontdesk: 9, ads_running: 5}
 
 fit:
-  required: 2
-  checks: [category_match, size_ok, independent]
+  categories: [educational_services, tutoring_center, test_preparation, language_school,
+               vocational_and_technical_school, educational_consultant]
+  service_keywords: [jee, neet, upsc, cat, clat, gate, ielts, pte, toefl, gre, gmat, sat, study abroad,
+                     admissions counselling, coaching, test preparation]
+  min_reviews: 50
+  min_staff: 2
 
 ticket_class:
-  study_abroad: {match: [study abroad, overseas education, ielts, toefl, gre, pte, visa], points: 6}
-  test_prep:    {match: [test_preparation, jee, neet, upsc, cat, clat, gate, ca coaching], points: 5}
-  academy:      {match: [vocational_and_technical_school, academy, training institute, skill], points: 4}
-  tutoring:     {match: [tutoring_center, tuition, tutorial], points: 2}
+  study_abroad:       {match: [educational_consultant, study abroad, overseas education, ielts, toefl,
+                               gre, gmat, pte, visa], points: 5}
+  coaching_institute: {match: [test_preparation, coaching, classes, jee, neet, upsc, ias, iit, cat, clat,
+                               gate], points: 4}
+  academy:            {match: [vocational_and_technical_school, academy, training institute, institute,
+                               skill], points: 3}
+  tutoring:           {match: [tutoring_center, language_school, tuition, tutorial, tutorials], points: 2}
 
 can_pay:
-  cap: 30
-  premium_price: {fact: fee_inr_per_year, min: 50000, points: 6}
-  proxies:
-    - {key: branches, points: 8, rule: {source: business, key: branches_count, op: ">=", value: 2}}
-    - {key: staff_10, points: 4, rule: {source: business, key: staff_count, op: ">=", value: 10}}
-    - {key: busy_100, points: 4, rule: {source: business, key: review_count, op: ">=", value: 100}}
-    - {key: pays_for_software, points: 3, rule: {source: fact, key: paid_tool, op: any}}
-    - {key: batches_running, points: 3, rule: {source: fact, key: batch_count, op: ">=", value: 3}}
-    - {key: funded, points: 6, rule: {source: signal, key: funding, op: exists}}
-
-exclusions:
-  chains:
-    - {name: Byju's, domains: [byjus.com]}
-    - {name: Allen, domains: [allen.ac.in]}
-    - {name: Aakash, domains: [aakash.ac.in]}
-    - {name: FIITJEE, domains: [fiitjee.com]}
-    - {name: Physics Wallah, domains: [pw.live]}
-    - {name: Unacademy, domains: [unacademy.com]}
-    - {name: Vedantu, domains: [vedantu.com]}
-    - {name: upGrad, domains: [upgrad.com]}
-    - {name: Leverage Edu, domains: [leverageedu.com]}
-    - {name: Leap Scholar, domains: [leapscholar.com]}
-    - {name: IDP, domains: [idp.com]}
-  hospital_keywords: []
-  agency_keywords: [edtech marketing agency]
-  competitors: []
-  max_branches: 15
-
-packaged_outcome: AI admissions counsellor
-agency_hint: "For a stated need, pitch building exactly that, tied to more admissions."
-angles:
-  - key: admissions_followup
-    label: Enquiries die after one call
-    signals: [hiring_frontdesk, review_pain, ads_running]
-    idea: "Every enquiry gets an instant WhatsApp reply, course details and follow-ups until the student enrols."
-  - key: demo_booking
-    label: Demo classes not booked
-    signals: [no_booking, slow_site]
-    idea: "Students book a demo class on WhatsApp, with reminders."
-  - key: season_rush
-    label: Admission season rush
-    signals: [new_branch, new_place, news]
-    idea: "Handle the admission season rush without hiring extra counsellors."
-  - key: stated_build
-    label: Their own stated need
-    signals: [hiring_builder, public_ask, tender]
-    idea: "Build exactly what they asked for, fast."
-  - key: fit_only_admissions
-    label: Admissions load (no signal)
-    signals: [fit_only]
-    idea: "Answer and follow up every admission enquiry automatically."
+  premium_price: {other: 50000}        # INR, any course or programme fee
 
 scoring: {}
 
-message:
-  language: en
-  greeting: first_name
-  examples:
-    - |
-      Hi Priya, came across your post for an admissions counsellor at your Kothrud centre.
+packaged_outcome: AI admissions counsellor
 
-      We're Nument, a small dev team. A WhatsApp assistant that answers course questions instantly and follows up until a demo is booked could take the first round off that role.
-
-      Is the enquiry rush already starting?
-
-phone:
-  region: IN
-  country_code: "+91"
-  whatsapp_needs_mobile: true
-
-compliance:
-  data_law: India DPDP Act 2023
-  contact_hours: Mon to Sat, 11:00 to 13:00 and 16:00 to 18:00 IST
-  notes:
-    - "Call only after a reply (TRAI 2025)."
-    - "Never collect student data. Business details only."
-    - "Admission seasons (roughly Jan to Jun for most exams) raise intent; verify per exam."
+angles:
+  - {key: build_what_they_asked, label: Their own stated need, signals: [public_ask, tender, hiring_builder],
+     idea: "Build exactly what they asked for, in their words, tied to more admissions."}
+  - {key: frontdesk_load, label: Counsellors overloaded, signals: [hiring_frontdesk],
+     idea: "Instant WhatsApp replies with course details and fees, so counsellors call only students who are ready."}
+  - {key: missed_calls, label: Enquiries not answered, signals: [review_pain],
+     idea: "Every enquiry answered in seconds, day and night, with a demo class slot."}
+  - {key: ad_leads_cold, label: Ad enquiries going cold, signals: [ads_running],
+     idea: "Every ad enquiry gets an instant reply and follow-ups until the student books a demo."}
+  - {key: no_online_booking, label: Demo classes not booked online, signals: [no_booking],
+     idea: "Students book a demo class on WhatsApp, with reminders."}
+  - {key: slow_site, label: Slow mobile site, signals: [slow_site],
+     idea: "A fast course page with WhatsApp enquiry, so mobile visitors ask instead of leaving."}
+  - {key: new_branch_setup, label: New centre, signals: [new_branch, new_place, news],
+     idea: "Handle the new centre's enquiry rush without hiring extra counsellors."}
+  - {key: admission_followup, label: Admission follow-up (no signal), signals: [fit_only],
+     idea: "Answer and follow up every admission enquiry until enrolment."}
 ```
 
 ### 3.7.4 `engine/segments/clinics-ae.yaml`
@@ -4691,27 +4624,18 @@ display_name: Clinics, UAE
 enabled: true
 timezone: Asia/Dubai
 currency: AED
-
-quota:
-  daily_research: 40
-  fit_only_max_pct: 10
+quota: {daily_research: 40}
 
 cities:
-  - name: Dubai
-    aliases: [Dubayy]
-    bbox: [55.05, 24.95, 55.45, 25.35]
-    localities: [Dubai Marina, JLT, Jumeirah, Umm Suqeim, Al Barsha, Business Bay, Downtown Dubai, DIFC,
-                 Deira, Bur Dubai, Karama, Al Quoz, Dubai Healthcare City, Mirdif, Al Nahda, JVC,
-                 Dubai Silicon Oasis, Motor City, Arabian Ranches]
-  - name: Abu Dhabi
-    aliases: [Abu Zaby]
-    bbox: [54.30, 24.20, 54.75, 24.55]
-    localities: [Al Khalidiyah, Al Bateen, Corniche, Al Reem Island, Khalifa City, Mohammed Bin Zayed City,
-                 Al Raha, Tourist Club Area, Al Mushrif, Yas Island]
-  - name: Sharjah
-    aliases: [Ash Shariqah]
-    bbox: [55.35, 25.25, 55.60, 25.42]
-    localities: [Al Majaz, Al Nahda Sharjah, Al Khan, Al Taawun, Muwaileh, University City, Al Qasimia]
+  - {name: Dubai, aliases: [Dubayy], bbox: [55.05, 24.95, 55.45, 25.35],
+     localities: [Dubai Marina, JLT, Jumeirah, Umm Suqeim, Al Barsha, Business Bay, Downtown Dubai, DIFC,
+                  Deira, Bur Dubai, Karama, Al Quoz, Dubai Healthcare City, Mirdif, Al Nahda, JVC,
+                  Dubai Silicon Oasis, Motor City, Arabian Ranches]}
+  - {name: Abu Dhabi, aliases: [Abu Zaby], bbox: [54.30, 24.20, 54.75, 24.55],
+     localities: [Al Khalidiyah, Al Bateen, Corniche, Al Reem Island, Khalifa City, Mohammed Bin Zayed City,
+                  Al Raha, Tourist Club Area, Al Mushrif, Yas Island]}
+  - {name: Sharjah, aliases: [Ash Shariqah], bbox: [55.35, 25.25, 55.60, 25.42],
+     localities: [Al Majaz, Al Nahda Sharjah, Al Khan, Al Taawun, Muwaileh, University City, Al Qasimia]}
 
 overture:
   categories:
@@ -4724,9 +4648,8 @@ overture:
     - counseling
     - behavioral_or_mental_health_clinic
     - hair_loss_center
-    - physical_therapy        # verify at build
-    - medical_skin_care       # verify at build
-  min_confidence: 0.6
+    - physical_therapy          # verify at build
+    - medical_skin_care         # verify at build
 
 places:
   queries:
@@ -4737,22 +4660,20 @@ places:
     - "IVF clinic in {locality}, {city}"
     - "physiotherapy clinic in {locality}, {city}"
     - "psychologist in {locality}, {city}"
-  details_per_day: 15            # outside India the free allowance is about 1K a month per SKU
+  details_per_day: 14           # outside India the free allowance is about 30 a day per SKU (3.7.7)
   reviews_per_day: 10
-  region_code: AE
-  language_code: en
 
 registries:
   - {key: dha, name: Dubai Health Authority licensed facilities, url: "https://www.dha.gov.ae",
-     status: verify_at_build, notes: "Use only a public, robots-allowed facility list; Sheryan may need login, skip if so."}
-  - {key: doh_abu_dhabi, name: Department of Health Abu Dhabi facility directory, url: "https://www.doh.gov.ae", status: verify_at_build}
-  - {key: mohap, name: Ministry of Health and Prevention (Sharjah and northern emirates), url: "https://mohap.gov.ae", status: verify_at_build}
+     status: verify_at_build, notes: "Only a public, robots-allowed list; Sheryan may need a login, skip if so."}
+  - {key: doh_abu_dhabi, name: Department of Health Abu Dhabi facility directory, url: "https://www.doh.gov.ae",
+     status: verify_at_build}
+  - {key: mohap, name: Ministry of Health and Prevention (Sharjah and northern emirates), url: "https://mohap.gov.ae",
+     status: verify_at_build}
 
-osm:
-  enabled: true
-apna:
-  pages_per_day: 0
-adzuna_enabled: false            # turn on only after Adzuna UAE coverage is verified
+osm: {enabled: true}
+apna: {pages_per_day: 0}
+adzuna_enabled: false           # only after Adzuna UAE coverage is checked
 
 job_keywords:
   frontdesk: [receptionist, front desk, front office, patient coordinator, patient relations,
@@ -4771,100 +4692,56 @@ news_queries:
 
 size_rules:
   any_of:
-    - {source: business, key: review_count, op: ">=", value: 80}
-    - {source: business, key: staff_count, op: ">=", value: 2}
+    - {source: business, key: review_count, op: ">=", value: 100}
     - {source: business, key: branches_count, op: ">=", value: 2}
-    - {source: signal, key: hiring_frontdesk, op: exists}
+    - {source: fact, key: staff_or_doctors, field: count, op: ">=", value: 2}
 
-signal_points:
-  review_pain: 7
-  hiring_frontdesk: 8
-  ads_running: 5
+signal_points: {review_pain: 7, ads_running: 5}
 
 fit:
-  required: 2
-  checks: [category_match, size_ok, independent]
+  categories: [dental_clinic, dermatology, aesthetic_medicine, fertility_clinic, psychology,
+               psychotherapy, counseling, behavioral_or_mental_health_clinic, hair_loss_center,
+               physical_therapy, medical_skin_care,
+               dentist, doctor, skin_care_clinic, physiotherapist]   # last four: Places types, verify at build
+  service_keywords: [ivf, fertility, dermatology, skin, laser, hair transplant, botox, fillers,
+                     dental implants, veneers, aligners, physiotherapy, counselling, therapy]
+  min_reviews: 100
+  min_staff: 2
 
 ticket_class:
-  ivf:       {match: [fertility_clinic, ivf, fertility], points: 6}
-  aesthetic: {match: [aesthetic_medicine, cosmetic, laser, hair_loss_center, hair transplant, botox, filler], points: 6}
-  derma:     {match: [dermatology, dermatologist, skin], points: 5}
-  dental:    {match: [dental_clinic, dentist, dental, orthodont], points: 4}
-  physio:    {match: [physical_therapy, physiotherapy, physio], points: 3}
-  therapy:   {match: [psychology, psychotherapy, counseling, behavioral_or_mental_health_clinic], points: 3}
+  ivf_fertility:   {match: [fertility_clinic, ivf, fertility], points: 6}
+  hair_transplant: {match: [hair_loss_center, hair transplant], points: 5}
+  aesthetic:       {match: [aesthetic_medicine, medical_skin_care, aesthetic, cosmetic, laser, botox, filler], points: 5}
+  dermatology:     {match: [dermatology, skin_care_clinic, dermatologist, skin], points: 4}
+  dental:          {match: [dental_clinic, dentist, dental, orthodontic], points: 3}
+  physio:          {match: [physical_therapy, physiotherapist, physiotherapy, physio], points: 2}
+  therapy_group:   {match: [psychology, psychotherapy, counseling, behavioral_or_mental_health_clinic,
+                            psychologist, therapy], points: 2}
 
 can_pay:
-  cap: 30
-  premium_price: {fact: price_point_aed, min: 300, points: 5}
-  proxies:
-    - {key: branches, points: 8, rule: {source: business, key: branches_count, op: ">=", value: 2}}
-    - {key: staff, points: 6, rule: {source: business, key: staff_count, op: ">=", value: 3}}
-    - {key: busy_300, points: 8, rule: {source: business, key: review_count, op: ">=", value: 300}}
-    - {key: busy_80, points: 5, rule: {source: business, key: review_count, op: ">=", value: 80}, unless: busy_300}
-    - {key: pays_for_software, points: 4, rule: {source: fact, key: paid_tool, op: any}}
-    - {key: custom_website, points: 2, rule: {source: fact, key: site_builder, op: not_in, value: [wix, godaddy_builder, google_sites]}}
-
-exclusions:
-  chains:
-    - {name: Aster, domains: [asterdmhealthcare.com, asterclinics.ae]}
-    - {name: NMC, domains: [nmc.ae]}
-    - {name: Mediclinic, domains: [mediclinic.ae]}
-    - {name: Thumbay, domains: [thumbay.com]}
-    - {name: Burjeel, domains: [burjeel.com]}
-  hospital_keywords: [emirates hospital, hospital group]
-  agency_keywords: []
-  competitors: []
-  max_branches: 15
-
-packaged_outcome: AI front desk
-agency_hint: "For a stated need, pitch building exactly what they asked for, in their own words."
-angles:
-  - key: missed_calls
-    label: Calls and WhatsApps missed
-    signals: [review_pain, hiring_frontdesk]
-    idea: "A WhatsApp assistant that answers patients in English and books slots 24/7."
-  - key: ad_leads_cold
-    label: Ad enquiries going cold
-    signals: [ads_running]
-    idea: "Every ad enquiry answered in seconds and followed up until it books."
-  - key: booking_friction
-    label: No easy booking
-    signals: [no_booking, slow_site, new_place, new_branch, news]
-    idea: "Booking on WhatsApp with reminders that cut no-shows."
-  - key: stated_build
-    label: Their own stated need
-    signals: [hiring_builder, public_ask, tender]
-    idea: "Build exactly what they asked for, fast."
-  - key: fit_only_frontdesk
-    label: Front desk load (no signal)
-    signals: [fit_only]
-    idea: "Take routine patient questions off the front desk."
+  premium_price: {consultation: 300, other: 3000}     # AED (Step 11.3)
 
 scoring: {}
 
-message:
-  language: en
-  greeting: dr_surname_if_doctor
-  examples:
-    - |
-      Hi Dr. Khan, came across your clinic's opening for a patient coordinator in Dubai Healthcare City.
+packaged_outcome: AI front desk
 
-      We're Nument, a small dev team. A WhatsApp assistant that answers patient questions and books appointments around the clock could take a lot off that role.
-
-      Are most enquiries coming in on WhatsApp?
-
-phone:
-  region: AE
-  country_code: "+971"
-  whatsapp_needs_mobile: true
-
-compliance:
-  data_law: UAE Personal Data Protection Law (Federal Decree-Law 45 of 2021)
-  contact_hours: Mon to Thu, 10:00 to 12:00 and 15:00 to 17:00 GST (Friday mornings only; shorter hours in Ramadan)
-  notes:
-    - "UAE telemarketing rules (2024) restrict promotional calls; call only after a reply. Verify current rules at build."
-    - "Health data is sensitive: never collect patient data."
-    - "Messages in English for wave 1. Arabic later if reply rates call for it."
+angles:
+  - {key: build_what_they_asked, label: Their own stated need, signals: [public_ask, tender, hiring_builder],
+     idea: "Build exactly what they asked for, in their words, and mention one detail from their post."}
+  - {key: frontdesk_load, label: Front desk overloaded, signals: [hiring_frontdesk],
+     idea: "A WhatsApp assistant answers patient questions in English and books appointments, so the front desk handles only real work."}
+  - {key: missed_calls, label: Calls and WhatsApps missed, signals: [review_pain],
+     idea: "Every call and WhatsApp answered in seconds, around the clock, with a booking link."}
+  - {key: ad_leads_cold, label: Ad enquiries going cold, signals: [ads_running],
+     idea: "Every ad enquiry answered in seconds and followed up until it books."}
+  - {key: no_online_booking, label: No easy online booking, signals: [no_booking],
+     idea: "Patients book on WhatsApp, with reminders that cut no-shows."}
+  - {key: slow_site, label: Slow mobile site, signals: [slow_site],
+     idea: "A fast booking page with a WhatsApp button, so mobile visitors book instead of leaving."}
+  - {key: new_branch_setup, label: New branch or clinic, signals: [new_branch, new_place, news],
+     idea: "One front desk assistant for every branch from day one."}
+  - {key: after_hours_enquiries, label: After-hours enquiries (no signal), signals: [fit_only],
+     idea: "Answer patient questions and book appointments after hours on WhatsApp."}
 ```
 
 ### 3.7.5 `engine/segments/realestate-ae.yaml`
@@ -4877,15 +4754,12 @@ display_name: Real estate, UAE
 enabled: true
 timezone: Asia/Dubai
 currency: AED
-
-quota:
-  daily_research: 40
-  fit_only_max_pct: 10
+quota: {daily_research: 40}
 
 cities:
   - {name: Dubai, aliases: [Dubayy], bbox: [55.05, 24.95, 55.45, 25.35],
-     localities: [Business Bay, Downtown Dubai, Dubai Marina, JLT, JVC, Al Barsha, Deira, Bur Dubai, Dubai Hills,
-                  Palm Jumeirah, Arjan, Dubai South]}
+     localities: [Business Bay, Downtown Dubai, Dubai Marina, JLT, JVC, Al Barsha, Deira, Bur Dubai,
+                  Dubai Hills, Palm Jumeirah, Arjan, Dubai South]}
   - {name: Abu Dhabi, aliases: [Abu Zaby], bbox: [54.30, 24.20, 54.75, 24.55],
      localities: [Al Reem Island, Yas Island, Saadiyat Island, Khalifa City, Al Raha, Corniche]}
   - {name: Sharjah, aliases: [Ash Shariqah], bbox: [55.35, 25.25, 55.60, 25.42],
@@ -4893,12 +4767,11 @@ cities:
 
 overture:
   categories:
-    - real_estate                # verify at build
-    - real_estate_agent          # verify at build
-    - real_estate_service        # verify at build
-    - real_estate_developer      # verify at build
-    - property_management        # verify at build
-  min_confidence: 0.6
+    - real_estate               # verify at build
+    - real_estate_agent         # verify at build
+    - real_estate_service       # verify at build
+    - real_estate_developer     # verify at build
+    - property_management       # verify at build
 
 places:
   queries:
@@ -4906,20 +4779,16 @@ places:
     - "real estate agency in {locality}, {city}"
     - "property developer in {city}"
     - "property management company in {locality}, {city}"
-  details_per_day: 10
-  reviews_per_day: 8
-  region_code: AE
-  language_code: en
+  details_per_day: 9
+  reviews_per_day: 7
 
 registries:
   - {key: dld_brokers, name: Dubai Land Department registered brokers and offices, url: "https://dubailand.gov.ae",
-     status: verify_at_build, notes: "Look for a public broker or office list or open data. Skip if login or CAPTCHA."}
+     status: verify_at_build, notes: "Look for a public list or open data. Skip on a login or CAPTCHA."}
   - {key: adrec, name: Abu Dhabi Real Estate Centre, url: "https://www.adrec.gov.ae", status: verify_at_build}
 
-osm:
-  enabled: true
-apna:
-  pages_per_day: 0
+osm: {enabled: true}
+apna: {pages_per_day: 0}
 adzuna_enabled: false
 
 job_keywords:
@@ -4937,96 +4806,52 @@ news_queries:
 
 size_rules:
   any_of:
-    - {source: business, key: staff_count, op: ">=", value: 5}
-    - {source: business, key: review_count, op: ">=", value: 40}
+    - {source: business, key: review_count, op: ">=", value: 30}
     - {source: business, key: branches_count, op: ">=", value: 2}
-    - {source: signal, key: hiring_frontdesk, op: exists}
+    - {source: registry, key: "*", op: exists}
 
-signal_points:
-  hiring_frontdesk: 9
-  ads_running: 6
-  review_pain: 5
+signal_points: {hiring_frontdesk: 9, ads_running: 6}
 
 fit:
-  required: 2
-  checks: [category_match, size_ok, independent]
+  categories: [real_estate, real_estate_agent, real_estate_service, real_estate_developer,
+               property_management, real_estate_agency]          # last one: Places type, verify at build
+  service_keywords: [off plan, offplan, secondary market, leasing, property management, holiday homes,
+                     villas, apartments, commercial property]
+  min_reviews: 30
+  min_staff: 2
 
 ticket_class:
-  developer: {match: [real_estate_developer, developer, developments, properties], points: 6}
-  brokerage: {match: [real_estate_agent, broker, brokerage, realty, real estate agency], points: 5}
-  services:  {match: [property_management, real_estate_service, holiday homes], points: 3}
+  developer:         {match: [real_estate_developer, developer, developers, developments], points: 6}
+  broker:            {match: [real_estate_agent, real_estate_agency, broker, brokers, brokerage, realty,
+                              real estate agency, properties], points: 2}
+  property_services: {match: [property_management, real_estate_service, holiday homes, property management], points: 2}
 
 can_pay:
-  cap: 30
-  premium_price: {fact: avg_listing_price_aed, min: 1500000, points: 5}
-  proxies:
-    - {key: agents_10, points: 7, rule: {source: business, key: staff_count, op: ">=", value: 10}}
-    - {key: listings_many, points: 6, rule: {source: fact, key: listings_count, op: ">=", value: 50}}
-    - {key: ads_live, points: 5, rule: {source: signal, key: ads_running, op: exists}}
-    - {key: busy_40, points: 3, rule: {source: business, key: review_count, op: ">=", value: 40}}
-    - {key: pays_for_software, points: 4, rule: {source: fact, key: paid_tool, op: any}}
-    - {key: registered_office, points: 3, rule: {source: fact, key: orn_number, op: exists}}
+  premium_price: {other: 1500000}      # AED 1.5 million, any listed property
 
-exclusions:
-  chains:
-    - {name: Emaar, domains: [emaar.com]}
-    - {name: DAMAC, domains: [damacproperties.com]}
-    - {name: Nakheel, domains: [nakheel.com]}
-    - {name: Aldar, domains: [aldar.com]}
-    - {name: Sobha Realty, domains: [sobharealty.com]}
-    - {name: Azizi, domains: [azizidevelopments.com]}
-    - {name: Property Finder, domains: [propertyfinder.ae]}
-    - {name: Bayut, domains: [bayut.com]}
-    - {name: Dubizzle, domains: [dubizzle.com]}
-  hospital_keywords: []
-  agency_keywords: [real estate marketing agency, proptech]
-  competitors: []
-  max_branches: 15
+scoring:
+  can_pay:
+    reviews: [{min: 100, points: 6}, {min: 30, points: 4}]
 
 packaged_outcome: AI lead qualifier and site-visit booking
-agency_hint: "For a stated need, pitch building exactly that, tied to faster lead response."
+
 angles:
-  - key: lead_speed
-    label: Portal leads answered late
-    signals: [hiring_frontdesk, ads_running, review_pain]
-    idea: "Every Property Finder, Bayut and ad lead answered on WhatsApp in seconds, qualified and offered a viewing."
-  - key: viewing_booking
-    label: Viewings not booked
-    signals: [no_booking, new_place, new_branch, news, slow_site]
-    idea: "Leads pick a viewing slot on WhatsApp, with reminders."
-  - key: stated_build
-    label: Their own stated need
-    signals: [hiring_builder, public_ask, tender]
-    idea: "Build exactly what they asked for, fast."
-  - key: fit_only_leads
-    label: Lead handling (no signal)
-    signals: [fit_only]
-    idea: "Qualify and book every enquiry automatically."
-
-scoring: {}
-
-message:
-  language: en
-  greeting: first_name
-  examples:
-    - |
-      Hi Omar, came across your opening for a telesales agent to handle portal leads in Business Bay.
-
-      We're Nument, a small dev team. A WhatsApp assistant that replies to every Bayut and Property Finder lead in seconds and books the viewing could take the first round off that role.
-
-      Roughly how many leads a day come in?
-
-phone:
-  region: AE
-  country_code: "+971"
-  whatsapp_needs_mobile: true
-
-compliance:
-  data_law: UAE Personal Data Protection Law (Federal Decree-Law 45 of 2021)
-  contact_hours: Mon to Thu, 10:00 to 12:00 and 15:00 to 17:00 GST
-  notes:
-    - "Call only after a reply (UAE telemarketing rules 2024; verify at build)."
-    - "Broker registration numbers (ORN) are public; store the number only."
+  - {key: build_what_they_asked, label: Their own stated need, signals: [public_ask, tender, hiring_builder],
+     idea: "Build exactly what they asked for, in their words, tied to faster lead response."}
+  - {key: frontdesk_load, label: Telesales overloaded, signals: [hiring_frontdesk],
+     idea: "Every Property Finder, Bayut and ad lead answered on WhatsApp in seconds, qualified and offered a viewing, so agents call only warm leads."}
+  - {key: missed_calls, label: Leads not answered, signals: [review_pain],
+     idea: "Every enquiry answered in seconds, day and night, and offered a viewing slot."}
+  - {key: ad_leads_cold, label: Ad leads going cold, signals: [ads_running],
+     idea: "Every ad lead gets an instant WhatsApp reply and follow-ups until it books a viewing."}
+  - {key: no_online_booking, label: Viewings not booked online, signals: [no_booking],
+     idea: "Leads pick a viewing slot on WhatsApp, with a reminder."}
+  - {key: slow_site, label: Slow listing pages, signals: [slow_site],
+     idea: "Fast listing pages with WhatsApp booking, so mobile visitors book a viewing instead of leaving."}
+  - {key: new_branch_setup, label: New project or office, signals: [new_branch, new_place, news],
+     idea: "Handle the launch rush: every enquiry answered and qualified automatically."}
+  - {key: site_visit_followup, label: Viewing follow-up (no signal), signals: [fit_only],
+     idea: "Follow up every enquiry until it books a viewing."}
 ```
 
 ### 3.7.6 `engine/segments/education-ae.yaml`
@@ -5039,10 +4864,7 @@ display_name: Education, UAE
 enabled: true
 timezone: Asia/Dubai
 currency: AED
-
-quota:
-  daily_research: 30
-  fit_only_max_pct: 10
+quota: {daily_research: 30}
 
 cities:
   - {name: Dubai, aliases: [Dubayy], bbox: [55.05, 24.95, 55.45, 25.35],
@@ -5054,13 +4876,12 @@ cities:
 
 overture:
   categories:
-    - educational_services       # verify at build
-    - tutoring_center            # verify at build
-    - test_preparation           # verify at build
-    - language_school            # verify at build
+    - educational_services      # verify at build
+    - tutoring_center           # verify at build
+    - test_preparation          # verify at build
+    - language_school           # verify at build
     - vocational_and_technical_school   # verify at build
-    - educational_consultant     # verify at build
-  min_confidence: 0.6
+    - educational_consultant    # verify at build
 
 places:
   queries:
@@ -5069,20 +4890,16 @@ places:
     - "test preparation centre in {locality}, {city}"
     - "language institute in {locality}, {city}"
     - "education consultant in {locality}, {city}"
-  details_per_day: 8
-  reviews_per_day: 6
-  region_code: AE
-  language_code: en
+  details_per_day: 7
+  reviews_per_day: 5
 
 registries:
   - {key: khda, name: KHDA licensed training institutes (Dubai), url: "https://www.khda.gov.ae",
      status: verify_at_build, notes: "KHDA publishes directories of licensed institutes; check robots and format."}
   - {key: adek, name: ADEK (Abu Dhabi), url: "https://www.adek.gov.ae", status: verify_at_build}
 
-osm:
-  enabled: true
-apna:
-  pages_per_day: 0
+osm: {enabled: true}
+apna: {pages_per_day: 0}
 adzuna_enabled: false
 
 job_keywords:
@@ -5099,111 +4916,70 @@ news_queries:
 
 size_rules:
   any_of:
-    - {source: business, key: review_count, op: ">=", value: 60}
+    - {source: business, key: review_count, op: ">=", value: 50}
     - {source: business, key: branches_count, op: ">=", value: 2}
-    - {source: business, key: staff_count, op: ">=", value: 5}
-    - {source: signal, key: hiring_frontdesk, op: exists}
 
-signal_points:
-  hiring_frontdesk: 9
-  ads_running: 5
-  review_pain: 5
+signal_points: {hiring_frontdesk: 9, ads_running: 5}
 
 fit:
-  required: 2
-  checks: [category_match, size_ok, independent]
+  categories: [educational_services, tutoring_center, test_preparation, language_school,
+               vocational_and_technical_school, educational_consultant]
+  service_keywords: [ielts, pte, toefl, sat, gmat, gre, university admissions, study abroad,
+                     tutoring, test preparation, professional certification]
+  min_reviews: 50
+  min_staff: 2
 
 ticket_class:
-  test_prep:  {match: [test_preparation, ielts, sat, gmat, gre, pte, toefl], points: 5}
-  institute:  {match: [vocational_and_technical_school, training institute, academy, institute], points: 5}
-  consultant: {match: [educational_consultant, education consultant, study abroad, university admissions], points: 5}
-  tutoring:   {match: [tutoring_center, tuition, tutoring], points: 3}
-  language:   {match: [language_school, language institute], points: 3}
+  study_abroad:       {match: [educational_consultant, education consultant, study abroad,
+                               university admissions], points: 5}
+  coaching_institute: {match: [test_preparation, ielts, sat, gmat, gre, pte, toefl], points: 4}
+  academy:            {match: [vocational_and_technical_school, training institute, academy, institute], points: 3}
+  tutoring:           {match: [tutoring_center, language_school, tutoring, tuition, language institute], points: 2}
 
 can_pay:
-  cap: 30
-  premium_price: {fact: fee_aed_per_course, min: 3000, points: 6}
-  proxies:
-    - {key: branches, points: 8, rule: {source: business, key: branches_count, op: ">=", value: 2}}
-    - {key: staff_10, points: 4, rule: {source: business, key: staff_count, op: ">=", value: 10}}
-    - {key: busy_60, points: 4, rule: {source: business, key: review_count, op: ">=", value: 60}}
-    - {key: pays_for_software, points: 3, rule: {source: fact, key: paid_tool, op: any}}
-    - {key: khda_licensed, points: 3, rule: {source: fact, key: khda_licence, op: exists}}
-
-exclusions:
-  chains:
-    - {name: GEMS Education, domains: [gemseducation.com]}
-    - {name: Taaleem, domains: [taaleem.ae]}
-    - {name: Aldar Academies, domains: [aldaracademies.com]}
-  hospital_keywords: []
-  agency_keywords: [education marketing agency]
-  competitors: []
-  max_branches: 15
-
-packaged_outcome: AI admissions counsellor
-agency_hint: "For a stated need, pitch building exactly that, tied to more enrolments."
-angles:
-  - key: admissions_followup
-    label: Enquiries not followed up
-    signals: [hiring_frontdesk, review_pain, ads_running]
-    idea: "Every enquiry gets an instant WhatsApp reply with course details and follow-ups until enrolment."
-  - key: trial_booking
-    label: Trial classes not booked
-    signals: [no_booking, slow_site, new_place, new_branch, news]
-    idea: "Students book a trial or assessment on WhatsApp, with reminders."
-  - key: stated_build
-    label: Their own stated need
-    signals: [hiring_builder, public_ask, tender]
-    idea: "Build exactly what they asked for, fast."
-  - key: fit_only_admissions
-    label: Admissions load (no signal)
-    signals: [fit_only]
-    idea: "Answer and follow up every enquiry automatically."
+  premium_price: {other: 10000}        # AED, any course fee
 
 scoring: {}
 
-message:
-  language: en
-  greeting: first_name
-  examples:
-    - |
-      Hi Sara, came across your opening for an admissions officer at your Al Barsha institute.
+packaged_outcome: AI admissions counsellor
 
-      We're Nument, a small dev team. A WhatsApp assistant that answers course questions instantly and follows up until the trial class is booked could take the first round off that role.
-
-      Are most enquiries coming in on WhatsApp?
-
-phone:
-  region: AE
-  country_code: "+971"
-  whatsapp_needs_mobile: true
-
-compliance:
-  data_law: UAE Personal Data Protection Law (Federal Decree-Law 45 of 2021)
-  contact_hours: Mon to Thu, 10:00 to 12:00 and 15:00 to 17:00 GST
-  notes:
-    - "Call only after a reply (UAE telemarketing rules 2024; verify at build)."
-    - "Never collect student data. Business details only."
+angles:
+  - {key: build_what_they_asked, label: Their own stated need, signals: [public_ask, tender, hiring_builder],
+     idea: "Build exactly what they asked for, in their words, tied to more enrolments."}
+  - {key: frontdesk_load, label: Admissions team overloaded, signals: [hiring_frontdesk],
+     idea: "Instant WhatsApp replies with course details and fees, so the team calls only students who are ready."}
+  - {key: missed_calls, label: Enquiries not answered, signals: [review_pain],
+     idea: "Every enquiry answered in seconds, with a trial class slot."}
+  - {key: ad_leads_cold, label: Ad enquiries going cold, signals: [ads_running],
+     idea: "Every ad enquiry gets an instant reply and follow-ups until the student books a trial."}
+  - {key: no_online_booking, label: Trial classes not booked online, signals: [no_booking],
+     idea: "Students book a trial or assessment on WhatsApp, with reminders."}
+  - {key: slow_site, label: Slow mobile site, signals: [slow_site],
+     idea: "A fast course page with WhatsApp enquiry, so mobile visitors ask instead of leaving."}
+  - {key: new_branch_setup, label: New centre, signals: [new_branch, new_place, news],
+     idea: "Handle the new centre's enquiry rush without hiring extra staff."}
+  - {key: admission_followup, label: Admission follow-up (no signal), signals: [fit_only],
+     idea: "Answer and follow up every enquiry until enrolment."}
 ```
 
 ### 3.7.7 Places daily caps across segments
-The `places.details_per_day` values above are set so the totals stay inside the free allowances in A.10.2:
+The `places` caps above keep the totals inside the free allowances (A.10.2). Step 5 enforces the same totals at run time with the settings `places_details_cap_in` (230) and `places_details_cap_global` (30).
 
-| Region | Segments | Details per day (sum) | Reviews per day (sum) | Free cap per day |
-|---|---|---|---|---|
-| India | clinics-in 90, realestate-in 60, education-in 50 | 200 | 170 | 230 each |
-| UAE (abroad) | clinics-ae 15, realestate-ae 10, education-ae 8 | 33 | 24 | about 33 each (1K a month) |
+| Region | Details per day | Reviews per day | Free cap per day, per SKU |
+|---|---|---|---|
+| India | clinics 90 + real estate 60 + education 50 = 200 | 90 + 60 + 40 = 190 | 230 |
+| UAE (abroad) | 14 + 9 + 7 = 30 | 10 + 7 + 5 = 22 | 30 |
 
-Verify at build which pricing applies to the founder's billing account (India pricing gives 7K free per month per SKU; global gives about 1K). Set the matching per-method quota caps in the Google Cloud console as a second safety net.
+Verify at build which pricing applies to the founder's billing account, and set the same caps as quotas in the Google Cloud console as a second safety net.
 
 ### 3.7.8 Verify-at-build checklist for the six files
-Do these on build day and update the files:
-1. Download Overture `taxonomy.csv` for the current release. Confirm every code in `overture.categories`, remove codes that do not exist, and delete the `# verify at build` comment from confirmed ones. Real estate and education have **no confirmed codes yet**.
-2. Draw every `bbox` on a map. It must cover the built-up area and not waste queries on sea or desert.
-3. Open each `verify_at_build` registry. Check robots.txt, login and CAPTCHA. Set `status: ready` only if it is public and allowed; otherwise delete the entry.
-4. Check exclusion chain domains are still the companies' real domains.
-5. Re-read compliance notes against current rules (TRAI, UAE telemarketing, this year's Ramadan dates).
+1. Download Overture `taxonomy.csv` for the current release. Confirm every code in `overture.categories` and `fit.categories`, remove codes that do not exist, and delete the `# verify at build` comment from confirmed ones. Real estate and education have **no confirmed codes yet**.
+2. Confirm the Places primary types used in `fit.categories` and `ticket_class` (`dentist`, `doctor`, `skin_care_clinic`, `physiotherapist`, `real_estate_agency`).
+3. Draw every `bbox` on a map. It must cover the built-up area and not waste queries on sea or desert.
+4. Open each `verify_at_build` registry. Check robots.txt, login and CAPTCHA. Set `status: ready` only if it is public and allowed (and add its key to `source_records_source_known`, 2.6.1); otherwise delete the entry.
+5. Check that chain domains in `exclusions.yaml` are still the companies' real domains.
 6. Run each `news_queries` entry once in the GDELT DOC API and each `public_ask_queries` entry once in grounded search; drop queries that return nothing useful.
+7. Run `subcategory_for()` on 50 real business names per segment and fix `match` lists that pick the wrong class.
 
 ## 3.8 Tests
 
@@ -5211,42 +4987,63 @@ Create `engine/tests/test_segments.py`:
 
 ```python
 from pathlib import Path
+
 import pytest
-from nument_engine.segments import load_segments, load_yaml_config, SEGMENTS_DIR
+
+from nument_engine.segments import (REQUIRED_ANGLES, SEGMENTS_DIR, load_segments, load_yaml_config,
+                                    scoring_config)
 
 WAVE1 = {"clinics-in", "realestate-in", "education-in", "clinics-ae", "realestate-ae", "education-ae"}
+
 
 def test_all_segments_load():
     assert set(load_segments()) == WAVE1
 
+
 def test_quotas_fit_research_per_day():
-    segs = load_segments()
-    assert sum(s.quota.daily_research for s in segs.values() if s.enabled) <= 300
+    assert sum(s.quota.daily_research for s in load_segments().values() if s.enabled) <= 300
 
-def test_can_pay_points_can_reach_cap():
-    for s in load_segments().values():
-        best_ticket = max(t.points for t in s.ticket_class.values())
-        best = sum(p.points for p in s.can_pay.proxies if not p.unless) + s.can_pay.premium_price.points + best_ticket
-        assert best >= s.can_pay.cap * 0.8, f"{s.id}: proxies cannot reach the cap"
-
-def test_signal_overrides_are_known_types():
-    defaults = load_yaml_config("scoring")["signals"]
-    for s in load_segments().values():
-        assert set(s.signal_points) <= set(defaults), s.id
 
 def test_places_caps_inside_free_allowance():
-    segs = load_segments()
-    india = sum(s.places.details_per_day for s in segs.values() if s.country == "in")
-    abroad = sum(s.places.details_per_day for s in segs.values() if s.country != "in")
-    assert india <= 230 and abroad <= 33
+    segs = list(load_segments().values())
+    for field in ("details_per_day", "reviews_per_day"):
+        india = sum(getattr(s.places, field) for s in segs if s.country == "in")
+        abroad = sum(getattr(s.places, field) for s in segs if s.country != "in")
+        assert india <= 230 and abroad <= 30, field
+
+
+def test_every_segment_has_the_angles_step11_picks():
+    for s in load_segments().values():
+        assert REQUIRED_ANGLES <= {a.key for a in s.angles}, s.id
+        assert s.fit_only_angle() and s.growth_angle()
+
+
+def test_subcategory_ticket_and_premium_helpers():
+    seg = load_segments()["clinics-in"]
+    assert seg.subcategory_for("fertility_clinic") == "ivf_fertility"
+    assert seg.subcategory_for(None, "Sunrise IVF and Fertility Centre") == "ivf_fertility"
+    assert seg.subcategory_for(None, "City Physiotherapy Centre") == "physio"
+    assert seg.ticket_points("ivf_fertility") == 6 and seg.ticket_points(None) == 0
+    assert seg.premium_threshold("Consultation fee") == 800
+    assert seg.premium_threshold("IVF package") == 20000
+    assert seg.is_type_match("dentist", None) and not seg.is_type_match("restaurant", None)
+
+
+def test_scoring_overrides_merge():
+    base = load_yaml_config("scoring")
+    merged = scoring_config(load_segments()["realestate-in"])
+    assert merged["can_pay"]["reviews"][-1]["min"] == 30        # segment override
+    assert merged["reach"] == base["reach"]                       # untouched default
+
 
 def test_exclusions_file_shape():
     ex = load_yaml_config("exclusions")
-    assert {"chains", "hospital_keywords", "agency_keywords", "competitors", "max_branches"} <= set(ex)
-    assert all("name" in c and "domains" in c for c in ex["chains"])
+    assert set(ex) == {"chains", "hospital_keywords", "agency_keywords", "competitors", "max_branches"}
+    assert all(set(c) == {"name", "domains"} for c in ex["chains"])
+
 
 def test_bad_id_is_rejected(tmp_path: Path):
-    bad = (SEGMENTS_DIR / "clinics-in.yaml").read_text().replace("id: clinics-in", "id: clinic-in")
+    bad = (SEGMENTS_DIR / "clinics-in.yaml").read_text().replace("id: clinics-in", "id: clinic-in", 1)
     (tmp_path / "clinic-in.yaml").write_text(bad)
     with pytest.raises(SystemExit):
         load_segments(tmp_path)
@@ -5257,46 +5054,46 @@ Run: `cd engine && uv run pytest tests/test_segments.py -q`.
 ## 3.9 How to add a new segment (checklist)
 Copy this into `docs/segments-guide.md`.
 
-1. **Decide the id:** `{domain}-{country}`, for example `clinics-sa` or `d2c-in`.
-2. **Copy the closest file** (for example `clinics-ae.yaml`) to `engine/segments/<id>.yaml` and change `id`, `domain`, `country`, `display_name`, `timezone`, `currency`.
-3. **Cities:** name, aliases, a bbox under 2 degrees, and 5 to 20 localities each.
-4. **Overture categories:** pick from `taxonomy.csv`; mark unsure ones `# verify at build`.
-5. **Places:** 3 to 8 query templates in plain local wording, plus `details_per_day` and `reviews_per_day` inside the free allowance (3.7.7).
-6. **Registries:** research public registries for that country and domain; status `verify_at_build` until checked.
+1. **Id:** `{domain}-{country}`, for example `clinics-sa` or `d2c-in`.
+2. **Copy the closest file** (for example `clinics-ae.yaml`) to `engine/segments/<id>.yaml`; change `id`, `domain`, `country`, `display_name`, `timezone`, `currency`.
+3. **Cities:** name, aliases, a bbox under 2 degrees each way, 5 to 20 localities.
+4. **Overture categories:** from `taxonomy.csv`; mark unsure ones `# verify at build`.
+5. **Places:** 3 to 8 queries in local wording; daily caps that keep the regional totals inside 3.7.7.
+6. **Registries:** public registries for that country and domain, status `verify_at_build` until checked.
 7. **Sources:** `osm.enabled`, `apna.pages_per_day` (India only, else 0), `adzuna_enabled` (only after checking coverage).
-8. **Job keywords:** front-desk and builder words that local job posts actually use, plus `exclude`.
-9. **Public ask and news queries:** 2 to 4 each; test them once.
-10. **Size rules, fit, ticket class, can-pay:** local-currency thresholds; a `premium_price` fact and minimum; points that can reach about 80% of the cap.
-11. **Exclusions:** the big chains, platforms and corporates of that market, plus any local competitors.
-12. **Pitch:** the domain's `packaged_outcome` from A.2.2 (the loader enforces it), an `agency_hint`, and 4 to 6 `angles` including `stated_build` and a `fit_only_*` angle.
-13. **Message examples:** 1 to 3, in the approved voice, 25 to 70 words, one question, no links, no dashes, fictional names.
-14. **Phone and compliance:** region, country code, data law, contact hours, telemarketing rules.
-15. **Quota:** lower other segments so the total stays at or under `research_per_day`.
-16. Run `uv run pytest tests/test_segments.py`.
-17. Commit, push, and run `nlead universe --segment <id> --limit 50 --dry-run --env dev`.
-18. Label 20 businesses from the new segment in the golden set (Step 17) before enabling it in prod.
-19. Enable it in prod with a small quota (for example 20 a day) and watch reply rates for 2 weeks (Step 23).
+8. **Job keywords:** words local job posts really use, plus `exclude`.
+9. **Public ask and news queries:** 2 to 4 each, tested once.
+10. **Size rules and fit:** local review and staff thresholds; `fit.categories` and `service_keywords`.
+11. **Ticket classes and premium price:** subcategories in match order with 0 to 6 points; price thresholds in the local currency.
+12. **Exclusions:** add the market's big chains, platforms and corporates to `config/exclusions.yaml`.
+13. **Pitch:** the domain's `packaged_outcome` (A.2.2); 8 angles with the six fixed codes, a growth angle and one `fit_only` angle.
+14. **Compliance:** read the country's data law and telemarketing rules (Step 18) before enabling.
+15. **Quota:** keep the enabled total at or under `research_per_day`.
+16. `uv run pytest tests/test_segments.py`, commit, then `nlead universe --segment <id> --limit 50 --dry-run --env dev`.
+17. Label 20 businesses from the new segment in the golden set (Step 17) before enabling it in prod.
+18. Enable it in prod with a small quota (for example 20 a day) and watch reply rates for 2 weeks (Step 23).
 
 ## 3.10 Pitfalls
 | Pitfall | Fix |
 |---|---|
 | A bbox too large (a whole state) | Overture queries get slow and noisy; split into cities under 2 degrees |
-| Guessing Overture codes | Wrong codes return nothing silently; confirm in `taxonomy.csv` and check counts in Step 6 |
+| Guessed Overture codes | Wrong codes return nothing, silently; confirm in `taxonomy.csv` and check counts in Step 6 |
 | Quotas adding up to more than 300 | The loader stops the run; lower another segment |
-| An exclusion keyword too broad (for example "max") | It drops real businesses; use full names and test against a sample |
-| Copying a file but forgetting to rename `id` | Loader error "File must be named"; rename both |
+| A short exclusion name (for example "dlf" or "max") | It rejects real businesses; use full names plus domains |
+| A broad `ticket_class` word placed early (for example "skin" above "laser") | The wrong class wins; put specific classes first and test with `subcategory_for()` |
+| Copying a file but forgetting to rename `id` | Loader error "must be named"; rename both |
 | Places caps above the free allowance | Real money is spent; the test in 3.8 catches it |
-| Real business names in examples | Use fictional names only |
-| A registry that needs login or CAPTCHA | Never use it (A.4.2); delete it from the file |
+| An angle code renamed in one file | Step 11 cannot find it; the loader requires the six fixed codes |
+| A registry that needs a login or CAPTCHA | Never use it (A.4.2); delete it from the file |
 
 ## 3.11 Done when
-- [ ] `engine/src/nument_engine/segments.py` exists with the models, `load_segments()`, `load_yaml_config()` and `sync_segments_to_db()`.
+- [ ] `engine/src/nument_engine/segments.py` exists with the models, helpers, `load_segments()`, `scoring_config()`, `load_yaml_config()` and `sync_segments_to_db()`.
 - [ ] `engine/config/scoring.yaml` and `engine/config/exclusions.yaml` exist with the shapes in 3.5 and 3.6.
-- [ ] All six wave-1 YAML files exist, use exactly the keys in 3.3, load without errors and pass `tests/test_segments.py`.
-- [ ] Quotas add up to 300 or less, matching the seeded `segments` rows; Places caps stay inside the free allowance.
-- [ ] Verify-at-build checklist 3.7.8 is done: Overture codes confirmed, bboxes checked on a map, registries marked `ready` or removed, queries tested.
-- [ ] Running `sync_segments_to_db()` on dev fills `segments.config` and `config_version` for all six rows.
-- [ ] Switching `settings.segments_enabled["education-ae"]` to false and re-syncing sets that segment's `enabled` to false.
+- [ ] All six wave-1 files load and `tests/test_segments.py` passes.
+- [ ] Quotas add up to 300 or less; Places caps stay inside 3.7.7.
+- [ ] Checklist 3.7.8 is done: codes confirmed, bboxes checked, registries `ready` or removed, queries tested.
+- [ ] `sync_segments_to_db()` on dev fills `segments.config` and `config_version` for all six rows and leaves `daily_quota` alone on later runs.
+- [ ] Setting `settings.segments_enabled["education-ae"]` to false and syncing sets that segment's `enabled` to false.
 - [ ] `docs/segments-guide.md` contains the checklist from 3.9.
 
 ---
