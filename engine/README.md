@@ -133,7 +133,8 @@ Apply pending migrations with either tool; both record history in `supabase_migr
 ```bash
 uv run nlead db migrate --env dev --dry-run    # list what would be applied
 uv run nlead db migrate --env dev
-npx supabase@3.1.0 db push --db-url "$DATABASE_URL"   # the Supabase CLI equivalent
+npx supabase@3.1.0 migration list --remote="$DATABASE_URL"   # the Supabase CLI sees the same history
+npx supabase@3.1.0 db push --remote="$DATABASE_URL"          # the CLI equivalent of nlead db migrate
 ```
 
 How the data is protected (Step 2.8):
