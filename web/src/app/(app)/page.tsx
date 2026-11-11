@@ -41,12 +41,17 @@ async function Today() {
 
   const items: SendItem[] = sendRows.map((r) => ({
     id: r.lead_id,
-    name: r.business_name,
+    name: r.company,
     city: r.city,
     segment: segmentOf(r.segment_id),
     grade: r.grade,
-    signal: r.signal
-      ? { label: signalLabel(r.signal.type), age: relativeAge(r.signal.observed_at, now), url: r.signal.url, quote: r.signal.quote }
+    signal: r.top_signal_type
+      ? {
+          label: signalLabel(r.top_signal_type),
+          age: r.top_signal_at ? relativeAge(r.top_signal_at, now) : '',
+          url: r.top_signal_url,
+          quote: r.top_signal_quote,
+        }
       : null,
     contactName: r.contact_name,
     contactRole: r.contact_role,
@@ -54,31 +59,28 @@ async function Today() {
     phoneDisplay: formatPhone(r.phone_e164),
     phoneType: r.phone_type,
     phoneMeta: r.phone_e164
-      ? [PHONE_TYPE_LABEL[r.phone_type ?? 'unknown'], CONTACT_SOURCE_LABEL[r.contact_source ?? 'other']].filter(Boolean).join(' · ')
+      ? [PHONE_TYPE_LABEL[r.phone_type ?? 'unknown'], CONTACT_SOURCE_LABEL[r.phone_source ?? 'other']].filter(Boolean).join(' · ')
       : '',
     email: r.email,
+    emailSubject: r.email_subject,
+    emailBody: r.email_body,
     message: r.message,
   }))
 
   const followupItems: FollowupItem[] = followups.map((f) => {
-    const state = dueState(f.due_at, today)
-    const followup =
-      f.wa_at && !f.d3_at && f.followup_d3
-        ? { which: 'd3' as const, text: f.followup_d3 }
-        : f.wa_at && !f.d7_at && f.followup_d7
-          ? { which: 'd7' as const, text: f.followup_d7 }
-          : null
+    const state = dueState(f.due_on, today)
     return {
       id: f.lead_id,
-      name: f.business_name,
+      name: f.company,
       city: f.city,
-      stage: f.stage,
-      nextStep: f.next_step,
-      dueLabel: state === 'today' ? 'today' : formatDate(f.due_at, now),
+      grade: f.grade,
+      which: f.which,
+      text: f.followup_text ?? '',
+      contactName: f.contact_name,
+      dueLabel: state === 'today' ? 'today' : formatDate(f.due_on, now),
       overdue: state === 'overdue',
       phone: f.phone_e164,
       phoneType: f.phone_type,
-      followup,
     }
   })
 
@@ -100,7 +102,7 @@ async function Today() {
       </Card>
 
       <Card className="mt-6" aria-labelledby="followups-title">
-        <CardHeader id="followups-title" title={`Follow-ups due · ${formatNumber(followupItems.length)}`} description="Open leads whose next step is due today or earlier." />
+        <CardHeader id="followups-title" title={`Follow-ups due · ${formatNumber(followupItems.length)}`} description="Day 3 and day 7 messages for leads that have not replied yet." />
         <div className="mt-2 border-t border-line-2">
           <FollowupList items={followupItems} canEdit={editable} />
         </div>

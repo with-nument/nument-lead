@@ -1,49 +1,8 @@
 import 'server-only'
 import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { createClient, type ServerClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 import { segmentFallbackLabel } from '@/lib/signals'
-
-export type TopSignal = {
-  business_id: string
-  type: string
-  category: string
-  points: number
-  observed_at: string
-  expires_at: string
-  url: string | null
-  quote: string | null
-}
-
-/**
- * The strongest live signal per business (most points, then newest). One query for a page of leads.
- * Callers pass at most a page of ids, which keeps the request URL short.
- */
-export async function getTopSignals(
-  sb: ServerClient,
-  businessIds: string[],
-  opts: { liveOnly?: boolean } = {},
-): Promise<Map<string, TopSignal>> {
-  const ids = [...new Set(businessIds)].filter(Boolean)
-  const out = new Map<string, TopSignal>()
-  if (!ids.length) return out
-  const liveOnly = opts.liveOnly ?? true
-  for (let i = 0; i < ids.length; i += 120) {
-    const chunk = ids.slice(i, i + 120)
-    let query = sb
-      .from('signals')
-      .select('business_id, type, category, points, observed_at, expires_at, url, quote')
-      .in('business_id', chunk)
-    if (liveOnly) query = query.gt('expires_at', new Date().toISOString())
-    const { data, error } = await query
-      .order('points', { ascending: false })
-      .order('observed_at', { ascending: false })
-      .limit(chunk.length * 12)
-    if (error) throw error
-    for (const s of data ?? []) if (!out.has(s.business_id)) out.set(s.business_id, s)
-  }
-  return out
-}
 
 export type Segment = { id: string; label: string; country: string; domain: string; enabled: boolean; daily_quota: number }
 

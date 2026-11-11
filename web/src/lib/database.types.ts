@@ -237,6 +237,7 @@ export type Database = {
         Row: {
           at: string
           calls: number
+          fallback_from: string | null
           id: string
           input_tokens: number
           inr: number
@@ -250,6 +251,7 @@ export type Database = {
         Insert: {
           at?: string
           calls?: number
+          fallback_from?: string | null
           id?: string
           input_tokens?: number
           inr?: number
@@ -263,6 +265,7 @@ export type Database = {
         Update: {
           at?: string
           calls?: number
+          fallback_from?: string | null
           id?: string
           input_tokens?: number
           inr?: number
@@ -474,6 +477,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          lead_id: string | null
           segment_id: string | null
           status: string
           text: string
@@ -483,6 +487,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          lead_id?: string | null
           segment_id?: string | null
           status?: string
           text: string
@@ -492,6 +497,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          lead_id?: string | null
           segment_id?: string | null
           status?: string
           text?: string
@@ -504,6 +510,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "inbox_posts_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "inbox_posts_segment_id_fkey"
@@ -651,6 +664,38 @@ export type Database = {
           },
         ]
       }
+      llm_batch_reservations: {
+        Row: {
+          created_at: string
+          id: number
+          llm_batch_id: string | null
+          released: boolean
+          reserved_inr: number
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          llm_batch_id?: string | null
+          released?: boolean
+          reserved_inr: number
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          llm_batch_id?: string | null
+          released?: boolean
+          reserved_inr?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "llm_batch_reservations_llm_batch_id_fkey"
+            columns: ["llm_batch_id"]
+            isOneToOne: false
+            referencedRelation: "llm_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       llm_batches: {
         Row: {
           completed_at: string | null
@@ -683,6 +728,33 @@ export type Database = {
           result_ref?: string | null
           status?: string
           submitted_at?: string
+          task?: string
+        }
+        Relationships: []
+      }
+      llm_cache: {
+        Row: {
+          created_at: string
+          expires_at: string
+          key: string
+          model: string
+          response: Json
+          task: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          key: string
+          model: string
+          response: Json
+          task: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          key?: string
+          model?: string
+          response?: Json
           task?: string
         }
         Relationships: []
@@ -800,7 +872,7 @@ export type Database = {
           name: string
           query?: Json
           shared?: boolean
-          user_id: string
+          user_id?: string
         }
         Update: {
           created_at?: string
@@ -1031,6 +1103,7 @@ export type Database = {
           last_error: string | null
           last_error_at: string | null
           last_ok_at: string | null
+          recent_blocks: string[]
           requests_day: string
           requests_today: number
           source: string
@@ -1041,6 +1114,7 @@ export type Database = {
           last_error?: string | null
           last_error_at?: string | null
           last_ok_at?: string | null
+          recent_blocks?: string[]
           requests_day?: string
           requests_today?: number
           source: string
@@ -1051,6 +1125,7 @@ export type Database = {
           last_error?: string | null
           last_error_at?: string | null
           last_ok_at?: string | null
+          recent_blocks?: string[]
           requests_day?: string
           requests_today?: number
           source?: string
@@ -1138,7 +1213,6 @@ export type Database = {
           day: string | null
           input_tokens: number | null
           inr: number | null
-          model: string | null
           output_tokens: number | null
           provider: string | null
           task: string | null
@@ -1148,70 +1222,34 @@ export type Database = {
       }
       v_followups_due: {
         Row: {
-          angle: string | null
-          business_id: string | null
-          business_name: string | null
-          call_at: string | null
-          category: string | null
-          channel: string | null
-          city: string | null
+          company: string | null
           contact_name: string | null
-          contact_role: string | null
-          contact_source: string | null
-          country: string | null
-          created_at: string | null
-          d3_at: string | null
-          d7_at: string | null
-          domain: string | null
-          due_at: string | null
-          email: string | null
-          email_body: string | null
-          email_subject: string | null
-          followup_d3: string | null
-          followup_d7: string | null
+          due_on: string | null
+          followup_text: string | null
           grade: string | null
-          judge_note: string | null
-          last_activity_at: string | null
           lead_id: string | null
-          locality: string | null
-          meeting_at: string | null
-          message: string | null
-          message_alt: string | null
-          next_step: string | null
-          notes: string | null
-          owner_id: string | null
           phone_e164: string | null
-          phone_type: string | null
-          pitch_mode: string | null
-          regen_requested_at: string | null
-          score_total: number | null
           segment_id: string | null
-          skipped_until: string | null
-          stage: string | null
-          subcategory: string | null
-          test_group: string | null
-          updated_at: string | null
-          wa_at: string | null
-          website: string | null
+          which: string | null
         }
         Relationships: []
       }
       v_funnel: {
         Row: {
           angle: string | null
-          contacted: number | null
           country: string | null
-          domain: string | null
+          created_on: string | null
           grade: string | null
-          leads: number | null
-          meetings: number | null
+          lead_id: string | null
           pitch_mode: string | null
-          proposals: number | null
-          replied: number | null
+          reached_contacted: boolean | null
+          reached_discovery: boolean | null
+          reached_proposal: boolean | null
+          reached_talking: boolean | null
+          reached_won: boolean | null
           segment_id: string | null
           test_group: string | null
-          won: number | null
-          wrong_contact: number | null
+          top_signal_type: string | null
         }
         Relationships: []
       }
@@ -1231,20 +1269,17 @@ export type Database = {
         Row: {
           angle: string | null
           business_id: string | null
-          business_name: string | null
           call_at: string | null
           category: string | null
           channel: string | null
           city: string | null
           contact_name: string | null
           contact_role: string | null
-          contact_source: string | null
           country: string | null
           created_at: string | null
           d3_at: string | null
           d7_at: string | null
           deal_value_inr: number | null
-          domain: string | null
           due_at: string | null
           email: string | null
           email_body: string | null
@@ -1252,28 +1287,38 @@ export type Database = {
           followup_d3: string | null
           followup_d7: string | null
           grade: string | null
+          id: string | null
           judge_note: string | null
           last_activity_at: string | null
-          lead_id: string | null
           locality: string | null
           meeting_at: string | null
           message: string | null
           message_alt: string | null
+          message_check_score: number | null
+          message_model: string | null
+          name: string | null
           next_step: string | null
           notes: string | null
           owner_id: string | null
           phone_e164: string | null
+          phone_source: string | null
           phone_type: string | null
           pitch_mode: string | null
           regen_requested_at: string | null
-          score_total: number | null
+          score_id: string | null
           segment_id: string | null
           skipped_until: string | null
           stage: string | null
           subcategory: string | null
           test_group: string | null
+          top_signal_at: string | null
+          top_signal_quote: string | null
+          top_signal_type: string | null
+          top_signal_url: string | null
+          total: number | null
           updated_at: string | null
           wa_at: string | null
+          web_domain: string | null
           website: string | null
         }
         Relationships: []
@@ -1282,19 +1327,16 @@ export type Database = {
         Row: {
           angle: string | null
           business_id: string | null
-          business_name: string | null
           call_at: string | null
           category: string | null
           channel: string | null
           city: string | null
           contact_name: string | null
           contact_role: string | null
-          contact_source: string | null
           country: string | null
           created_at: string | null
           d3_at: string | null
           d7_at: string | null
-          domain: string | null
           due_at: string | null
           email: string | null
           email_body: string | null
@@ -1302,28 +1344,38 @@ export type Database = {
           followup_d3: string | null
           followup_d7: string | null
           grade: string | null
+          id: string | null
           judge_note: string | null
           last_activity_at: string | null
-          lead_id: string | null
           locality: string | null
           meeting_at: string | null
           message: string | null
           message_alt: string | null
+          message_check_score: number | null
+          message_model: string | null
+          name: string | null
           next_step: string | null
           notes: string | null
           owner_id: string | null
           phone_e164: string | null
+          phone_source: string | null
           phone_type: string | null
           pitch_mode: string | null
           regen_requested_at: string | null
-          score_total: number | null
+          score_id: string | null
           segment_id: string | null
           skipped_until: string | null
           stage: string | null
           subcategory: string | null
           test_group: string | null
+          top_signal_at: string | null
+          top_signal_quote: string | null
+          top_signal_type: string | null
+          top_signal_url: string | null
+          total: number | null
           updated_at: string | null
           wa_at: string | null
+          web_domain: string | null
           website: string | null
         }
         Relationships: []
@@ -1332,20 +1384,17 @@ export type Database = {
         Row: {
           angle: string | null
           business_id: string | null
-          business_name: string | null
           call_at: string | null
           category: string | null
           channel: string | null
           city: string | null
           contact_name: string | null
           contact_role: string | null
-          contact_source: string | null
           country: string | null
           created_at: string | null
           d3_at: string | null
           d7_at: string | null
           deal_value_inr: number | null
-          domain: string | null
           due_at: string | null
           email: string | null
           email_body: string | null
@@ -1353,28 +1402,38 @@ export type Database = {
           followup_d3: string | null
           followup_d7: string | null
           grade: string | null
+          id: string | null
           judge_note: string | null
           last_activity_at: string | null
-          lead_id: string | null
           locality: string | null
           meeting_at: string | null
           message: string | null
           message_alt: string | null
+          message_check_score: number | null
+          message_model: string | null
+          name: string | null
           next_step: string | null
           notes: string | null
           owner_id: string | null
           phone_e164: string | null
+          phone_source: string | null
           phone_type: string | null
           pitch_mode: string | null
           regen_requested_at: string | null
-          score_total: number | null
+          score_id: string | null
           segment_id: string | null
           skipped_until: string | null
           stage: string | null
           subcategory: string | null
           test_group: string | null
+          top_signal_at: string | null
+          top_signal_quote: string | null
+          top_signal_type: string | null
+          top_signal_url: string | null
+          total: number | null
           updated_at: string | null
           wa_at: string | null
+          web_domain: string | null
           website: string | null
         }
         Relationships: []
@@ -1403,6 +1462,7 @@ export type Database = {
           last_error: string | null
           last_error_at: string | null
           last_ok_at: string | null
+          recent_blocks: string[] | null
           requests_day: string | null
           requests_today: number | null
           source: string | null
@@ -1413,99 +1473,45 @@ export type Database = {
         Row: {
           angle: string | null
           business_id: string | null
-          business_name: string | null
-          call_at: string | null
-          category: string | null
           channel: string | null
           city: string | null
+          company: string | null
           contact_name: string | null
           contact_role: string | null
-          contact_source: string | null
           country: string | null
           created_at: string | null
-          d3_at: string | null
-          d7_at: string | null
-          domain: string | null
-          due_at: string | null
           email: string | null
           email_body: string | null
           email_subject: string | null
-          followup_d3: string | null
-          followup_d7: string | null
           grade: string | null
-          judge_note: string | null
-          last_activity_at: string | null
           lead_id: string | null
-          locality: string | null
-          meeting_at: string | null
           message: string | null
           message_alt: string | null
-          next_step: string | null
-          notes: string | null
-          owner_id: string | null
           phone_e164: string | null
+          phone_source: string | null
           phone_type: string | null
           pitch_mode: string | null
-          regen_requested_at: string | null
-          score_total: number | null
           segment_id: string | null
-          skipped_until: string | null
-          stage: string | null
-          subcategory: string | null
           test_group: string | null
-          updated_at: string | null
-          wa_at: string | null
-          website: string | null
+          top_signal_at: string | null
+          top_signal_quote: string | null
+          top_signal_type: string | null
+          top_signal_url: string | null
+          total: number | null
         }
         Relationships: []
       }
-      v_today_queue: {
+      v_top_signal: {
         Row: {
-          angle: string | null
           business_id: string | null
-          business_name: string | null
-          call_at: string | null
           category: string | null
-          channel: string | null
-          city: string | null
-          contact_name: string | null
-          contact_role: string | null
-          contact_source: string | null
-          country: string | null
-          created_at: string | null
-          d3_at: string | null
-          d7_at: string | null
-          domain: string | null
-          due_at: string | null
-          email: string | null
-          email_body: string | null
-          email_subject: string | null
-          followup_d3: string | null
-          followup_d7: string | null
-          grade: string | null
-          judge_note: string | null
-          last_activity_at: string | null
-          lead_id: string | null
-          locality: string | null
-          meeting_at: string | null
-          message: string | null
-          message_alt: string | null
-          next_step: string | null
-          notes: string | null
-          owner_id: string | null
-          phone_e164: string | null
-          phone_type: string | null
-          pitch_mode: string | null
-          regen_requested_at: string | null
-          score_total: number | null
-          segment_id: string | null
-          skipped_until: string | null
-          stage: string | null
-          subcategory: string | null
-          test_group: string | null
-          updated_at: string | null
-          wa_at: string | null
-          website: string | null
+          expires_at: string | null
+          observed_at: string | null
+          points: number | null
+          quote: string | null
+          signal_id: string | null
+          type: string | null
+          url: string | null
         }
         Relationships: []
       }
@@ -1530,9 +1536,6 @@ export type Database = {
     Functions: {
       auth_role: { Args: never; Returns: string }
       db_size_mb: { Args: never; Returns: number }
-      mark_wrong_contact: { Args: { p_lead_id: string; p_reason?: string }; Returns: undefined }
-      set_user_role: { Args: { p_user_id: string; p_role: string }; Returns: undefined }
-      spend_today_inr: { Args: never; Returns: number }
     }
     Enums: {
       [_ in never]: never

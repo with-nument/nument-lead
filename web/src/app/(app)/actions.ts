@@ -26,10 +26,10 @@ const Previous = z.object({
 })
 export type PreviousState = z.infer<typeof Previous>
 
-const STATE_COLUMNS = 'stage, wa_at, call_at, d3_at, d7_at, meeting_at, skipped_until, next_step, due_at' as const
+const STATE_COLUMNS = 'stage, wa_at, call_at, d3_at, d7_at, meeting_at, skipped_until, next_step, due_at, phone_e164' as const
 
 async function readState(sb: ServerClient, leadId: string) {
-  const { data } = await sb.from('v_leads_caller').select(STATE_COLUMNS).eq('lead_id', leadId).maybeSingle()
+  const { data } = await sb.from('v_leads_caller').select(STATE_COLUMNS).eq('id', leadId).maybeSingle()
   if (!data?.stage) return null
   const previous: PreviousState = {
     stage: data.stage as PreviousState['stage'],
@@ -84,23 +84,34 @@ export async function skipLead(leadId: string): Promise<ActionResult<PreviousSta
 }
 
 /**
- * Wrong number: stage Wrong contact, and the phone goes on the do-not-contact list and is marked on
- * the contact (database function `mark_wrong_contact`, which checks the role itself).
+ * Wrong number: stage Wrong contact, the number goes on Do not contact and every contact with that
+ * number is flagged, so the engine never offers it again.
  */
 export async function markWrongContact(leadId: string): Promise<ActionResult<PreviousState>> {
-  await requireRole(['admin', 'caller'])
+  const user = await requireRole(['admin', 'caller'])
   const id = LeadId.safeParse(leadId)
   if (!id.success) return fail('Lead not found.')
   const sb = await createClient()
   const state = await readState(sb, id.data)
   if (!state) return fail('Lead not found.')
-  const { error } = await sb.rpc('mark_wrong_contact', { p_lead_id: id.data, p_reason: 'wrong_contact' })
+  const step = nextStepAndDue({ ...state.row, stage: 'wrong_contact' }, istDate())
+  const { error } = await sb
+    .from('leads')
+    .update({ stage: 'wrong_contact', ...(step ?? {}) })
+    .eq('id', id.data)
   if (error) {
-    console.error('mark_wrong_contact failed', error.code, error.message)
+    console.error('markWrongContact failed', error.code, error.message)
     return fail(SAVE_FAILED)
   }
-  const step = nextStepAndDue({ ...state.row, stage: 'wrong_contact' }, istDate())
-  if (step) await sb.from('leads').update(step).eq('id', id.data)
+  const phone = state.row.phone_e164
+  if (phone) {
+    const flag = await sb.from('contacts').update({ do_not_contact: true }).eq('phone_e164', phone)
+    if (flag.error) console.error('contact flag failed', flag.error.code, flag.error.message)
+    const block = await sb.from('suppression').insert({ phone_e164: phone, reason: 'wrong_contact', added_by: user.id })
+    // 23505: the number is already on the list, which is the goal.
+    if (block.error && block.error.code !== '23505') console.error('suppression insert failed', block.error.code, block.error.message)
+  }
+  await logActivity(sb, id.data, user.id, 'wrong_contact', { phone, reason: 'wrong_contact' })
   revalidateLead(id.data)
   return ok('Marked as wrong contact', state.previous)
 }
@@ -136,8 +147,9 @@ export async function undoLeadChange(
     if (!last || !fresh) return fail('This can no longer be undone here. Ask an admin to remove the number from Do not contact.')
     const phone = (last.payload as { phone?: string | null } | null)?.phone ?? null
     if (phone) {
-      // Callers cannot delete from the do-not-contact list or edit contacts under RLS. The checks
-      // above limit this service-role write to the mark this user just made on this lead.
+      await sb.from('contacts').update({ do_not_contact: false }).eq('phone_e164', phone)
+      // Only admins may delete from Do not contact under RLS. The checks above limit this
+      // service-role delete to the entry this user just made for this lead.
       const admin = createAdminClient()
       const since = new Date(Date.parse(last.at) - 60_000).toISOString()
       await admin
@@ -147,7 +159,6 @@ export async function undoLeadChange(
         .eq('reason', 'wrong_contact')
         .eq('added_by', user.id)
         .gte('added_at', since)
-      await admin.from('contacts').update({ do_not_contact: false }).eq('phone_e164', phone)
     }
   }
 
