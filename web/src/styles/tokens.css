@@ -1,0 +1,231 @@
+/* ==========================================================================
+   Nument design tokens, copied from the Nument design kit (tokens/tokens.css).
+   Three deliberate changes for the web app, nothing else:
+   1. The Google Fonts @import is removed. next/font loads Newsreader, Figtree and
+      DM Mono (self-hosted, no layout shift) and exposes them as --nf-display,
+      --nf-sans and --nf-mono, which the font-family tokens below now point at.
+   2. The base element defaults sit in @layer base, so Tailwind utilities
+      (which live in a later layer) can override them.
+   3. The noise URL is dropped (the app has no dark CTA band).
+   ========================================================================== */
+:root {
+  /* ---------- Font families ---------- */
+  --font-display: var(--nf-display), Georgia, serif;   /* h1/h2, section titles, hero buttons, CTA band */
+  --font-sans: var(--nf-sans), system-ui, -apple-system, "Segoe UI", sans-serif; /* everything else */
+  --font-mono: var(--nf-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-eyebrow: var(--font-mono); /* footer column titles & small uppercase labels ("Matter Semi Mono") */
+
+  /* Weights. Sarvam uses non-standard variable weights: 425 = regular, 525 = medium. */
+  --fw-light: 300;
+  --fw-regular: 425;       /* body default (Matter 425) */
+  --fw-medium: 525;        /* buttons, card titles, h3 */
+  --fw-semibold: 600;      /* compliance chips only */
+  --fw-display-regular: 380; /* Newsreader stand-in for Season Mix 425 (hero h1) */
+  --fw-display-medium: 450;  /* Newsreader stand-in for Season Mix 525 (section h2) */
+
+  /* ---------- Type scale (px values exactly as on site) ---------- */
+  --text-2xs: 10px;
+  --text-label: 12px;        /* eyebrows, footer column titles */
+  --text-caption: 14px;      /* meta, supporting copy, small buttons */
+  --text-nav: 15px;          /* header nav items + header buttons */
+  --text-body: 16px;
+  --text-body-lg: 18px;
+  --text-lead: 20px;         /* hero sub-copy (md+) */
+  --text-heading-card: 20px; /* card titles (h3) */
+  --text-heading-4: 22px;
+  --text-heading-3: 24px;    /* testimonial quote */
+  --text-heading-feature: 26px; /* accordion panel titles */
+  --text-heading-sub: 28px;  /* section h2 on mobile / sub-feature titles */
+  --text-heading-section: 36px; /* section h2 desktop */
+  --text-heading-2: 40px;
+  --text-heading-hero-sm: 44px; /* hero h1 mobile */
+  --text-heading-metric: 48px;
+  --text-heading-hero: 64px; /* hero h1 desktop */
+
+  /* Line heights */
+  --lh-tight: 1.05;    /* hero h1 */
+  --lh-heading: 1.2;   /* section h2 */
+  --lh-card: 1.3;      /* card titles */
+  --lh-snug: 1.45;     /* blog card titles */
+  --lh-body: 1.6;      /* card body copy */
+  --lh-relaxed: 1.65;  /* section intro copy */
+  --lh-lead: 1.75;     /* hero sub-copy */
+
+  /* Letter spacing */
+  --ls-hero: -0.025em;     /* hero h1 (-1.6px @64px) */
+  --ls-heading: -0.02em;   /* section h2 (-0.72px @36px) */
+  --ls-card: -0.015em;     /* card titles */
+  --ls-eyebrow: 0.17em;    /* "INDIA BUILDS WITH" style eyebrow (2px @12px) */
+  --ls-badge: 0.025em;     /* hero badge text */
+
+  /* ---------- Colour: text ---------- */
+  --color-tx: #1f1f1f;            /* primary text, headings */
+  --color-tx-secondary: #3d3d3d;  /* hero sub-copy, list items */
+  --color-tx-tertiary: #666666;   /* body copy in cards, meta, footer links */
+  --color-tx-muted: #999999;      /* disabled, placeholders */
+  --color-tx-inverse: #faf8f5;    /* text on dark */
+  --color-tx-brand: #29211d;
+  --color-tx-accent: #c4733d;
+
+  /* ---------- Colour: surfaces ---------- */
+  --color-bg: #fcfcfc;            /* page background = main 'sheet' (bg-sf). #fafafa is used for edge-fade overlays */
+  --color-sf: #fcfcfc;            /* raised surface */
+  --color-sf-white: #ffffff;      /* cards */
+  --color-sf-secondary: #f5f5f5;  /* secondary buttons, footer gradient end */
+  --color-sf-tertiary: #f0f0f0;   /* inactive tabs, auth buttons, code header */
+  --color-sf-quaternary: #e6e6e6;
+
+  /* ---------- Colour: strokes ---------- */
+  --color-st: #e6e6e6;            /* default border / divider */
+  --color-st-secondary: #f0f0f0;  /* subtle card border */
+
+  /* ---------- Colour: brand accents (nument keeps Sarvam's palette) ---------- */
+  --color-ink: #2a2c33;           /* "slate": primary filled buttons (Log In, Get Started) */
+  --color-ink-deep: #1e2033;      /* hero CTA gradient end */
+  --color-ink-auth: #141414;      /* auth primary button */
+  --color-accent-orange: #d5650f;
+  --color-accent-blue: #393cc1;
+  --color-accent-green: #4cd964;
+  --color-accent-purple: #9b5de5;
+
+  /* Indigo, primary accent (links, active tab text, check icons, focus rings) */
+  --indigo-50: #fafcff;  --indigo-100: #e8effc; --indigo-200: #d2dff9; --indigo-300: #a7c0f1;
+  --indigo-400: #81a0e9; --indigo-500: #6a88e2; --indigo-600: #556adc; --indigo-700: #4250d5;
+  --indigo-800: #3333cc; --indigo-900: #212191; --indigo-950: #11115b;
+  /* Orange */
+  --orange-50: #fffbfa;  --orange-100: #feede6; --orange-200: #fddcce; --orange-300: #f9bb9e;
+  --orange-400: #f59970; --orange-500: #f38858; --orange-600: #ee7944; --orange-700: #e96c2f;
+  --orange-800: #e6651b; --orange-900: #a5460f; --orange-950: #682906;
+  /* Green */
+  --green-50: #f2f8eb;   --green-100: #e3f1d8;  --green-200: #c8e4b0;  --green-300: #acd587;
+  --green-400: #90c85b;  --green-500: #83c040;  --green-600: #6ea335;  --green-700: #496d21;
+  --green-800: #385418;  --green-900: #263d0e;
+  /* Pink */
+  --pink-50: #fceaf0;    --pink-100: #f9d5e1;   --pink-200: #efabc5;   --pink-300: #e380a8;
+  --pink-400: #d4508e;   --pink-500: #b12060;   --pink-600: #9d2055;   --pink-700: #871f4b;
+  /* Red */
+  --red-50: #fde7e2;     --red-100: #f8d1c6;    --red-200: #eba18f;    --red-300: #db715c;
+  --red-400: #c43d2b;    --red-500: #b81514;    --red-600: #a21913;    --red-700: #781a11;
+  /* Yellow */
+  --yellow-50: #fff8e6;  --yellow-100: #fff0cf; --yellow-200: #ffe8b7; --yellow-300: #ffcb79;
+  --yellow-400: #ffb94a; --yellow-500: #feb12b; --yellow-600: #df9c2a; --yellow-700: #c08827;
+  /* Grey */
+  --grey-50: #f9f9f9;  --grey-100: #f5f5f5; --grey-200: #f0f0f0; --grey-300: #e6e6e6;
+  --grey-400: #cccccc; --grey-500: #b3b3b3; --grey-600: #999999; --grey-700: #666666;
+  --grey-800: #525252; --grey-900: #3d3d3d; --grey-950: #292929;
+
+  /* Icon hover colours used on link rows (one colour per product family) */
+  --icon-hover-orange: #ea580c;
+  --icon-hover-indigo: #6366f1;
+  --icon-hover-green: #16a34a;
+  --icon-hover-red: #dc2626;
+
+  /* ---------- Gradients ---------- */
+  /* Hero "sunrise": orange core -> amber ring -> periwinkle -> near-white. See assets/hero-gradient.svg */
+  --gradient-hero-stops: #f9730c 75%, #ffb053 78%, #a5bbfc 80%, #f4f7ff 100%;
+  --gradient-hero-glow: radial-gradient(ellipse, #a5bbfc 0%, #d5e2ff 40%, transparent 70%);
+  --gradient-hero-rule: radial-gradient(circle, #6a88e2 0%, transparent 100%); /* 1px lines around hero badge */
+  --gradient-band-indigo: linear-gradient(180deg, #c7d2fe 0%, #a5b4fc 30%, #818cf8 50%, #a5b4fc 70%, #c7d2fe 100%); /* blurred band behind product showcase */
+  --gradient-cta-dark: linear-gradient(to bottom, #13121e 0%, #a5bbfc 116.55%); /* final CTA card */
+  --gradient-btn-primary: linear-gradient(to bottom, #3a3f5c 0%, #1e2033 100%);   /* hero primary button */
+  --gradient-btn-outline: linear-gradient(to bottom, #ffffff 0%, #f0f1f5 100%);   /* hero secondary button */
+  --gradient-footer: linear-gradient(to bottom, #ffffff, #f5f5f5);
+  --gradient-orange: linear-gradient(180deg, #d5650f 0%, #eaaf1c 100%);
+  --gradient-orange-medium: linear-gradient(180deg, #e29357 0%, #f0c760 100%);
+  --gradient-orange-light: linear-gradient(180deg, #f2d1b7 0%, #f9e7bb 100%);
+  --gradient-pink: linear-gradient(180deg, #f581a6 0%, #76123d 100%);
+  --gradient-pink-medium: linear-gradient(180deg, #f8a7c1 0%, #b47d94 100%);
+  --gradient-pink-light: linear-gradient(180deg, #fcd9e4 0%, #ddc4cf 100%);
+  --gradient-green: linear-gradient(180deg, #89b95b 0%, #293a18 100%);
+  --gradient-green-medium: linear-gradient(180deg, #acce8c 0%, #899380 100%);
+  --gradient-green-light: linear-gradient(180deg, #dceace 0%, #cacec5 100%);
+  --gradient-blue: linear-gradient(180deg, #bed2ff 0%, #393cc1 100%);
+  --gradient-blue-medium: linear-gradient(180deg, #dde7ff 0%, #a6a7e3 100%);
+  --gradient-blue-light: linear-gradient(180deg, #f4f7ff 0%, #bed2ff 100%);
+
+  /* ---------- Spacing (4px base) ---------- */
+  --space-1: 4px;  --space-1-5: 6px; --space-2: 8px;  --space-2-5: 10px; --space-3: 12px;
+  --space-3-5: 14px; --space-4: 16px; --space-5: 20px; --space-6: 24px; --space-7: 28px;
+  --space-8: 32px; --space-10: 40px; --space-12: 48px; --space-14: 56px; --space-16: 64px;
+  --space-20: 80px; --space-24: 96px; --space-28: 112px; --space-32: 128px; --space-36: 144px; --space-40: 160px;
+  --section-gap: 176px;       /* gap between home-page sections, desktop (md:gap-44) */
+  --section-gap-mobile: 96px; /* mobile (gap-24) */
+  --section-gap-inner-page: 128px; /* token --spacing-section-gap: used on product/inner pages */
+  --section-gap-sm: 96px;
+  --section-inner: 48px;      /* heading-to-content gap inside a section (md: gap-12) */
+  --section-inner-sm: 32px;   /* mobile (gap-8) */
+
+  /* ---------- Layout ---------- */
+  --container-width: 83.333%;   /* w-10/12 on md+ */
+  --container-width-mobile: 88%;/* w-[88%] on mobile */
+  --container-max: 1400px;      /* 2xl:max-w-width-mx; at 1440 viewport content = 1200px */
+  --header-height: 68px;
+  --bp-sm: 640px; --bp-md: 768px; --bp-lg: 1024px; --bp-xl: 1280px; --bp-2xl: 1536px;
+
+  /* ---------- Radius ---------- */
+  --radius-xs: 2px; --radius-sm: 4px; --radius-md: 6px; --radius-lg: 8px;
+  --radius-xl: 12px;       /* product mini-cards, chips, footer badges */
+  --radius-2xl: 16px;      /* --radius-card: standard card */
+  --radius-3xl: 24px;      /* showcase frame, CTA card */
+  --radius-pill-card: 26px;/* deployment option cards */
+  --radius-4xl: 32px;      /* --radius-card-lg: testimonial */
+  --radius-full: 9999px;   /* ALL buttons, tabs-as-pills, inputs on auth */
+  --radius-card: var(--radius-2xl);
+  --radius-card-lg: var(--radius-4xl);
+
+  /* ---------- Shadows ---------- */
+  --shadow-sm: 0 1px 3px #00000014;
+  --shadow-md: 0 4px 24px #0000001f;
+  --shadow-lg: 0 12px 40px -8px #0000001f;
+  --shadow-card: 0 0 40px 0 #0000000f;
+  --shadow-card-hover: 0 8px 40px -4px #0000001f;
+  --shadow-stroke-sm: 0 0 1px #00000033;
+  --shadow-stroke-md: 0 0 2px 0 #0000001a;
+  --shadow-inset-glow-white: inset 0 0 12px #ffffff;
+  --shadow-inset-glow-dark: inset 0 0 12px #00000017;
+  --shadow-inset-glow-indigo: inset 0 0 10px #c7d2fecc;
+  --shadow-inset-subtle: inset 0 -1px 0 #0000000d;
+  --shadow-focus: 0 0 0 3px #a5bbfc26;
+  --shadow-focus-error: 0 0 0 3px #f8717126;
+  /* Button bevels (the "pressed pill" look) */
+  --shadow-btn-ink: inset 0 1px 0 rgba(255,255,255,0.4), inset 0 -2px 0 rgba(0,0,0,0.2);
+  --shadow-btn-soft: inset 0 2px 0 rgba(200,200,200,0.1), inset 0 -1px 0 rgba(0,0,0,0.05);
+  --shadow-btn-outline: inset 0 0 0 1px rgba(30,32,51,0.14);
+  --shadow-tab-active: inset 0 0 6px rgba(0,0,0,0.08), 0 0 0 1px #e6e6e6;
+
+  /* ---------- Motion ---------- */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);   /* buttons, links, most UI */
+  --ease-reveal: cubic-bezier(0.25, 1, 0.5, 1);  /* scroll reveals */
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);        /* tabs, small state changes */
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-instant: 100ms; --dur-fast: 150ms; --dur-normal: 200ms; --dur-moderate: 300ms;
+  --dur-button: 350ms;  --dur-slow: 500ms;  --dur-entrance: 700ms; --dur-reveal: 800ms;
+
+  /* ---------- Z-index ---------- */
+  --z-base: 0; --z-raised: 10; --z-dropdown: 50; --z-overlay: 100; --z-header: 10000;
+}
+
+@layer base {
+  /* ---------- Base element defaults ---------- */
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-weight: var(--fw-regular);
+    font-size: var(--text-body);
+    line-height: 1.5;
+    color: var(--color-tx);
+    background: var(--color-bg);
+  }
+  h1, h2, h3, h4, h5, h6, p { margin: 0; font-weight: inherit; font-size: inherit; }
+  ::selection { background: var(--indigo-200); color: var(--color-tx); }
+  :focus-visible { outline: 2px solid var(--indigo-400); outline-offset: 2px; }
+  img, video, svg { display: block; max-width: 100%; }
+  a { color: inherit; text-decoration: none; }
+  button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  }
+}
