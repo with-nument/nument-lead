@@ -6,7 +6,7 @@ const DAY_MS = 86_400_000
 type DateInput = string | number | Date
 
 const toDate = (v: DateInput) => (v instanceof Date ? v : new Date(typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? `${v}T00:00:00+05:30` : v))
-const clean = (s: string) => s.replace(/ | /g, ' ')
+const clean = (s: string) => s.replace(/\u202f|\u00a0/g, ' ')
 
 function parts(v: DateInput, options: Intl.DateTimeFormatOptions) {
   const out: Record<string, string> = {}

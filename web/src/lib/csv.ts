@@ -15,5 +15,5 @@ export function toCsv(rows: Record<string, unknown>[], columns?: { key: string; 
   const head = cols.map((c) => cell(c.label)).join(',')
   const body = rows.map((r) => cols.map((c) => cell(r[c.key])).join(','))
   // BOM so Excel opens UTF-8 (rupee sign, names) correctly.
-  return `﻿${[head, ...body].join('\r\n')}\r\n`
+  return `\uFEFF${[head, ...body].join('\r\n')}\r\n`
 }

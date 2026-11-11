@@ -66,7 +66,7 @@ test('Message lint blocks saving until the problem is fixed', async ({ page }) =
   await page.goto(`/leads/${s!.leadIds.new2}`)
   const box = page.getByLabel('First message')
   const original = await box.inputValue()
-  await box.fill(original.replace('busy.', 'busy — always.'))
+  await box.fill(original.replace('busy.', 'busy \u2014 always.'))
   await expect(page.getByText('Contains a dash')).toBeVisible()
   const card = page.getByRole('region', { name: 'Message' })
   await expect(card.getByRole('button', { name: 'Save' })).toBeDisabled()
