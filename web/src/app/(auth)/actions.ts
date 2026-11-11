@@ -29,12 +29,15 @@ export async function login(_: AuthFormState, formData: FormData): Promise<AuthF
   })
   if (!parsed.success) return { message: 'Enter your email and password.' }
   const supabase = await createClient()
-  const { error } = await supabase.auth.signInWithPassword({ email: parsed.data.email, password: parsed.data.password })
+  const { data, error } = await supabase.auth.signInWithPassword({ email: parsed.data.email, password: parsed.data.password })
   if (error) {
     if (error.status === 429) return { message: 'Too many attempts. Wait a minute and try again.' }
     // Never say whether the email or the password was wrong.
     return { message: 'Email or password is not right.' }
   }
+  // A redirect from a Server Action renders the target in the same response, without the proxy,
+  // so the temporary-password rule is applied here as well.
+  if (data.user?.user_metadata?.must_change_password === true) redirect('/settings?change_password=1')
   redirect(safeNext(parsed.data.next))
 }
 
