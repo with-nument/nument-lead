@@ -1,0 +1,42 @@
+# Render Blueprint for the Nument Leads web app (plan 15.11).
+# Render > New > Blueprint > pick this repository. Fill every `sync: false` value in the dashboard
+# before the first build: NEXT_PUBLIC_* values are baked into the browser bundle at build time.
+services:
+  - type: web
+    name: nument-leads-web
+    runtime: node
+    region: singapore            # closest Render region to India
+    plan: free                   # sleeps after 15 idle minutes; move to starter at go-live
+    rootDir: web
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    startCommand: pnpm start     # node .next/standalone/server.js
+    healthCheckPath: /api/health # no database call, so a Supabase hiccup never restarts the service
+    autoDeploy: true
+    buildFilter:
+      paths:
+        - web/**
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: HOSTNAME
+        value: 0.0.0.0           # the standalone server must listen on all interfaces; Render sets PORT
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      - key: APP_ENV
+        value: prod
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false              # https://leads.nument.in once the domain is live, else the onrender.com URL
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false              # server only, never NEXT_PUBLIC_
+      - key: GH_DISPATCH_TOKEN
+        sync: false              # fine-grained token: Actions read and write on this repository only
+      - key: GH_REPO
+        value: with-nument/nument-lead
+      - key: GH_DISPATCH_REF
+        value: main
