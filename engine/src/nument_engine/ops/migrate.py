@@ -80,9 +80,12 @@ def ensure_history(conn: Connection[Any]) -> None:
 
 
 def applied_versions(conn: Connection[Any]) -> set[str]:
-    """Versions recorded in supabase_migrations.schema_migrations."""
-    ensure_history(conn)
+    """Versions recorded in supabase_migrations.schema_migrations (none when the table does not exist yet)."""
     with conn.cursor() as cur:
+        cur.execute("select to_regclass('supabase_migrations.schema_migrations') is not null")
+        row = cur.fetchone()
+        if not row or not (row[0] if isinstance(row, tuple) else next(iter(row.values()))):
+            return set()
         cur.execute("select version from supabase_migrations.schema_migrations")
         return {row[0] if isinstance(row, tuple) else row["version"] for row in cur.fetchall()}
 
@@ -106,8 +109,9 @@ def apply(
     conn.execute("select pg_advisory_lock(%s)", [LOCK_KEY])
     try:
         todo = pending(conn, todo_all)
-        if dry_run:
+        if dry_run:  # read only: nothing is created, not even the history table
             return todo
+        ensure_history(conn)
         for m in todo:
             sql_text = m.read()
             try:
