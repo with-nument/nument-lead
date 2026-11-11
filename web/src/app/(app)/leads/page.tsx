@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { Suspense } from 'react'
 import { Download } from 'lucide-react'
 import { FilterPanel } from '@/components/leads/filter-panel'
@@ -121,9 +122,9 @@ async function Leads({ searchParams }: Pick<PageProps<'/leads'>, 'searchParams'>
                 text={activeFilterCount(filters) ? 'No leads match these filters.' : 'No leads yet. The engine adds them every morning.'}
                 action={
                   activeFilterCount(filters) ? (
-                    <a href="/leads" className={buttonClasses('secondary', 'sm')}>
+                    <Link href="/leads" className={buttonClasses('secondary', 'sm')}>
                       Clear filters
-                    </a>
+                    </Link>
                   ) : undefined
                 }
               />
