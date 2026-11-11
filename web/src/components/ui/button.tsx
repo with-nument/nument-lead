@@ -9,7 +9,7 @@ export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon' | 'icon-sm'
 const base =
   'relative inline-flex shrink-0 select-none items-center justify-center gap-2 whitespace-nowrap rounded-full font-medium ' +
   'transition-[background-color,box-shadow,color,transform,filter] duration-300 ease-ui active:scale-[0.96] ' +
-  'disabled:pointer-events-none disabled:opacity-45 aria-disabled:pointer-events-none aria-disabled:opacity-45 ' +
+  'disabled:pointer-events-none [&:disabled:not([data-hydrating])]:opacity-45 aria-disabled:pointer-events-none aria-disabled:opacity-45 ' +
   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 [&_svg]:size-4 [&_svg]:shrink-0'
 
 const variants: Record<ButtonVariant, string> = {

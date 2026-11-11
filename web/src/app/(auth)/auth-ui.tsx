@@ -6,7 +6,7 @@ export const authInput =
 
 export const authPrimary =
   'relative inline-flex h-11 w-full items-center justify-center rounded-full bg-[var(--color-ink-auth)] px-4 text-md font-medium text-white transition-[background-color,transform] duration-300 ease-ui ' +
-  'hover:bg-[var(--color-ink)] active:scale-[0.98] disabled:bg-surface-3 disabled:text-tx-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400'
+  'hover:bg-[var(--color-ink)] active:scale-[0.98] [&:disabled:not([data-hydrating]):not([aria-busy])]:bg-surface-3 [&:disabled:not([data-hydrating]):not([aria-busy])]:text-tx-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400'
 
 export function AuthAlert({ children, tone = 'error', className }: { children: React.ReactNode; tone?: 'error' | 'info'; className?: string }) {
   return (
