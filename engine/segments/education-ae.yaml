@@ -1,0 +1,103 @@
+id: education-ae
+domain: education
+country: ae
+display_name: Education, UAE
+enabled: true
+timezone: Asia/Dubai
+currency: AED
+quota: {daily_research: 30}
+
+cities:
+  - {name: Dubai, aliases: [Dubayy], bbox: [55.05, 24.95, 55.45, 25.35],
+     localities: [Al Barsha, Karama, Al Qusais, Deira, Bur Dubai, Knowledge Park, Academic City, JLT, Mirdif]}
+  - {name: Abu Dhabi, aliases: [Abu Zaby], bbox: [54.30, 24.20, 54.75, 24.55],
+     localities: [Tourist Club Area, Al Khalidiyah, Khalifa City, Mohammed Bin Zayed City, Al Mushrif]}
+  - {name: Sharjah, aliases: [Ash Shariqah], bbox: [55.35, 25.25, 55.60, 25.42],
+     localities: [Al Nahda Sharjah, Al Taawun, University City, Al Majaz, Muwaileh]}
+
+overture:
+  categories:
+    - educational_services      # verify at build
+    - tutoring_center           # verify at build
+    - test_preparation          # verify at build
+    - language_school           # verify at build
+    - vocational_and_technical_school   # verify at build
+    - educational_consultant    # verify at build
+
+places:
+  queries:
+    - "training institute in {locality}, {city}"
+    - "tutoring centre in {locality}, {city}"
+    - "test preparation centre in {locality}, {city}"
+    - "language institute in {locality}, {city}"
+    - "education consultant in {locality}, {city}"
+  details_per_day: 7
+  reviews_per_day: 5
+
+registries:
+  - {key: khda, name: KHDA licensed training institutes (Dubai), url: "https://www.khda.gov.ae",
+     status: verify_at_build, notes: "KHDA publishes directories of licensed institutes; check robots and format."}
+  - {key: adek, name: ADEK (Abu Dhabi), url: "https://www.adek.gov.ae", status: verify_at_build}
+
+osm: {enabled: true}
+apna: {pages_per_day: 0}
+adzuna_enabled: false
+
+job_keywords:
+  frontdesk: [admissions officer, admissions executive, student counsellor, academic counsellor,
+              receptionist, front desk, customer service executive, telesales]
+  builder: [lms developer, web developer, app developer, full stack developer, automation, ai engineer, chatbot]
+  exclude: [teacher, trainer, lecturer, tutor, driver, cleaner]
+
+public_ask_queries:
+  - "training institute Dubai looking for app developer"
+  - "tutoring centre UAE need WhatsApp booking automation"
+news_queries:
+  - '("new centre" OR "opens" OR "launches") (institute OR academy OR "training centre") (Dubai OR "Abu Dhabi" OR Sharjah)'
+
+size_rules:
+  any_of:
+    - {source: business, key: review_count, op: ">=", value: 50}
+    - {source: business, key: branches_count, op: ">=", value: 2}
+
+signal_points: {hiring_frontdesk: 9, ads_running: 5}
+
+fit:
+  categories: [educational_services, tutoring_center, test_preparation, language_school,
+               vocational_and_technical_school, educational_consultant]
+  service_keywords: [ielts, pte, toefl, sat, gmat, gre, university admissions, study abroad,
+                     tutoring, test preparation, professional certification]
+  min_reviews: 50
+  min_staff: 2
+
+ticket_class:
+  study_abroad:       {match: [educational_consultant, education consultant, study abroad,
+                               university admissions], points: 5}
+  coaching_institute: {match: [test_preparation, ielts, sat, gmat, gre, pte, toefl], points: 4}
+  academy:            {match: [vocational_and_technical_school, training institute, academy, institute], points: 3}
+  tutoring:           {match: [tutoring_center, language_school, tutoring, tuition, language institute], points: 2}
+
+can_pay:
+  premium_price: {other: 10000}        # AED, any course fee
+
+scoring: {}
+
+packaged_outcome: AI admissions counsellor
+
+angles:
+  - {key: build_what_they_asked, label: Their own stated need, signals: [public_ask, tender, hiring_builder],
+     idea: "Build exactly what they asked for, in their words, tied to more enrolments."}
+  - {key: frontdesk_load, label: Admissions team overloaded, signals: [hiring_frontdesk],
+     idea: "Instant WhatsApp replies with course details and fees, so the team calls only students who are ready."}
+  - {key: missed_calls, label: Enquiries not answered, signals: [review_pain],
+     idea: "Every enquiry answered in seconds, with a trial class slot."}
+  - {key: ad_leads_cold, label: Ad enquiries going cold, signals: [ads_running],
+     idea: "Every ad enquiry gets an instant reply and follow-ups until the student books a trial."}
+  - {key: no_online_booking, label: Trial classes not booked online, signals: [no_booking],
+     idea: "Students book a trial or assessment on WhatsApp, with reminders."}
+  - {key: slow_site, label: Slow mobile site, signals: [slow_site],
+     idea: "A fast course page with WhatsApp enquiry, so mobile visitors ask instead of leaving."}
+  - {key: new_branch_setup, label: New centre, signals: [new_branch, new_place, news],
+     idea: "Handle the new centre's enquiry rush without hiring extra staff."}
+  - {key: admission_followup, label: Admission follow-up (no signal), signals: [fit_only],
+     idea: "Answer and follow up every enquiry until enrolment."}

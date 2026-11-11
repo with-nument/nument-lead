@@ -1,0 +1,143 @@
+# engine/config/exclusions.yaml : skipped in every segment
+# Use full names. Short names that independents share (for example "max", "allen", "aster", "dlf")
+# wrongly reject real clinics: "DLF Phase 4" is a Gurugram locality that appears in many names.
+chains:
+  # Healthcare, India
+  - {name: apollo hospitals, domains: [apollohospitals.com, apollo247.com]}
+  - {name: apollo clinic, domains: [apolloclinic.com]}
+  - {name: apollo cradle, domains: []}
+  - {name: apollo fertility, domains: []}
+  - {name: fortis, domains: [fortishealthcare.com]}
+  - {name: max healthcare, domains: [maxhealthcare.in]}
+  - {name: manipal hospital, domains: [manipalhospitals.com]}
+  - {name: narayana health, domains: [narayanahealth.org]}
+  - {name: medanta, domains: []}
+  - {name: motherhood hospital, domains: []}
+  - {name: rainbow children, domains: []}
+  - {name: cloudnine, domains: [cloudninecare.com]}
+  - {name: indira ivf, domains: [indiraivf.com]}
+  - {name: nova ivf, domains: [novaivffertility.com]}
+  - {name: birla fertility, domains: [birlafertility.com]}
+  - {name: ferty9, domains: []}
+  - {name: oasis fertility, domains: []}
+  - {name: milann, domains: []}
+  - {name: kaya skin clinic, domains: [kaya.in]}
+  - {name: kaya clinic, domains: [kaya.in]}
+  - {name: vlcc, domains: [vlccwellness.com]}
+  - {name: oliva skin, domains: [olivaclinic.com]}
+  - {name: kolors, domains: []}
+  - {name: dr batra, domains: []}
+  - {name: clove dental, domains: [clovedental.in]}
+  - {name: sabka dentist, domains: [sabkadentist.com]}
+  # Healthcare, UAE
+  - {name: aster dm, domains: [asterdmhealthcare.com]}
+  - {name: aster clinic, domains: [asterclinic.ae]}
+  - {name: aster hospital, domains: [asterhospitals.in]}
+  - {name: nmc healthcare, domains: [nmc.ae]}
+  - {name: mediclinic, domains: [mediclinic.ae]}
+  - {name: burjeel, domains: [burjeel.com]}
+  - {name: thumbay, domains: [thumbay.com]}
+  - {name: cleveland clinic abu dhabi, domains: []}
+  - {name: king's college hospital, domains: []}
+  - {name: american hospital dubai, domains: []}
+  - {name: prime hospital, domains: []}
+  - {name: saudi german hospital, domains: []}
+  # Real estate developers, big brokers and portals, India
+  - {name: dlf limited, domains: [dlf.in]}
+  - {name: godrej properties, domains: [godrejproperties.com]}
+  - {name: lodha group, domains: [lodhagroup.in, lodhagroup.com]}
+  - {name: macrotech developers, domains: []}
+  - {name: prestige group, domains: [prestigeconstructions.com]}
+  - {name: sobha limited, domains: [sobha.com]}
+  - {name: brigade group, domains: [brigadegroup.com]}
+  - {name: tata housing, domains: []}
+  - {name: mahindra lifespaces, domains: []}
+  - {name: oberoi realty, domains: []}
+  - {name: puravankara, domains: []}
+  - {name: anarock, domains: []}
+  - {name: jll, domains: []}
+  - {name: cbre, domains: []}
+  - {name: knight frank, domains: []}
+  - {name: colliers, domains: []}
+  - {name: nobroker, domains: [nobroker.in]}
+  - {name: square yards, domains: [squareyards.com]}
+  - {name: housing.com, domains: [housing.com]}
+  - {name: magicbricks, domains: [magicbricks.com]}
+  - {name: 99acres, domains: [99acres.com]}
+  - {name: proptiger, domains: [proptiger.com]}
+  # Real estate developers and portals, UAE
+  - {name: emaar properties, domains: [emaar.com]}
+  - {name: damac properties, domains: [damacproperties.com]}
+  - {name: nakheel, domains: [nakheel.com]}
+  - {name: meraas, domains: []}
+  - {name: aldar properties, domains: [aldar.com]}
+  - {name: sobha realty, domains: [sobharealty.com]}
+  - {name: azizi developments, domains: [azizidevelopments.com]}
+  - {name: property finder, domains: [propertyfinder.ae]}
+  - {name: bayut, domains: [bayut.com]}
+  - {name: dubizzle, domains: [dubizzle.com]}
+  # Education companies
+  - {name: byju's, domains: [byjus.com]}
+  - {name: unacademy, domains: [unacademy.com]}
+  - {name: physics wallah, domains: [pw.live]}
+  - {name: physicswallah, domains: [pw.live]}
+  - {name: allen career institute, domains: [allen.ac.in]}
+  - {name: aakash institute, domains: [aakash.ac.in]}
+  - {name: fiitjee, domains: [fiitjee.com]}
+  - {name: vedantu, domains: [vedantu.com]}
+  - {name: upgrad, domains: [upgrad.com]}
+  - {name: leverage edu, domains: [leverageedu.com]}
+  - {name: idp education, domains: [idp.com]}
+  - {name: leap scholar, domains: [leapscholar.com]}
+  - {name: yocket, domains: []}
+  - {name: gems education, domains: [gemseducation.com]}
+  - {name: taaleem, domains: [taaleem.ae]}
+  - {name: aldar academies, domains: [aldaracademies.com]}
+
+hospital_keywords:            # whole words in the name. Small Indian clinics sometimes call themselves
+  - hospital                  # a "hospital" (for example "dental hospital"): check R3 rejects in week 1
+  - hospitals
+  - medical college
+  - institute of medical sciences
+  - super speciality hospital
+  - multispeciality hospital
+  - nursing home
+
+agency_keywords:              # in name, category or site title: they sell what we sell
+  - digital marketing
+  - marketing agency
+  - seo agency
+  - seo services
+  - web design
+  - web development
+  - web solutions
+  - app development
+  - software development
+  - software solutions
+  - it services
+  - it solutions
+  - infotech
+  - technologies pvt
+  - ai solutions
+  - automation agency
+  - placement consultancy
+  - staffing
+  - recruitment agency
+
+competitors:                  # software vendors and platforms in our space: never leads (names or domains)
+  - aisensy
+  - interakt
+  - gallabox
+  - wati
+  - leadsquared
+  - zoho
+  - freshworks
+  - haptik
+  - yellow.ai
+  - gupshup
+  - kaleyra
+  - exotel
+  - knowlarity
+  - practo
+
+max_branches: 10              # 10 or more branches = a big chain (Steps 6 and 8)

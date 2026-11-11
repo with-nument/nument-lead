@@ -1,0 +1,175 @@
+# engine/segments/clinics-in.yaml : the reference segment (keys explained in Step 3.3)
+id: clinics-in
+domain: clinics
+country: in
+display_name: Clinics, India
+enabled: true
+timezone: Asia/Kolkata
+currency: INR
+
+quota:
+  daily_research: 80            # first-sync value; afterwards the app owns it (Step 15)
+
+cities:
+  - name: Delhi
+    aliases: [New Delhi, NCT of Delhi]
+    bbox: [76.84, 28.40, 77.35, 28.88]
+    localities: [Connaught Place, Saket, Hauz Khas, Greater Kailash, Lajpat Nagar, Defence Colony,
+                 Vasant Kunj, Rajouri Garden, Punjabi Bagh, Janakpuri, Dwarka, Rohini, Pitampura,
+                 Karol Bagh, Preet Vihar, Mayur Vihar, Kalkaji, Laxmi Nagar]
+  - name: Gurugram
+    aliases: [Gurgaon]
+    bbox: [76.95, 28.38, 77.12, 28.53]
+    localities: [DLF Phase 1, DLF Phase 4, Golf Course Road, Sohna Road, Sushant Lok, MG Road,
+                 South City, Sector 14, Sector 29, Sector 56, Nirvana Country, Palam Vihar, Sector 82]
+  - name: Noida
+    aliases: [Greater Noida, Gautam Buddh Nagar]
+    bbox: [77.29, 28.45, 77.50, 28.64]
+    localities: [Sector 18, Sector 50, Sector 62, Sector 76, Sector 104, Sector 137, Greater Noida West]
+  - name: Mumbai
+    aliases: [Bombay, Mumbai Suburban]
+    bbox: [72.77, 18.89, 72.99, 19.30]
+    localities: [Andheri West, Andheri East, Bandra West, Khar, Santacruz, Juhu, Vile Parle, Powai,
+                 Goregaon, Malad, Kandivali, Borivali, Dadar, Lower Parel, Worli, Colaba, Chembur,
+                 Ghatkopar, Mulund]
+  - name: Thane and Navi Mumbai
+    aliases: [Thane, Navi Mumbai, New Bombay]
+    bbox: [72.95, 18.98, 73.10, 19.30]
+    localities: [Thane West, Vashi, Nerul, Kharghar, Belapur, Airoli]
+  - name: Bengaluru
+    aliases: [Bangalore, Bengaluru Urban]
+    bbox: [77.46, 12.83, 77.78, 13.14]
+    localities: [Indiranagar, Koramangala, HSR Layout, Whitefield, Jayanagar, JP Nagar, Malleshwaram,
+                 Rajajinagar, Hebbal, Yelahanka, Marathahalli, Electronic City, BTM Layout, Bellandur,
+                 Sarjapur Road, Banashankari, Basavanagudi, Frazer Town]
+  - name: Pune
+    aliases: [Pimpri Chinchwad, PCMC]
+    bbox: [73.70, 18.40, 74.05, 18.70]
+    localities: [Kothrud, Baner, Aundh, Wakad, Hinjewadi, Viman Nagar, Kalyani Nagar, Koregaon Park,
+                 Hadapsar, Magarpatta, Shivajinagar, Deccan, Camp, Kharadi, Pimple Saudagar, Bavdhan]
+  - name: Hyderabad
+    aliases: [Secunderabad, Cyberabad]
+    bbox: [78.30, 17.28, 78.62, 17.56]
+    localities: [Banjara Hills, Jubilee Hills, Madhapur, Gachibowli, Kondapur, Kukatpally, Ameerpet,
+                 Begumpet, Secunderabad, Somajiguda, Himayatnagar, Dilsukhnagar, LB Nagar, Miyapur,
+                 Manikonda, Kompally]
+
+overture:
+  categories:
+    - dental_clinic
+    - dermatology
+    - aesthetic_medicine
+    - fertility_clinic
+    - psychology
+    - psychotherapy
+    - counseling
+    - behavioral_or_mental_health_clinic
+    - hair_loss_center
+    - physical_therapy          # verify at build
+    - medical_skin_care         # verify at build
+
+places:
+  queries:
+    - "dermatology clinic in {locality}, {city}"
+    - "skin and hair clinic in {locality}, {city}"
+    - "aesthetic clinic in {locality}, {city}"
+    - "hair transplant clinic in {locality}, {city}"
+    - "IVF centre in {locality}, {city}"
+    - "fertility clinic in {locality}, {city}"
+    - "dental clinic in {locality}, {city}"
+    - "physiotherapy clinic in {locality}, {city}"
+    - "psychologist clinic in {locality}, {city}"
+  details_per_day: 90
+  reviews_per_day: 90
+
+registries:
+  - key: art_registry
+    name: ART and Surrogacy Registry (registered IVF clinics)
+    url: https://registry.artsurrogacy.gov.in/clinic/list?type=register-clinic
+    status: ready
+    subcategory: ivf_fertility
+    notes: About 4,767 clinics on one public page (checked 12 Nov 2026). Emails are written with [at] and [dot].
+  - key: nabh
+    name: NABH accredited small healthcare organisations
+    url: https://nabh.co
+    status: verify_at_build
+    notes: Use only a public, robots-allowed list. Skip on a login or CAPTCHA.
+
+osm:
+  enabled: true
+apna:
+  pages_per_day: 120
+adzuna_enabled: false
+
+job_keywords:
+  frontdesk: [receptionist, front desk, front office, patient coordinator, patient care coordinator,
+              telecaller, tele caller, customer care executive, clinic coordinator,
+              appointment coordinator, fertility counsellor, call centre executive]
+  builder: [web developer, website developer, app developer, full stack developer, wordpress developer,
+            automation, n8n, zapier, ai engineer, chatbot, crm executive, software developer]
+  exclude: [nurse, doctor, dentist, physiotherapist, pharmacist, lab technician, ward boy, housekeeping]
+
+public_ask_queries:
+  - "looking for developer WhatsApp chatbot for clinic India"
+  - "need website and online booking for my clinic India"
+  - "clinic looking for appointment booking software developer"
+  - "dermatologist looking for app developer"
+news_queries:
+  - '("new clinic" OR "opens" OR "inaugurates" OR "launches") (dermatology OR "skin clinic" OR IVF OR fertility OR dental) sourcecountry:IN'
+  - '("new branch" OR "second centre" OR "expands") (clinic OR IVF OR "hair transplant") sourcecountry:IN'
+
+size_rules:                     # Step 8.6; an active stated need also passes
+  any_of:
+    - {source: business, key: review_count, op: ">=", value: 100}
+    - {source: business, key: branches_count, op: ">=", value: 2}
+    - {source: registry, key: art_registry, op: exists}
+    - {source: fact, key: staff_or_doctors, field: count, op: ">=", value: 2}
+
+signal_points:                  # overrides of the A.12.3 defaults
+  review_pain: 7
+  no_booking: 4
+
+fit:
+  categories: [dental_clinic, dermatology, aesthetic_medicine, fertility_clinic, psychology,
+               psychotherapy, counseling, behavioral_or_mental_health_clinic, hair_loss_center,
+               physical_therapy, medical_skin_care,
+               dentist, doctor, skin_care_clinic, physiotherapist]   # last four: Places types, verify at build
+  service_keywords: [ivf, iui, fertility, dermatology, skin, laser, hair transplant, botox, fillers,
+                     dental implants, aligners, root canal, physiotherapy, counselling, therapy]
+  min_reviews: 100
+  min_staff: 2
+
+ticket_class:                   # match order matters: the first class that matches wins
+  ivf_fertility:   {match: [fertility_clinic, ivf, fertility, infertility, test tube baby], points: 6}
+  hair_transplant: {match: [hair_loss_center, hair transplant, hair restoration], points: 5}
+  aesthetic:       {match: [aesthetic_medicine, medical_skin_care, aesthetic, cosmetic, laser, botox], points: 5}
+  dermatology:     {match: [dermatology, skin_care_clinic, dermatologist, skin clinic, skin], points: 4}
+  dental:          {match: [dental_clinic, dentist, dental, orthodontic], points: 3}
+  physio:          {match: [physical_therapy, physiotherapist, physiotherapy, physio], points: 2}
+  therapy_group:   {match: [psychology, psychotherapy, counseling, behavioral_or_mental_health_clinic,
+                            psychologist, counselling, therapy], points: 2}
+
+can_pay:
+  premium_price: {consultation: 800, other: 20000}    # INR (Step 11.3)
+
+scoring: {}                     # no overrides of config/scoring.yaml
+
+packaged_outcome: AI front desk
+
+angles:
+  - {key: build_what_they_asked, label: Their own stated need, signals: [public_ask, tender, hiring_builder],
+     idea: "Build exactly what they asked for, in their words, and mention one detail from their post."}
+  - {key: frontdesk_load, label: Front desk overloaded, signals: [hiring_frontdesk],
+     idea: "A WhatsApp assistant answers routine patient questions and books slots, so the front desk handles only real work."}
+  - {key: missed_calls, label: Calls and messages missed, signals: [review_pain],
+     idea: "Every call and WhatsApp answered in seconds, day and night, with a booking link."}
+  - {key: ad_leads_cold, label: Ad enquiries going cold, signals: [ads_running],
+     idea: "Every ad enquiry answered in 5 seconds and followed up until it books a consultation."}
+  - {key: no_online_booking, label: No easy online booking, signals: [no_booking],
+     idea: "Patients book on WhatsApp in under a minute, with reminders that cut no-shows."}
+  - {key: slow_site, label: Slow mobile site, signals: [slow_site],
+     idea: "A fast booking page with a WhatsApp button, so mobile visitors book instead of leaving."}
+  - {key: new_branch_setup, label: New branch or clinic, signals: [new_branch, new_place, news],
+     idea: "One front desk assistant for every branch from day one."}
+  - {key: after_hours_enquiries, label: After-hours enquiries (no signal), signals: [fit_only],
+     idea: "Answer patient questions and book slots after hours on WhatsApp."}
