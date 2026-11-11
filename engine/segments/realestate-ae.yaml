@@ -1,0 +1,105 @@
+id: realestate-ae
+domain: realestate
+country: ae
+display_name: Real estate, UAE
+enabled: true
+timezone: Asia/Dubai
+currency: AED
+quota: {daily_research: 40}
+
+cities:
+  - {name: Dubai, aliases: [Dubayy], bbox: [55.05, 24.95, 55.45, 25.35],
+     localities: [Business Bay, Downtown Dubai, Dubai Marina, JLT, JVC, Al Barsha, Deira, Bur Dubai,
+                  Dubai Hills, Palm Jumeirah, Arjan, Dubai South]}
+  - {name: Abu Dhabi, aliases: [Abu Zaby], bbox: [54.30, 24.20, 54.75, 24.55],
+     localities: [Al Reem Island, Yas Island, Saadiyat Island, Khalifa City, Al Raha, Corniche]}
+  - {name: Sharjah, aliases: [Ash Shariqah], bbox: [55.35, 25.25, 55.60, 25.42],
+     localities: [Al Majaz, Al Khan, Aljada, Muwaileh, Al Nahda Sharjah]}
+
+overture:
+  categories:
+    - real_estate               # verify at build
+    - real_estate_agent         # verify at build
+    - real_estate_service       # verify at build
+    - real_estate_developer     # verify at build
+    - property_management       # verify at build
+
+places:
+  queries:
+    - "real estate brokerage in {locality}, {city}"
+    - "real estate agency in {locality}, {city}"
+    - "property developer in {city}"
+    - "property management company in {locality}, {city}"
+  details_per_day: 9
+  reviews_per_day: 7
+
+registries:
+  - {key: dld_brokers, name: Dubai Land Department registered brokers and offices, url: "https://dubailand.gov.ae",
+     status: verify_at_build, notes: "Look for a public list or open data. Skip on a login or CAPTCHA."}
+  - {key: adrec, name: Abu Dhabi Real Estate Centre, url: "https://www.adrec.gov.ae", status: verify_at_build}
+
+osm: {enabled: true}
+apna: {pages_per_day: 0}
+adzuna_enabled: false
+
+job_keywords:
+  frontdesk: [telesales, call centre agent, lead qualifier, sales coordinator, admin assistant,
+              customer service executive, leasing coordinator, crm executive]
+  builder: [web developer, app developer, full stack developer, crm developer, automation,
+            ai engineer, chatbot, salesforce developer]
+  exclude: [commission only, driver, cleaner, security guard, civil engineer]
+
+public_ask_queries:
+  - "real estate brokerage Dubai looking for CRM automation"
+  - "Dubai real estate agency need WhatsApp lead bot"
+news_queries:
+  - '("launches" OR "new project" OR "opens office") ("real estate" OR brokerage OR developer) (Dubai OR "Abu Dhabi" OR Sharjah)'
+
+size_rules:
+  any_of:
+    - {source: business, key: review_count, op: ">=", value: 30}
+    - {source: business, key: branches_count, op: ">=", value: 2}
+    - {source: registry, key: "*", op: exists}
+
+signal_points: {hiring_frontdesk: 9, ads_running: 6}
+
+fit:
+  categories: [real_estate, real_estate_agent, real_estate_service, real_estate_developer,
+               property_management, real_estate_agency]          # last one: Places type, verify at build
+  service_keywords: [off plan, offplan, secondary market, leasing, property management, holiday homes,
+                     villas, apartments, commercial property]
+  min_reviews: 30
+  min_staff: 2
+
+ticket_class:
+  developer:         {match: [real_estate_developer, developer, developers, developments], points: 6}
+  broker:            {match: [real_estate_agent, real_estate_agency, broker, brokers, brokerage, realty,
+                              real estate agency, properties], points: 2}
+  property_services: {match: [property_management, real_estate_service, holiday homes, property management], points: 2}
+
+can_pay:
+  premium_price: {other: 1500000}      # AED 1.5 million, any listed property
+
+scoring:
+  can_pay:
+    reviews: [{min: 100, points: 6}, {min: 30, points: 4}]
+
+packaged_outcome: AI lead qualifier and site-visit booking
+
+angles:
+  - {key: build_what_they_asked, label: Their own stated need, signals: [public_ask, tender, hiring_builder],
+     idea: "Build exactly what they asked for, in their words, tied to faster lead response."}
+  - {key: frontdesk_load, label: Telesales overloaded, signals: [hiring_frontdesk],
+     idea: "Every Property Finder, Bayut and ad lead answered on WhatsApp in seconds, qualified and offered a viewing, so agents call only warm leads."}
+  - {key: missed_calls, label: Leads not answered, signals: [review_pain],
+     idea: "Every enquiry answered in seconds, day and night, and offered a viewing slot."}
+  - {key: ad_leads_cold, label: Ad leads going cold, signals: [ads_running],
+     idea: "Every ad lead gets an instant WhatsApp reply and follow-ups until it books a viewing."}
+  - {key: no_online_booking, label: Viewings not booked online, signals: [no_booking],
+     idea: "Leads pick a viewing slot on WhatsApp, with a reminder."}
+  - {key: slow_site, label: Slow listing pages, signals: [slow_site],
+     idea: "Fast listing pages with WhatsApp booking, so mobile visitors book a viewing instead of leaving."}
+  - {key: new_branch_setup, label: New project or office, signals: [new_branch, new_place, news],
+     idea: "Handle the launch rush: every enquiry answered and qualified automatically."}
+  - {key: site_visit_followup, label: Viewing follow-up (no signal), signals: [fit_only],
+     idea: "Follow up every enquiry until it books a viewing."}

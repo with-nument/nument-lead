@@ -1,0 +1,125 @@
+id: clinics-ae
+domain: clinics
+country: ae
+display_name: Clinics, UAE
+enabled: true
+timezone: Asia/Dubai
+currency: AED
+quota: {daily_research: 40}
+
+cities:
+  - {name: Dubai, aliases: [Dubayy], bbox: [55.05, 24.95, 55.45, 25.35],
+     localities: [Dubai Marina, JLT, Jumeirah, Umm Suqeim, Al Barsha, Business Bay, Downtown Dubai, DIFC,
+                  Deira, Bur Dubai, Karama, Al Quoz, Dubai Healthcare City, Mirdif, Al Nahda, JVC,
+                  Dubai Silicon Oasis, Motor City, Arabian Ranches]}
+  - {name: Abu Dhabi, aliases: [Abu Zaby], bbox: [54.30, 24.20, 54.75, 24.55],
+     localities: [Al Khalidiyah, Al Bateen, Corniche, Al Reem Island, Khalifa City, Mohammed Bin Zayed City,
+                  Al Raha, Tourist Club Area, Al Mushrif, Yas Island]}
+  - {name: Sharjah, aliases: [Ash Shariqah], bbox: [55.35, 25.25, 55.60, 25.42],
+     localities: [Al Majaz, Al Nahda Sharjah, Al Khan, Al Taawun, Muwaileh, University City, Al Qasimia]}
+
+overture:
+  categories:
+    - dental_clinic
+    - dermatology
+    - aesthetic_medicine
+    - fertility_clinic
+    - psychology
+    - psychotherapy
+    - counseling
+    - behavioral_or_mental_health_clinic
+    - hair_loss_center
+    - physical_therapy          # verify at build
+    - medical_skin_care         # verify at build
+
+places:
+  queries:
+    - "dermatology clinic in {locality}, {city}"
+    - "aesthetic clinic in {locality}, {city}"
+    - "hair transplant clinic in {locality}, {city}"
+    - "dental clinic in {locality}, {city}"
+    - "IVF clinic in {locality}, {city}"
+    - "physiotherapy clinic in {locality}, {city}"
+    - "psychologist in {locality}, {city}"
+  details_per_day: 14           # outside India the free allowance is about 30 a day per SKU (3.7.7)
+  reviews_per_day: 10
+
+registries:
+  - {key: dha, name: Dubai Health Authority licensed facilities, url: "https://www.dha.gov.ae",
+     status: verify_at_build, notes: "Only a public, robots-allowed list; Sheryan may need a login, skip if so."}
+  - {key: doh_abu_dhabi, name: Department of Health Abu Dhabi facility directory, url: "https://www.doh.gov.ae",
+     status: verify_at_build}
+  - {key: mohap, name: Ministry of Health and Prevention (Sharjah and northern emirates), url: "https://mohap.gov.ae",
+     status: verify_at_build}
+
+osm: {enabled: true}
+apna: {pages_per_day: 0}
+adzuna_enabled: false           # only after Adzuna UAE coverage is checked
+
+job_keywords:
+  frontdesk: [receptionist, front desk, front office, patient coordinator, patient relations,
+              call centre agent, customer service executive, clinic coordinator, insurance coordinator]
+  builder: [web developer, app developer, full stack developer, automation, ai engineer, chatbot,
+            crm specialist, software developer]
+  exclude: [nurse, doctor, dentist, physiotherapist, pharmacist, lab technician, cleaner, driver]
+
+public_ask_queries:
+  - "clinic Dubai looking for WhatsApp booking system"
+  - "dental clinic UAE need app developer"
+  - "aesthetic clinic Dubai looking for CRM automation"
+news_queries:
+  - '("new clinic" OR "opens" OR "launches") (dermatology OR aesthetic OR dental OR IVF) (Dubai OR "Abu Dhabi" OR Sharjah)'
+  - '("new branch" OR "expands") clinic (Dubai OR "Abu Dhabi")'
+
+size_rules:
+  any_of:
+    - {source: business, key: review_count, op: ">=", value: 100}
+    - {source: business, key: branches_count, op: ">=", value: 2}
+    - {source: fact, key: staff_or_doctors, field: count, op: ">=", value: 2}
+
+signal_points: {review_pain: 7, ads_running: 5}
+
+fit:
+  categories: [dental_clinic, dermatology, aesthetic_medicine, fertility_clinic, psychology,
+               psychotherapy, counseling, behavioral_or_mental_health_clinic, hair_loss_center,
+               physical_therapy, medical_skin_care,
+               dentist, doctor, skin_care_clinic, physiotherapist]   # last four: Places types, verify at build
+  service_keywords: [ivf, fertility, dermatology, skin, laser, hair transplant, botox, fillers,
+                     dental implants, veneers, aligners, physiotherapy, counselling, therapy]
+  min_reviews: 100
+  min_staff: 2
+
+ticket_class:
+  ivf_fertility:   {match: [fertility_clinic, ivf, fertility], points: 6}
+  hair_transplant: {match: [hair_loss_center, hair transplant], points: 5}
+  aesthetic:       {match: [aesthetic_medicine, medical_skin_care, aesthetic, cosmetic, laser, botox, filler], points: 5}
+  dermatology:     {match: [dermatology, skin_care_clinic, dermatologist, skin], points: 4}
+  dental:          {match: [dental_clinic, dentist, dental, orthodontic], points: 3}
+  physio:          {match: [physical_therapy, physiotherapist, physiotherapy, physio], points: 2}
+  therapy_group:   {match: [psychology, psychotherapy, counseling, behavioral_or_mental_health_clinic,
+                            psychologist, therapy], points: 2}
+
+can_pay:
+  premium_price: {consultation: 300, other: 3000}     # AED (Step 11.3)
+
+scoring: {}
+
+packaged_outcome: AI front desk
+
+angles:
+  - {key: build_what_they_asked, label: Their own stated need, signals: [public_ask, tender, hiring_builder],
+     idea: "Build exactly what they asked for, in their words, and mention one detail from their post."}
+  - {key: frontdesk_load, label: Front desk overloaded, signals: [hiring_frontdesk],
+     idea: "A WhatsApp assistant answers patient questions in English and books appointments, so the front desk handles only real work."}
+  - {key: missed_calls, label: Calls and WhatsApps missed, signals: [review_pain],
+     idea: "Every call and WhatsApp answered in seconds, around the clock, with a booking link."}
+  - {key: ad_leads_cold, label: Ad enquiries going cold, signals: [ads_running],
+     idea: "Every ad enquiry answered in seconds and followed up until it books."}
+  - {key: no_online_booking, label: No easy online booking, signals: [no_booking],
+     idea: "Patients book on WhatsApp, with reminders that cut no-shows."}
+  - {key: slow_site, label: Slow mobile site, signals: [slow_site],
+     idea: "A fast booking page with a WhatsApp button, so mobile visitors book instead of leaving."}
+  - {key: new_branch_setup, label: New branch or clinic, signals: [new_branch, new_place, news],
+     idea: "One front desk assistant for every branch from day one."}
+  - {key: after_hours_enquiries, label: After-hours enquiries (no signal), signals: [fit_only],
+     idea: "Answer patient questions and book appointments after hours on WhatsApp."}

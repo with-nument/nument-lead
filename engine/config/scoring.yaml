@@ -1,0 +1,37 @@
+# engine/config/scoring.yaml : default scoring numbers (Step 11 owns the formula)
+# A segment's `scoring:` block overrides any value here for that segment (lists are replaced).
+# Fixed in score.py, not here: grade cut-offs (A.12.9), signal decay steps, SCORE_VERSION.
+
+fit:
+  gate: 2                       # fit below 2 = grade D (reason fit_gate)
+  bonus: {3: 10, 2: 5, 1: 0, 0: 0}
+
+can_pay:
+  cap: 30
+  branches: [{min: 4, points: 8}, {min: 2, points: 6}]     # tiers: the first that matches counts
+  staff:    [{min: 8, points: 6}, {min: 3, points: 4}]
+  reviews:  [{min: 300, points: 6}, {min: 100, points: 4}]
+  premium_price: 5              # a verified price_point at or above the segment's threshold
+  pays_for_software: 3          # booking system, CRM, live chat, WhatsApp API provider, claimed Practo
+  custom_website: 2             # live site on its own domain, not a free builder sub-domain
+  funding: 6                    # an active funding signal
+  # ticket class points (0 to 6) come from the segment's ticket_class
+
+intent:
+  cap: 40
+  stack_bonus_per_type: 2       # for each signal type after the first
+  stack_bonus_max: 4
+
+reach:
+  decision_maker_mobile: 1.00
+  business_mobile: 0.85
+  landline: 0.65
+  email: 0.45
+  form: 0.30
+  none: 0.00
+
+total:
+  raw_max: 80                   # total = round(raw / raw_max * 100 * reach)
+
+fit_only_max_pct: 10            # A.12.4
+judge_top_share: 0.5            # the best half by total (and every A) goes to the top model

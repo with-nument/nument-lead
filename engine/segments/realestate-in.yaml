@@ -1,0 +1,122 @@
+id: realestate-in
+domain: realestate
+country: in
+display_name: Real estate, India
+enabled: true
+timezone: Asia/Kolkata
+currency: INR
+quota: {daily_research: 60}
+
+cities:
+  - {name: Delhi, aliases: [New Delhi], bbox: [76.84, 28.40, 77.35, 28.88],
+     localities: [Saket, Dwarka, Rohini, Janakpuri, Vasant Kunj, Greater Kailash, Rajouri Garden, Preet Vihar]}
+  - {name: Gurugram, aliases: [Gurgaon], bbox: [76.95, 28.38, 77.12, 28.53],
+     localities: [Golf Course Road, Golf Course Extension Road, Sohna Road, MG Road, Dwarka Expressway,
+                  Sector 49, Sector 65, Sector 82]}
+  - {name: Noida, aliases: [Greater Noida], bbox: [77.29, 28.45, 77.50, 28.64],
+     localities: [Sector 18, Sector 62, Sector 75, Sector 137, Sector 150, Greater Noida West]}
+  - {name: Mumbai, aliases: [Bombay], bbox: [72.77, 18.89, 72.99, 19.30],
+     localities: [Andheri West, Bandra West, Powai, Goregaon, Malad, Borivali, Lower Parel, Worli, Chembur, Ghatkopar]}
+  - {name: Thane and Navi Mumbai, aliases: [Thane, Navi Mumbai, Panvel], bbox: [72.95, 18.98, 73.10, 19.30],
+     localities: [Thane West, Vashi, Kharghar, Panvel, Belapur]}
+  - {name: Bengaluru, aliases: [Bangalore], bbox: [77.46, 12.83, 77.78, 13.14],
+     localities: [Whitefield, Sarjapur Road, Hebbal, Yelahanka, Electronic City, HSR Layout, Koramangala,
+                  Bannerghatta Road]}
+  - {name: Pune, aliases: [Pimpri Chinchwad], bbox: [73.70, 18.40, 74.05, 18.70],
+     localities: [Baner, Wakad, Hinjewadi, Kharadi, Viman Nagar, Hadapsar, Kothrud, Undri]}
+  - {name: Hyderabad, aliases: [Secunderabad], bbox: [78.30, 17.28, 78.62, 17.56],
+     localities: [Gachibowli, Kondapur, Kokapet, Madhapur, Kukatpally, Miyapur, Banjara Hills, Kompally]}
+
+overture:
+  categories:                   # none confirmed yet (Appendix F item 1)
+    - real_estate               # verify at build
+    - real_estate_agent         # verify at build
+    - real_estate_service       # verify at build
+    - real_estate_developer     # verify at build
+    - property_management       # verify at build
+
+places:
+  queries:
+    - "real estate developer in {city}"
+    - "real estate agent in {locality}, {city}"
+    - "property consultant in {locality}, {city}"
+    - "real estate channel partner in {locality}, {city}"
+  details_per_day: 60
+  reviews_per_day: 60
+
+registries:
+  - {key: rera_maharashtra, name: MahaRERA agents and projects, url: "https://maharera.maharashtra.gov.in",
+     status: verify_at_build, notes: "Mumbai and Pune. Stop on a CAPTCHA."}
+  - {key: rera_haryana, name: HRERA (Gurugram), url: "https://haryanarera.gov.in", status: verify_at_build}
+  - {key: rera_up, name: UP RERA (Noida), url: "https://www.up-rera.in", status: verify_at_build}
+  - {key: rera_karnataka, name: Karnataka RERA (Bengaluru), url: "https://rera.karnataka.gov.in", status: verify_at_build}
+  - {key: rera_telangana, name: Telangana RERA (Hyderabad), url: "https://rera.telangana.gov.in", status: verify_at_build}
+  - {key: rera_delhi, name: Delhi RERA, url: "https://rera.delhi.gov.in", status: verify_at_build}
+
+osm: {enabled: true}
+apna: {pages_per_day: 100}
+adzuna_enabled: false
+
+job_keywords:
+  frontdesk: [telecaller, tele sales, telesales, pre sales executive, presales, sales coordinator,
+              customer relationship executive, inside sales, lead manager, crm executive, site visit coordinator]
+  builder: [web developer, app developer, full stack developer, crm developer, automation, n8n, zapier,
+            ai engineer, chatbot, salesforce developer]
+  exclude: [civil engineer, site engineer, architect, accountant, driver, security guard]
+
+public_ask_queries:
+  - "real estate developer looking for CRM automation India"
+  - "builder looking for WhatsApp lead management system"
+  - "need app developer for real estate brokerage India"
+news_queries:
+  - '("launches" OR "new project" OR "new launch") ("real estate" OR developer OR realty) sourcecountry:IN'
+  - '("opens office" OR "expands") (realty OR "real estate") sourcecountry:IN'
+
+size_rules:
+  any_of:
+    - {source: business, key: review_count, op: ">=", value: 30}
+    - {source: business, key: branches_count, op: ">=", value: 2}
+    - {source: registry, key: "*", op: exists}
+
+signal_points: {hiring_frontdesk: 9, ads_running: 6}
+
+fit:
+  categories: [real_estate, real_estate_agent, real_estate_service, real_estate_developer,
+               property_management, real_estate_agency]          # last one: Places type, verify at build
+  service_keywords: [residential projects, commercial projects, plots, villas, apartments, resale,
+                     rentals, property management, channel partner]
+  min_reviews: 30
+  min_staff: 2
+
+ticket_class:
+  developer:         {match: [real_estate_developer, developers, builders, constructions, infra, buildcon], points: 6}
+  broker:            {match: [real_estate_agent, real_estate_agency, realty, realtors, broker, brokerage,
+                              property consultant, property consultants, channel partner], points: 2}
+  property_services: {match: [property_management, real_estate_service, property management], points: 2}
+
+can_pay:
+  premium_price: {other: 7500000}      # INR 75 lakh, any listed property
+
+scoring:
+  can_pay:
+    reviews: [{min: 100, points: 6}, {min: 30, points: 4}]     # brokers rarely reach 100 reviews
+
+packaged_outcome: AI lead qualifier and site-visit booking
+
+angles:
+  - {key: build_what_they_asked, label: Their own stated need, signals: [public_ask, tender, hiring_builder],
+     idea: "Build exactly what they asked for, in their words, tied to faster lead response."}
+  - {key: frontdesk_load, label: Telecallers overloaded, signals: [hiring_frontdesk],
+     idea: "A WhatsApp assistant replies to every portal and ad lead in seconds, qualifies it and books the site visit, so telecallers call only warm leads."}
+  - {key: missed_calls, label: Leads not answered, signals: [review_pain],
+     idea: "Every enquiry answered in seconds, day and night, and offered a site visit slot."}
+  - {key: ad_leads_cold, label: Ad leads going cold, signals: [ads_running],
+     idea: "Every ad lead gets an instant WhatsApp reply and follow-ups until it books a visit."}
+  - {key: no_online_booking, label: Site visits not booked online, signals: [no_booking],
+     idea: "Leads pick a site visit slot on WhatsApp, with a reminder the day before."}
+  - {key: slow_site, label: Slow project pages, signals: [slow_site],
+     idea: "A fast project page with WhatsApp booking, so mobile visitors book a visit instead of leaving."}
+  - {key: new_branch_setup, label: New project or office, signals: [new_branch, new_place, news],
+     idea: "Handle the launch rush: every enquiry for the new project answered and qualified automatically."}
+  - {key: site_visit_followup, label: Site visit follow-up (no signal), signals: [fit_only],
+     idea: "Follow up every enquiry until it books a site visit."}

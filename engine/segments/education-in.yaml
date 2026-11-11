@@ -1,0 +1,116 @@
+id: education-in
+domain: education
+country: in
+display_name: Education, India
+enabled: true
+timezone: Asia/Kolkata
+currency: INR
+quota: {daily_research: 50}
+
+cities:
+  - {name: Delhi, aliases: [New Delhi], bbox: [76.84, 28.40, 77.35, 28.88],
+     localities: [Mukherjee Nagar, Rajendra Nagar, Laxmi Nagar, Kalu Sarai, Karol Bagh, Dwarka, Rohini,
+                  Saket, Lajpat Nagar]}
+  - {name: Gurugram, aliases: [Gurgaon], bbox: [76.95, 28.38, 77.12, 28.53],
+     localities: [Sector 14, Sushant Lok, Sohna Road, DLF Phase 4, Sector 56]}
+  - {name: Noida, aliases: [Greater Noida], bbox: [77.29, 28.45, 77.50, 28.64],
+     localities: [Sector 18, Sector 62, Sector 15, Greater Noida West]}
+  - {name: Mumbai, aliases: [Bombay], bbox: [72.77, 18.89, 72.99, 19.30],
+     localities: [Andheri West, Dadar, Vile Parle, Borivali, Chembur, Ghatkopar, Powai, Bandra West]}
+  - {name: Bengaluru, aliases: [Bangalore], bbox: [77.46, 12.83, 77.78, 13.14],
+     localities: [Jayanagar, Malleshwaram, Rajajinagar, Koramangala, HSR Layout, Marathahalli, Indiranagar]}
+  - {name: Pune, aliases: [Pimpri Chinchwad], bbox: [73.70, 18.40, 74.05, 18.70],
+     localities: [Deccan, Shivajinagar, Kothrud, Aundh, Viman Nagar, Wakad]}
+  - {name: Hyderabad, aliases: [Secunderabad], bbox: [78.30, 17.28, 78.62, 17.56],
+     localities: [Ameerpet, Dilsukhnagar, Kukatpally, Madhapur, Himayatnagar, Ashok Nagar]}
+
+overture:
+  categories:                   # none confirmed yet (Appendix F item 1)
+    - educational_services      # verify at build
+    - tutoring_center           # verify at build
+    - test_preparation          # verify at build
+    - language_school           # verify at build
+    - vocational_and_technical_school   # verify at build
+    - educational_consultant    # verify at build
+
+places:
+  queries:
+    - "coaching institute in {locality}, {city}"
+    - "JEE NEET coaching in {locality}, {city}"
+    - "UPSC coaching in {locality}, {city}"
+    - "CA coaching in {locality}, {city}"
+    - "study abroad consultant in {locality}, {city}"
+    - "IELTS coaching in {locality}, {city}"
+    - "training institute in {locality}, {city}"
+  details_per_day: 50
+  reviews_per_day: 40
+
+registries: []                  # none known yet; research public lists at build (Appendix F)
+
+osm: {enabled: true}
+apna: {pages_per_day: 80}
+adzuna_enabled: false
+
+job_keywords:
+  frontdesk: [admission counsellor, admissions executive, academic counsellor, student counsellor,
+              telecaller, front desk executive, centre coordinator, counsellor, career counsellor]
+  builder: [lms developer, web developer, app developer, full stack developer, automation, n8n,
+            ai engineer, chatbot, edtech developer]
+  exclude: [teacher, faculty, lecturer, tutor, professor, content writer, driver, peon]
+
+public_ask_queries:
+  - "coaching institute looking for app developer India"
+  - "need LMS and WhatsApp automation for coaching centre"
+  - "study abroad consultancy looking for CRM automation"
+news_queries:
+  - '("new centre" OR "opens" OR "launches") (coaching OR "study abroad" OR academy) sourcecountry:IN'
+  - '("expands" OR "new branch") (coaching OR institute) sourcecountry:IN'
+
+size_rules:
+  any_of:
+    - {source: business, key: review_count, op: ">=", value: 50}
+    - {source: business, key: branches_count, op: ">=", value: 2}
+
+signal_points: {hiring_frontdesk: 9, ads_running: 5}
+
+fit:
+  categories: [educational_services, tutoring_center, test_preparation, language_school,
+               vocational_and_technical_school, educational_consultant]
+  service_keywords: [jee, neet, upsc, cat, clat, gate, ielts, pte, toefl, gre, gmat, sat, study abroad,
+                     admissions counselling, coaching, test preparation]
+  min_reviews: 50
+  min_staff: 2
+
+ticket_class:
+  study_abroad:       {match: [educational_consultant, study abroad, overseas education, ielts, toefl,
+                               gre, gmat, pte, visa], points: 5}
+  coaching_institute: {match: [test_preparation, coaching, classes, jee, neet, upsc, ias, iit, cat, clat,
+                               gate], points: 4}
+  academy:            {match: [vocational_and_technical_school, academy, training institute, institute,
+                               skill], points: 3}
+  tutoring:           {match: [tutoring_center, language_school, tuition, tutorial, tutorials], points: 2}
+
+can_pay:
+  premium_price: {other: 50000}        # INR, any course or programme fee
+
+scoring: {}
+
+packaged_outcome: AI admissions counsellor
+
+angles:
+  - {key: build_what_they_asked, label: Their own stated need, signals: [public_ask, tender, hiring_builder],
+     idea: "Build exactly what they asked for, in their words, tied to more admissions."}
+  - {key: frontdesk_load, label: Counsellors overloaded, signals: [hiring_frontdesk],
+     idea: "Instant WhatsApp replies with course details and fees, so counsellors call only students who are ready."}
+  - {key: missed_calls, label: Enquiries not answered, signals: [review_pain],
+     idea: "Every enquiry answered in seconds, day and night, with a demo class slot."}
+  - {key: ad_leads_cold, label: Ad enquiries going cold, signals: [ads_running],
+     idea: "Every ad enquiry gets an instant reply and follow-ups until the student books a demo."}
+  - {key: no_online_booking, label: Demo classes not booked online, signals: [no_booking],
+     idea: "Students book a demo class on WhatsApp, with reminders."}
+  - {key: slow_site, label: Slow mobile site, signals: [slow_site],
+     idea: "A fast course page with WhatsApp enquiry, so mobile visitors ask instead of leaving."}
+  - {key: new_branch_setup, label: New centre, signals: [new_branch, new_place, news],
+     idea: "Handle the new centre's enquiry rush without hiring extra counsellors."}
+  - {key: admission_followup, label: Admission follow-up (no signal), signals: [fit_only],
+     idea: "Answer and follow up every admission enquiry until enrolment."}
