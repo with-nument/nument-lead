@@ -29,6 +29,8 @@ dependencies = [
     "rich>=13.8",
     "structlog>=24.4",
     "python-dateutil>=2.9",
+    "scipy>=1.13",
+    "scikit-learn>=1.5",
 ]
 
 [project.scripts]
