@@ -168,7 +168,8 @@ then prod (Step 21).
 - **Schedules:** `.github/workflows/` runs night (02:00 IST), morning (06:00), sheet sync (every 2 hours, 09:00
   to 21:00), weekly (Monday 07:00), monthly (the 1st, 22:30) and backup (Sunday 23:00). Scheduled runs stay off
   until the repository variable `SCHEDULES_ENABLED` is `true` (go-live, Step 21); manual runs always work.
-  Put the sheet ids in the `prod` and `dev` environments, never at repository level (dev refuses live ids).
+  Secrets and variables are set at repository level; each workflow passes `SHEET_MASTER_ID` and
+  `SHEET_CALLER_ID` to prod runs only and `SHEET_STAGING_ID` to dev runs only (dev refuses live ids).
   A failed scheduled run opens or updates one GitHub issue per workflow.
 
 ## Tests

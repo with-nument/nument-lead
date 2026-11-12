@@ -38,7 +38,8 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || vars.SCHEDULES_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    environment: ${{ inputs.env || 'prod' }}
+    # Repository-level secrets and variables: GitHub environments need a paid plan on a private personal
+    # repository. Live sheet ids reach prod runs only; dev runs see only the staging sheet.
     permissions:
       contents: read
       issues: write
@@ -52,9 +53,9 @@ jobs:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
       GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
-      SHEET_MASTER_ID: ${{ vars.SHEET_MASTER_ID }}
-      SHEET_CALLER_ID: ${{ vars.SHEET_CALLER_ID }}
-      SHEET_STAGING_ID: ${{ vars.SHEET_STAGING_ID }}
+      SHEET_MASTER_ID: ${{ (inputs.env || 'prod') == 'prod' && vars.SHEET_MASTER_ID || '' }}
+      SHEET_CALLER_ID: ${{ (inputs.env || 'prod') == 'prod' && vars.SHEET_CALLER_ID || '' }}
+      SHEET_STAGING_ID: ${{ (inputs.env || 'prod') == 'dev' && vars.SHEET_STAGING_ID || '' }}
       ASSOCIATE_NAME: ${{ vars.ASSOCIATE_NAME }}
       USER_AGENT: ${{ vars.USER_AGENT }}
       ALERT_EMAIL: ${{ vars.ALERT_EMAIL }}

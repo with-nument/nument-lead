@@ -249,9 +249,11 @@ The web app has its own unit tests (Vitest) and end-to-end tests (Playwright).
 | `monthly.yml` | the 1st, 22:30 | universe refresh, retention |
 | `backup.yml` | Sundays 23:00 | encrypted dump of the public schema |
 
-Secrets and variables are set per GitHub environment (`dev` and `prod`); scheduled runs use `prod`. Every
-workflow can be started by hand from the Actions tab or from the app's Engine page, with dry run, limit and
-segment options.
+Secrets and variables live at repository level (GitHub environments need a paid plan on a private personal
+repository). Each workflow passes the live sheet ids only to `prod` runs and the staging sheet id only to `dev`
+runs, so a dev run can never write a live sheet. Scheduled runs use `prod` and stay off until the repository
+variable `SCHEDULES_ENABLED` is `true`. Every workflow can be started by hand from the Actions tab or from the
+app's Engine page, with environment, dry run, limit and segment options.
 
 ### Supabase
 

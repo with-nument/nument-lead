@@ -30,7 +30,8 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || vars.SCHEDULES_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    environment: ${{ inputs.env || 'prod' }}
+    # Repository-level secrets and variables: GitHub environments need a paid plan on a private personal
+    # repository. Live sheet ids reach prod runs only; dev runs see only the staging sheet.
     permissions:
       contents: read
       issues: write
@@ -43,9 +44,9 @@ jobs:
       GEMINI_API_KEY_BACKUP: ${{ secrets.GEMINI_API_KEY_BACKUP }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
-      SHEET_MASTER_ID: ${{ vars.SHEET_MASTER_ID }}
-      SHEET_CALLER_ID: ${{ vars.SHEET_CALLER_ID }}
-      SHEET_STAGING_ID: ${{ vars.SHEET_STAGING_ID }}
+      SHEET_MASTER_ID: ${{ (inputs.env || 'prod') == 'prod' && vars.SHEET_MASTER_ID || '' }}
+      SHEET_CALLER_ID: ${{ (inputs.env || 'prod') == 'prod' && vars.SHEET_CALLER_ID || '' }}
+      SHEET_STAGING_ID: ${{ (inputs.env || 'prod') == 'dev' && vars.SHEET_STAGING_ID || '' }}
       ALERT_EMAIL: ${{ vars.ALERT_EMAIL }}
       ALERT_EMAIL_FROM: ${{ vars.ALERT_EMAIL_FROM }}
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }} # optional: alerts and reports by email (14.7)
