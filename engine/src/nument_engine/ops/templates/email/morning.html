@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% set sans = "-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" %}
+{% block body %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  <tr><td class="pad" style="padding:32px 36px 8px 36px;">
+    <div style="font:600 12px/16px {{ sans }};letter-spacing:.08em;text-transform:uppercase;color:#4250d5;">Your morning list</div>
+    <div class="h1" style="font:400 30px/38px Georgia,'Times New Roman',serif;color:#1f1f1f;margin:10px 0 8px 0;">{{ new_count }} new leads are ready</div>
+    <div style="font:400 15px/23px {{ sans }};color:#666666;">Best first. Each one has a fresh reason to talk now and a message ready to send.</div>
+  </td></tr>
+  <tr><td class="pad" style="padding:20px 36px 4px 36px;">
+    <table class="kpis" role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+      {% for k in kpis %}
+      <td class="kpi" width="25%" style="padding:0 8px 0 0;vertical-align:top;">
+        <div style="background:#fafafa;border:1px solid #f0f0f0;border-radius:12px;padding:12px 14px;">
+          <div style="font:600 11px/14px {{ sans }};letter-spacing:.06em;text-transform:uppercase;color:#999999;">{{ k.label }}</div>
+          <div style="font:400 24px/30px Georgia,serif;color:{{ k.color or '#1f1f1f' }};margin-top:4px;">{{ k.value }}</div>
+          <div style="font:400 12px/16px {{ sans }};color:#999999;">{{ k.note or "&nbsp;"|safe }}</div>
+        </div>
+      </td>
+      {% endfor %}
+    </tr></table>
+  </td></tr>
+  {% for l in leads %}
+  <tr><td class="pad" style="padding:16px 36px 0 36px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #ececec;border-radius:14px;">
+      <tr><td style="padding:18px 20px 16px 20px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+          <td style="vertical-align:top;">
+            <span style="display:inline-block;font:700 12px/22px {{ sans }};width:22px;text-align:center;border-radius:6px;background:{{ l.grade_bg }};color:{{ l.grade_fg }};margin-right:8px;">{{ l.grade }}</span><span style="font:600 16px/22px {{ sans }};color:#1f1f1f;">{{ l.name }}</span>
+            <div style="font:400 13px/20px {{ sans }};color:#999999;margin:4px 0 0 30px;">{{ l.place }}</div>
+          </td>
+          <td align="right" style="vertical-align:top;font:400 13px/22px {{ sans }};color:#999999;white-space:nowrap;">{{ l.score }}<span style="color:#cccccc;">/100</span></td>
+        </tr></table>
+        <div style="font:400 14px/22px {{ sans }};color:#3d3d3d;margin:12px 0 0 0;"><span style="color:#4250d5;font-weight:600;">Why now:</span> {{ l.why }}</div>
+        <div style="font:400 13px/20px {{ sans }};color:#666666;margin:6px 0 14px 0;">{{ l.facts }}</div>
+        <a class="btn" href="{{ l.url }}" style="display:inline-block;background:#2a2c33;color:#ffffff;font:600 14px/20px {{ sans }};text-decoration:none;padding:10px 18px;border-radius:10px;margin-right:6px;">Open lead</a>
+        <a class="btn" href="{{ l.wa }}" style="display:inline-block;background:#ffffff;color:#1f1f1f;border:1px solid #e6e6e6;font:600 14px/20px {{ sans }};text-decoration:none;padding:9px 17px;border-radius:10px;">Send on WhatsApp</a>
+      </td></tr>
+    </table>
+  </td></tr>
+  {% endfor %}
+  {% if more %}
+  <tr><td class="pad" style="padding:18px 36px 0 36px;font:500 14px/22px {{ sans }};">
+    <a href="{{ app_url }}/" style="color:#4250d5;text-decoration:none;">See all {{ new_count }} in the app &rarr;</a>
+  </td></tr>
+  {% endif %}
+  {% if followups %}
+  <tr><td class="pad" style="padding:28px 36px 0 36px;">
+    <div style="border-top:1px solid #f0f0f0;padding-top:22px;font:600 12px/16px {{ sans }};letter-spacing:.08em;text-transform:uppercase;color:#999999;">Follow-ups due today</div>
+    {% for f in followups %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;"><tr>
+      <td style="font:500 14px/22px {{ sans }};color:#1f1f1f;">{{ f.name }} <span style="color:#999999;font-weight:400;">· {{ f.step }}</span></td>
+      <td align="right"><a href="{{ f.url }}" style="font:500 13px/22px {{ sans }};color:#4250d5;text-decoration:none;">Open</a></td>
+    </tr></table>
+    {% endfor %}
+  </td></tr>
+  {% endif %}
+  <tr><td style="padding:32px 0 0 0;"></td></tr>
+</table>
+{% endblock %}
+{% block footer %}Sent every morning at 7:30 IST. Spend today ₹{{ spend }} of ₹{{ cap }}.{% endblock %}

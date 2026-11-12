@@ -19,7 +19,7 @@ log = get_logger()
 
 
 def run(rc: RunContext, *, light: bool = False) -> dict[str, Any]:
-    if rc.opts.env == "prod" and not gs.targets():
+    if not gs.targets():
         log.info("sheet.sync.no_sheet")
         stats: dict[str, Any] = {"skipped": "no sheet configured: the web app is the only view"}
         rc.stats["sheet"] = stats
