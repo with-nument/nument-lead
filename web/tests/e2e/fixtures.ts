@@ -10,6 +10,8 @@ import type { Database } from '../../src/lib/database.types'
 export const FIXTURE_PREFIX = 'E2E Fixture'
 export const MARKER_KEY = 'e2e_fixture'
 export const FIXTURE_EMAIL = /^e2e-[a-z]+-[a-z0-9]+@example\.com$/
+/** Email recipients the specs add (Settings > Email recipients): reserved domain, so never mailed. */
+export const RECIPIENT_PATTERN = 'e2e-%@example.com'
 const RUN_FILE = path.join(__dirname, '.auth', 'run.json')
 
 export type TestUser = { id: string; email: string; password: string }
@@ -234,6 +236,7 @@ export async function deleteFixtures() {
   }
   await sb.from('inbox_posts').delete().like('text', `${FIXTURE_PREFIX}%`)
   await sb.from('custom_queries').delete().like('query', `${FIXTURE_PREFIX}%`)
+  await sb.from('notify_recipients').delete().like('email', RECIPIENT_PATTERN)
   const { data: list } = await sb.auth.admin.listUsers({ page: 1, perPage: 1000 })
   for (const u of list?.users ?? []) {
     if (u.email && FIXTURE_EMAIL.test(u.email)) {
@@ -250,7 +253,7 @@ export async function leftovers() {
   const { data: businesses } = await sb.from('businesses').select('id').like('name', `${FIXTURE_PREFIX}%`)
   const ids = (businesses ?? []).map((b) => b.id)
   const none = ['00000000-0000-0000-0000-000000000000']
-  const [leads, contacts, signals, scores, facts, inbox, queries, markedBusinesses] = await Promise.all([
+  const [leads, contacts, signals, scores, facts, inbox, queries, markedBusinesses, recipients] = await Promise.all([
     sb.from('leads').select('id', head).in('business_id', ids.length ? ids : none),
     sb.from('contacts').select('id', head).in('business_id', ids.length ? ids : none),
     sb.from('signals').select('id', head).like('dedupe_key', 'e2e:%'),
@@ -259,6 +262,7 @@ export async function leftovers() {
     sb.from('inbox_posts').select('id', head).like('text', `${FIXTURE_PREFIX}%`),
     sb.from('custom_queries').select('id', head).like('query', `${FIXTURE_PREFIX}%`),
     sb.from('businesses').select('id', head).not(`extra->>${MARKER_KEY}`, 'is', null),
+    sb.from('notify_recipients').select('id', head).like('email', RECIPIENT_PATTERN),
   ])
   const { data: list } = await sb.auth.admin.listUsers({ page: 1, perPage: 1000 })
   return {
@@ -271,6 +275,7 @@ export async function leftovers() {
     facts: facts.count ?? 0,
     inboxPosts: inbox.count ?? 0,
     customQueries: queries.count ?? 0,
+    emailRecipients: recipients.count ?? 0,
     testUsers: (list?.users ?? []).filter((u) => u.email && FIXTURE_EMAIL.test(u.email)).length,
   }
 }

@@ -24,3 +24,11 @@ test('Today on a phone: the WhatsApp app button first, no sideways scroll', asyn
   await expect(row.getByRole('link', { name: /Open WhatsApp Web/ })).toBeHidden()
   await expectNoHorizontalScroll(page)
 })
+
+test('Email recipients on a phone: labelled switches, no sideways scroll', async ({ page }) => {
+  await signIn(page, run.admin.email, run.admin.password)
+  await page.goto('/settings/email')
+  await expect(page.getByRole('heading', { name: /Email recipients/ })).toBeVisible()
+  await expect(page.getByLabel('Email', { exact: true })).toBeVisible()
+  await expectNoHorizontalScroll(page)
+})

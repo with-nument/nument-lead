@@ -138,3 +138,71 @@ test('Admin creates a user; a new caller must change the password and never sees
   expect(adminView.data ?? []).toEqual([])
   await ctx.close()
 })
+
+test('Admin manages email recipients: add, no duplicates, toggle, test without sending, remove', async ({ page }) => {
+  const email = `e2e-recipient-${run.runId}@example.com`
+  await signIn(page, run.admin.email, run.admin.password)
+  await page.goto('/settings')
+  await page.getByRole('link', { name: 'Email recipients' }).click()
+  await expect(page).toHaveURL(/\/settings\/email$/)
+  await expect(page.getByRole('heading', { name: /^Email recipients · \d+$/ })).toBeVisible()
+
+  // Add, typed in capitals: stored lower-cased.
+  const add = page.getByRole('region', { name: 'Add' })
+  await add.getByLabel('Email', { exact: true }).fill(email.toUpperCase())
+  await add.getByLabel('Name').fill('E2E Recipient')
+  await add.getByRole('button', { name: 'Add', exact: true }).click()
+  const row = page.getByTestId('recipient-row').filter({ hasText: email })
+  await expect(row).toBeVisible()
+  await expect(row.getByText('E2E Recipient')).toBeVisible()
+
+  // The same address again is refused.
+  await add.getByLabel('Email', { exact: true }).fill(email)
+  await add.getByRole('button', { name: 'Add', exact: true }).click()
+  await expect(add.getByText('Already on the list.')).toBeVisible()
+  await expect(page.getByTestId('recipient-row').filter({ hasText: email })).toHaveCount(1)
+
+  // Toggles save at once.
+  const morning = row.getByRole('switch', { name: `Morning list for ${email}` })
+  const active = row.getByRole('switch', { name: `Active for ${email}` })
+  for (const s of [morning, active, row.getByRole('switch', { name: `Alerts for ${email}` }), row.getByRole('switch', { name: `Weekly report for ${email}` })]) {
+    await expect(s).toHaveAttribute('aria-checked', 'true')
+  }
+  await morning.click()
+  await expect(morning).toHaveAttribute('aria-checked', 'false')
+  await active.click()
+  await expect(row.getByText('Paused')).toBeVisible()
+  const saved = async () => (await serviceClient().from('notify_recipients').select('email, morning, alerts, weekly, active').eq('email', email).maybeSingle()).data
+  await expect.poll(saved).toEqual({ email, morning: false, alerts: true, weekly: true, active: false })
+  await page.reload()
+  await expect(page.getByTestId('recipient-row').filter({ hasText: email }).getByRole('switch', { name: `Morning list for ${email}` })).toHaveAttribute('aria-checked', 'false')
+  await axe(page)
+
+  // Send test: a reserved test address is never mailed, whatever the server's key.
+  await row.getByRole('button', { name: `Send test email to ${email}` }).click()
+  await expect(page.getByText(`${email} is a test address, so nothing was sent.`)).toBeVisible()
+
+  // A caller cannot open the page or read the list.
+  const caller = await userClient(run.caller.email, run.caller.password)
+  const direct = await caller.from('notify_recipients').select('email')
+  expect(direct.data ?? []).toEqual([])
+
+  // Remove, with a confirm dialog (not a browser alert).
+  await row.getByRole('button', { name: 'Remove E2E Recipient' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toContainText('Remove from email?')
+  await dialog.getByRole('button', { name: 'Keep' }).click()
+  await expect(row).toBeVisible()
+  await row.getByRole('button', { name: 'Remove E2E Recipient' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Remove' }).click()
+  await expect(page.getByTestId('recipient-row').filter({ hasText: email })).toHaveCount(0)
+  await expect.poll(saved).toBeNull()
+})
+
+test('A caller never sees the email recipients page', async ({ page }) => {
+  await signIn(page, run.caller.email, run.caller.password)
+  await page.goto('/settings')
+  await expect(page.getByRole('link', { name: 'Email recipients' })).toHaveCount(0)
+  await page.goto('/settings/email')
+  await expect(page).toHaveURL(/\/$/)
+})
