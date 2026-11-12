@@ -22,7 +22,7 @@ from ..normalize import city_for_text
 from ..segments import Segment
 from . import health
 from .base import Signal, SourceAdapter
-from .jobs import JobPost, classify_job, has_domain_hint, job_from_html, role_from_keywords
+from .jobs import DOMAIN_HINTS, JobPost, classify_job, has_domain_hint, job_from_html, role_from_keywords
 
 SITEMAP_INDEX = "https://apna.co/api/sitemap-index.xml"
 JOB_URL = re.compile(r"^https://apna\.co/job/(?P<city>[a-z0-9-]+)/(?P<slug>[a-z0-9-]+)-(?P<id>\d{5,})/?$")
@@ -116,11 +116,17 @@ class ApnaAdapter(SourceAdapter):
 
     @staticmethod
     def order(jobs: Sequence[JobUrl], segments: Sequence[Segment]) -> list[JobUrl]:
-        """Share the day's pages between segments by their caps, keeping URL order inside a segment."""
+        """Share the day's pages between segments by their caps. Inside a segment, titles that name the segment's
+        kind of business ("dental receptionist", "clinic coordinator") come first: live check 12 Nov, only 12 of
+        59 pages read in sitemap order were clinic jobs, the rest generic telecaller posts."""
         caps = {s.id: s.apna.pages_per_day for s in segments}
+        hints = {s.id: DOMAIN_HINTS.get(s.domain, ()) for s in segments}
         by_seg: dict[str, list[JobUrl]] = {}
         for job in jobs:
             by_seg.setdefault(job.segment_id, []).append(job)
+        for seg_id, items in by_seg.items():
+            words = hints.get(seg_id, ())
+            items.sort(key=lambda j: not any(w in j.title_slug.replace("-", " ") for w in words))  # stable
         out: list[JobUrl] = []
         while any(by_seg.values()):
             for seg_id in sorted(by_seg, key=lambda k: -caps.get(k, 0)):

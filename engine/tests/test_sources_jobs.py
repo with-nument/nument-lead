@@ -197,3 +197,17 @@ def test_adzuna_is_off_without_credentials(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.delenv("ADZUNA_APP_KEY", raising=False)
     usable, why = AdzunaAdapter(ctx()).status()
     assert not usable and "ADZUNA_APP_ID" in why
+
+
+def test_clinic_titles_are_read_before_generic_telecaller_posts() -> None:
+    from nument_engine.segments import load_segments
+    from nument_engine.sources.apna import ApnaAdapter, JobUrl
+
+    seg = load_segments()["clinics-in"]
+
+    def job(n: int, slug: str) -> JobUrl:
+        return JobUrl(f"https://apna.co/job/pune/{slug}-{n}", str(n), "pune", slug, "clinics-in", "frontdesk")
+
+    jobs = [job(1, "telecaller"), job(2, "dental-receptionist"), job(3, "telecaller"), job(4, "clinic-coordinator")]
+    ordered = ApnaAdapter.order(jobs, [seg])
+    assert [j.job_id for j in ordered] == ["2", "4", "1", "3"]  # clinic titles first, sitemap order kept inside
