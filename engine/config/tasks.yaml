@@ -1,2 +1,252 @@
-# engine/config/tasks.yaml : AI task to model mapping per tier, with fallback chains.
-# Written in Step 4 from Appendix C of IMPLEMENTATION_PLAN.md. Gemini alone must be able to run every task.
+# engine/config/tasks.yaml : which model runs each AI task, with fallback chains (Step 4.2, Appendix C).
+#
+# Rules (checked at startup by nument_engine.llm.config):
+#   - every chain contains at least one Gemini model, so Gemini alone can run every task;
+#   - every model has a price in prices.yaml and an entry under `models` below;
+#   - every `schema` is a model in nument_engine.models and every `prompt` file exists.
+# The active tier comes from settings.tier (default "balanced"). Run `nlead eval` before switching tiers.
+#
+# Model ids: verified on 2026-11-12 with `nlead health --models` against the founder's Gemini key, and against
+# the official model and deprecation pages. Re-verify at every build: ids change every few months.
+#   gemini-4-carbon, gemini-4-argon   Gemini 4 (Oct and Nov 2026). Thinking levels low, medium, high only.
+#   gemini-3.8-flash                  newest Flash (Sep 2026). Thinking levels low, medium, high only.
+#   gemini-3.6-flash                  stable previous Flash (Jul 2026). Also supports minimal thinking.
+#   gemini-3.5-flash-lite             stable Flash-Lite (Jul 2026). Default thinking is minimal.
+# Not used: gemini-3.1-pro-preview and gemini-3-flash-preview are not served on this key; gemini-2.5-pro and
+# gemini-2.5-flash are deprecated (auto-routed from 1 Dec 2026); gemini-3.1-flash-lite shuts down 7 May 2027.
+# OpenAI ids are the ones on the pricing page today; the key returned 401 at build, so they are unverified
+# and OpenAI stays off (settings.providers_enabled.openai = false) until the founder adds a working key.
+
+version: 1
+
+# Short names used in the chains. Capabilities tell the router what each model accepts:
+#   thinking_levels      levels the model accepts; a task's level is mapped to the nearest one
+#   sampling             accepts temperature (Gemini 3.5 and newer ignore it; GPT-5 reasoning models reject it)
+#   batch                has a batch API
+#   search               can use the web search tool
+#   search_with_schema   returns grounding citations when search and a JSON schema are combined. Verified
+#                        false on 2026-11-12: with a schema the citations are dropped, so the router makes a
+#                        search call first and a separate structuring call after it (Step 5.11.1)
+#   max_output_tokens    per-request output cap, thinking included
+models:
+  g_top:   {provider: gemini, model: gemini-4-carbon, thinking_levels: [low, medium, high], max_output_tokens: 32768}
+  g_pro:   {provider: gemini, model: gemini-4-argon, thinking_levels: [low, medium, high], max_output_tokens: 32768}
+  g_flash: {provider: gemini, model: gemini-3.8-flash, thinking_levels: [low, medium, high]}
+  g_flash_prev: {provider: gemini, model: gemini-3.6-flash, thinking_levels: [minimal, low, medium, high]}
+  g_lite:  {provider: gemini, model: gemini-3.5-flash-lite, thinking_levels: [minimal, low, medium, high]}
+  o_top:   {provider: openai, model: gpt-5.4, thinking_levels: [low, medium, high]}
+  o_mini:  {provider: openai, model: gpt-5-mini, thinking_levels: [minimal, low, medium, high]}
+  o_nano:  {provider: openai, model: gpt-5-nano, thinking_levels: [minimal, low, medium, high]}
+
+# Field meanings (Step 4.2.1):
+#   primary, fallbacks       chain tried in order; disabled, keyless or tripped providers are skipped
+#   mode                     sync (call now) or batch (submit at night, collect in the morning, half price)
+#   schema, prompt           output model in nument_engine.models, prompt file in engine/prompts
+#   max_output_tokens        cap on the answer itself; the router adds room for thinking on thinking models
+#   thinking                 off, low, medium or high
+#   tools                    [] or [web_search]
+#   priority                 1 (stops last) to 6 (stops first) when the daily cap gets close (Step 19.6)
+#   est_input_tokens, est_output_tokens   budget guard estimate before a call; output includes thinking
+#   cache_ttl_days           0 means never cache
+#   timeout_s, max_retries   per call; retries cover network errors, 429 and 5xx
+#   structure_with           search tasks only: model for the structuring call after the search call
+#   structure_prompt         search tasks only: prompt for the structuring call
+#   daily_limit_setting      settings key holding a shared daily call limit, with daily_limit as its default
+tiers:
+  balanced:
+    classify_signal:
+      primary: g_lite
+      fallbacks: [g_flash, o_nano]
+      mode: sync
+      schema: SignalClassification
+      prompt: classify_signal.md
+      max_output_tokens: 500
+      temperature: 0.0
+      thinking: "off"
+      tools: []
+      priority: 4
+      est_input_tokens: 1500
+      est_output_tokens: 300
+      cache_ttl_days: 30
+      timeout_s: 60
+      max_retries: 3
+      daily_limit_setting: ai.classify_per_day
+      daily_limit: 1500
+
+    classify_news:
+      primary: g_lite
+      fallbacks: [g_flash, o_nano]
+      mode: sync
+      schema: NewsClassification
+      prompt: classify_news.md
+      max_output_tokens: 400
+      temperature: 0.0
+      thinking: "off"
+      tools: []
+      priority: 5
+      est_input_tokens: 1500
+      est_output_tokens: 250
+      cache_ttl_days: 30
+      timeout_s: 60
+      max_retries: 3
+      daily_limit_setting: ai.classify_per_day
+      daily_limit: 1500
+
+    classify_page_change:
+      primary: g_lite
+      fallbacks: [g_flash, o_nano]
+      mode: sync
+      schema: PageChangeClassification
+      prompt: classify_page_change.md
+      max_output_tokens: 400
+      temperature: 0.0
+      thinking: "off"
+      tools: []
+      priority: 4
+      est_input_tokens: 1500
+      est_output_tokens: 250
+      cache_ttl_days: 0
+      timeout_s: 60
+      max_retries: 3
+      daily_limit_setting: ai.classify_per_day
+      daily_limit: 1500
+
+    extract_facts:
+      primary: g_flash
+      fallbacks: [g_flash_prev, g_lite, o_mini]   # batch on the first one available (4.10.2)
+      mode: batch
+      schema: FactsExtraction
+      prompt: extract_facts.md
+      max_output_tokens: 3000
+      temperature: 0.0
+      thinking: low
+      tools: []
+      priority: 3
+      est_input_tokens: 12000
+      est_output_tokens: 2500
+      cache_ttl_days: 14
+      timeout_s: 180
+      max_retries: 2
+
+    verify_flagged:
+      primary: g_flash
+      fallbacks: [g_pro, o_mini]
+      mode: sync
+      schema: FlaggedVerification
+      prompt: verify_flagged.md
+      max_output_tokens: 600
+      temperature: 0.0
+      thinking: low
+      tools: []
+      priority: 3
+      est_input_tokens: 4000
+      est_output_tokens: 800
+      cache_ttl_days: 7
+      timeout_s: 120
+      max_retries: 2
+
+    judge_lead:
+      primary: g_pro
+      fallbacks: [g_flash, o_top]
+      mode: sync
+      schema: LeadJudgement
+      prompt: judge_lead.md
+      max_output_tokens: 1200
+      temperature: 0.2
+      thinking: low
+      tools: []
+      priority: 2
+      est_input_tokens: 5000
+      est_output_tokens: 1800
+      cache_ttl_days: 7
+      timeout_s: 240
+      max_retries: 2
+
+    write_message:
+      primary: o_mini                         # skipped while OpenAI is off
+      fallbacks: [g_flash, g_pro]
+      mode: sync
+      schema: MessageDraft
+      prompt: write_message.md
+      max_output_tokens: 1500
+      temperature: 0.7
+      thinking: low
+      tools: []
+      priority: 1
+      est_input_tokens: 3000
+      est_output_tokens: 1500
+      cache_ttl_days: 0
+      timeout_s: 120
+      max_retries: 2
+
+    check_message:
+      primary: g_flash
+      fallbacks: [g_pro, o_mini]              # the caller excludes the writer's model (Step 12.9)
+      mode: sync
+      schema: MessageCheck
+      prompt: check_message.md
+      max_output_tokens: 600
+      temperature: 0.0
+      thinking: low
+      tools: []
+      priority: 1
+      est_input_tokens: 2500
+      est_output_tokens: 800
+      cache_ttl_days: 0
+      timeout_s: 120
+      max_retries: 2
+
+    grounded_search:
+      primary: g_flash
+      fallbacks: [g_lite]                     # OpenAI web search ($10 per 1K calls) stays out while it is off
+      mode: sync
+      schema: PublicAskResults
+      prompt: grounded_public_asks.md
+      structure_with: g_lite
+      structure_prompt: structure_public_asks.md
+      max_output_tokens: 3000
+      temperature: 0.0
+      thinking: low
+      tools: [web_search]
+      priority: 5
+      est_input_tokens: 2500
+      est_output_tokens: 3000                 # search answer plus the structuring call
+      cache_ttl_days: 1
+      timeout_s: 180
+      max_retries: 1
+
+    weekly_audit:
+      primary: g_pro
+      fallbacks: [g_flash, o_top]
+      mode: sync
+      schema: AuditResult
+      prompt: weekly_audit.md
+      max_output_tokens: 1500
+      temperature: 0.0
+      thinking: medium
+      tools: []
+      priority: 6
+      est_input_tokens: 8000
+      est_output_tokens: 4000
+      cache_ttl_days: 0
+      timeout_s: 300
+      max_retries: 2
+
+  # Ready for later. Switch with settings.tier and run `nlead eval` first.
+  best:
+    inherit: balanced
+    overrides:
+      classify_signal: {primary: g_flash, fallbacks: [g_lite, o_nano]}
+      extract_facts: {primary: g_pro, fallbacks: [g_flash, o_top]}
+      verify_flagged: {primary: g_pro, fallbacks: [g_flash, o_top]}
+      judge_lead: {primary: g_top, fallbacks: [g_pro, o_top]}
+      write_message: {primary: o_top, fallbacks: [g_pro, g_flash]}
+      check_message: {primary: g_pro, fallbacks: [g_flash, o_mini]}
+      weekly_audit: {primary: g_top, fallbacks: [g_pro, o_top]}
+  lean:
+    inherit: balanced
+    overrides:
+      extract_facts: {primary: g_lite, fallbacks: [o_nano, g_flash]}
+      judge_lead: {primary: g_flash, fallbacks: [g_lite, o_mini]}
+      check_message: {primary: g_lite, fallbacks: [g_flash]}
+      weekly_audit: {primary: g_flash, fallbacks: [g_lite]}

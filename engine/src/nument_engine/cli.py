@@ -107,7 +107,11 @@ def main(
     ] = None,
     limit: Annotated[int | None, typer.Option("--limit", min=1, help="Max items per stage.")] = None,
     dry_run: Annotated[
-        bool, typer.Option("--dry-run", help="No sheet writes, no batch submission, no paid calls.")
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="No sheet or database writes for leads, no batch submission; sync AI calls still run within --max-spend-inr.",
+        ),
     ] = False,
     max_spend_inr: Annotated[
         float | None,
@@ -482,8 +486,34 @@ def health(
     prune: Annotated[bool, typer.Option("--prune", help="Apply the retention rules (Step 18.2.2).")] = False,
     summary: Annotated[bool, typer.Option("--summary", help="Markdown for the GitHub job summary.")] = False,
     notify: Annotated[bool, typer.Option("--notify", help="Email new alerts (when email is configured).")] = False,
+    models: Annotated[
+        bool, typer.Option("--models", help="Check every AI model id in tasks.yaml against the providers (Step 4.4).")
+    ] = False,
+    llm_smoke: Annotated[
+        bool,
+        typer.Option("--llm-smoke", help="One tiny paid request per AI task on every usable model (under ₹5)."),
+    ] = False,
+    providers: Annotated[
+        str | None,
+        typer.Option("--providers", help="With --models or --llm-smoke: providers to use, e.g. gemini,openai."),
+    ] = None,
 ) -> None:
-    """Check the database, AI providers, quotas, sources and runs. Exit 1 when a check fails (Step 22)."""
+    """Check the database, AI providers, quotas, sources and runs. Exit 1 when a check fails (Step 22).
+
+    --models and --llm-smoke check the AI router instead (Step 4.4 and 4.12).
+    """
+    if models or llm_smoke:
+        from .llm import health as llm_health
+
+        failures: list[int] = []
+
+        def check(rc: RunContext) -> None:
+            failures.append(llm_health.run(rc, models=models, smoke=llm_smoke, providers=providers))
+
+        _execute(ctx, "manual", check)
+        if failures and failures[0]:
+            raise typer.Exit(code=1)
+        return
     import psycopg
     import psycopg_pool
 
