@@ -29,6 +29,23 @@ chains:
   - {name: dr batra, domains: []}
   - {name: clove dental, domains: [clovedental.in]}
   - {name: sabka dentist, domains: [sabkadentist.com]}
+  - {name: makeo, domains: [makeo.app]}
+  - {name: toothsi, domains: [toothsi.in]}
+  - {name: dentaldost, domains: [dentaldost.com]}
+  - {name: orthosquare, domains: [orthosquare.com]}
+  - {name: apollo white, domains: [apollowhitedental.com]}
+  - {name: partha dental, domains: [parthadental.com]}
+  - {name: kosmoderma, domains: [kosmoderma.com]}
+  - {name: berkowits, domains: [berkowits.in]}
+  - {name: advanced grohair, domains: [advancedgrohair.com]}
+  - {name: the esthetic clinics, domains: [theestheticclinics.com]}
+  - {name: qi spine, domains: [qispine.com]}
+  - {name: physiotattva, domains: [physiotattva.com]}
+  - {name: reliva physiotherapy, domains: [reliva.in]}
+  - {name: cadabams, domains: [cadabams.org]}
+  - {name: mpower, domains: [mpowerminds.com]}
+  - {name: amaha, domains: [amahahealth.com]}
+  - {name: medicover, domains: [medicoverhospitals.in, medicoverfertility.com]}
   # Healthcare, UAE
   - {name: aster dm, domains: [asterdmhealthcare.com]}
   - {name: aster clinic, domains: [asterclinic.ae]}
@@ -93,6 +110,24 @@ chains:
   - {name: gems education, domains: [gemseducation.com]}
   - {name: taaleem, domains: [taaleem.ae]}
   - {name: aldar academies, domains: [aldaracademies.com]}
+
+# Whole words in the name that mean the place is not our kind of business in any segment, whatever its
+# map category says (live check 12 Nov: a furniture store and a marriage bureau were filed as clinics).
+non_target_keywords:
+  - furniture
+  - matrimony
+  - matrimonial
+  - marriage bureau
+  - jewellers
+  - jewellery
+  - restaurant
+  - bakery
+  - supermarket
+  - hardware
+  - electronics
+  - mobile store
+  - showroom
+  - petrol pump
 
 hospital_keywords:            # whole words in the name. Small Indian clinics sometimes call themselves
   - hospital                  # a "hospital" (for example "dental hospital"): check R3 rejects in week 1

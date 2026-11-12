@@ -100,6 +100,18 @@ IGNORED_HOSTS: frozenset[str] = frozenset(
     {
         "practo.com",
         "lybrate.com",
+        "eka.care",
+        "whitecoats.com",
+        "clinicspots.com",
+        "credihealth.com",
+        "drlogy.com",
+        "zoylo.com",
+        "medindia.net",
+        "docprime.com",
+        "mfine.co",
+        "1mg.com",
+        "tata1mg.com",
+        "bajajfinservhealth.in",
         "justdial.com",
         "sulekha.com",
         "indiamart.com",
@@ -144,6 +156,16 @@ IGNORED_HOSTS: frozenset[str] = frozenset(
 SHARED_HOSTS: frozenset[str] = frozenset(
     {
         "wixsite.com",
+        "wix.com",
+        "ueniweb.com",
+        "icareheal.com",
+        "weebly.com",
+        "site123.me",
+        "jimdosite.com",
+        "mystrikingly.com",
+        "strikingly.com",
+        "webnode.page",
+        "canva.site",
         "blogspot.com",
         "wordpress.com",
         "webflow.io",
@@ -162,7 +184,24 @@ SHARED_HOSTS: frozenset[str] = frozenset(
 )
 # Free site builders: a "custom website" scores higher than these (Step 11.3).
 FREE_BUILDER_HOSTS: frozenset[str] = frozenset(
-    {"wixsite.com", "business.site", "godaddysites.com", "sites.google.com", "blogspot.com", "wordpress.com"}
+    {
+        "wixsite.com",
+        "wix.com",
+        "ueniweb.com",
+        "icareheal.com",
+        "weebly.com",
+        "site123.me",
+        "jimdosite.com",
+        "mystrikingly.com",
+        "strikingly.com",
+        "webnode.page",
+        "canva.site",
+        "business.site",
+        "godaddysites.com",
+        "sites.google.com",
+        "blogspot.com",
+        "wordpress.com",
+    }
 )
 
 _TLD = tldextract.TLDExtract(suffix_list_urls=())  # offline: the bundled public suffix list, no network

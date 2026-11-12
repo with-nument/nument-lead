@@ -90,6 +90,10 @@ def world(**kw: Any) -> World:
         (biz(branches_count=12), world(), ("reject", "R3_excluded")),
         (biz(name="DLF Phase 4 Skin Clinic"), world(), ("pass", None)),  # a locality, not the DLF chain
         (biz(name="Pixel Digital Marketing Agency"), world(), ("reject", "R4_agency")),
+        (biz(name="Home Centre - Furniture Store"), world(), ("reject", "R2_not_target")),
+        (biz(name="Zariyaa Matrimony, Marriage Bureau"), world(), ("reject", "R2_not_target")),
+        (biz(name="makeO toothsi"), world(), ("reject", "R3_excluded")),
+        (biz(web_domain="dentaldost.com"), world(), ("reject", "R3_excluded")),
         (biz(), world(suppressed_domains={"lotusskin-nlead.in"}), ("suppress", "R5_suppressed")),
         (
             biz(),

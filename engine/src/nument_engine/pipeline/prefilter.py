@@ -57,6 +57,7 @@ class Exclusions:
     hospital: list[re.Pattern[str]]
     agency: list[re.Pattern[str]]
     max_branches: int
+    non_target: list[re.Pattern[str]] = field(default_factory=list)
 
     @classmethod
     def load(cls) -> Exclusions:
@@ -67,6 +68,7 @@ class Exclusions:
             hospital=[_phrase(k) for k in cfg.get("hospital_keywords", [])],
             agency=[_phrase(k) for k in cfg.get("agency_keywords", [])],
             max_branches=int(cfg.get("max_branches", 10)),
+            non_target=[_phrase(k) for k in cfg.get("non_target_keywords", [])],
         )
 
 
@@ -229,6 +231,8 @@ def apply_rules(b: dict[str, Any], seg: Segment | None, excl: Exclusions, world:
             return "reject", "R2_category"
     elif not sigs:
         return "skip", "R2_category_unknown"
+    if any(p.search(name) for p in excl.non_target):  # the map category is wrong: "Home Centre - Furniture Store"
+        return "reject", "R2_not_target"
     # R3: big chains, hospitals, too many branches
     domain = (b.get("web_domain") or "").lower()
     if domain in excl.chain_domains or any(p.search(name) for p in excl.chain_names):

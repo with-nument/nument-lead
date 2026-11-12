@@ -148,3 +148,18 @@ def test_locality_and_distance() -> None:
     assert locality_for("Shop 2, Baner Road, Baner, Pune", ["Baner", "Aundh", "Baner Road"]) == "Baner Road"
     assert locality_for("Kothrud", ["Baner"]) is None
     assert 1100 < meters(18.5, 73.8, 18.51, 73.8) < 1120
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("https://eka.care/doctor/dr-vamsi-krishna-dentist", None),  # a health directory, not their site
+        ("https://www.whitecoats.com/swastik-dental-care", None),
+        ("https://wix.com", None),  # the builder itself
+        ("https://smileavenue.icareheal.com/", "smileavenue.icareheal.com"),  # a site on a builder: the host
+        ("https://impressionsdental.ueniweb.com/", "impressionsdental.ueniweb.com"),
+        ("https://www.signaturesmiles.in/", "signaturesmiles.in"),
+    ],
+)
+def test_platform_pages_are_not_a_clinic_website(url: str, expected: str | None) -> None:
+    assert web_domain(url) == expected

@@ -81,8 +81,16 @@ def test_scoring_overrides_merge() -> None:
 
 def test_exclusions_file_shape() -> None:
     ex = load_yaml_config("exclusions")
-    assert set(ex) == {"chains", "hospital_keywords", "agency_keywords", "competitors", "max_branches"}
+    assert set(ex) == {
+        "chains",
+        "non_target_keywords",
+        "hospital_keywords",
+        "agency_keywords",
+        "competitors",
+        "max_branches",
+    }
     assert all(set(c) == {"name", "domains"} for c in ex["chains"])
+    assert all(isinstance(k, str) and k == k.lower() for k in ex["non_target_keywords"])
 
 
 def test_bad_id_is_rejected(tmp_path: Path) -> None:
