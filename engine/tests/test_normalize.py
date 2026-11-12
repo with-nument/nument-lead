@@ -159,6 +159,8 @@ def test_locality_and_distance() -> None:
         ("https://smileavenue.icareheal.com/", "smileavenue.icareheal.com"),  # a site on a builder: the host
         ("https://impressionsdental.ueniweb.com/", "impressionsdental.ueniweb.com"),
         ("https://www.signaturesmiles.in/", "signaturesmiles.in"),
+        ("https://webs.com/", None),
+        ("https://clearthoughts.blogspot.in/", "clearthoughts.blogspot.in"),
     ],
 )
 def test_platform_pages_are_not_a_clinic_website(url: str, expected: str | None) -> None:
