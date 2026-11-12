@@ -283,3 +283,125 @@ def test_parse_output_accepts_fences_and_trims_small_overshoots() -> None:
 def test_parse_output_errors_name_the_field(text: str, message: str) -> None:
     with pytest.raises(OutputInvalid, match=message):
         parse_output(text, LeadJudgement)
+
+
+# Input dicts shaped exactly like the Steps 10 to 12 builders (pipeline/verify.py, judge.py, message.py):
+# the same keys, including the extras those builders pass that a prompt may ignore.
+_FACT = {
+    "id": "f-1",
+    "field": "branches",
+    "value": {"count": 2},
+    "quote": "Two branches in Baner",
+    "url": "https://x.in/",
+}
+_SIGNAL = {
+    "id": "s-1",
+    "type": "hiring_frontdesk",
+    "category": "visible_pain",
+    "observed_at": "2026-11-07",
+    "age_days": 5,
+    "quote": "Hiring a patient coordinator",
+    "url": "https://x.in/careers",
+    "details": {},
+    "source": "careers_watch",
+}
+PIPELINE_SHAPES: dict[str, dict[str, Any]] = {
+    "verify_flagged": {
+        "business_name": "Sunrise Dental",
+        "field": "is_agency_or_vendor",
+        "question": "Is this business an agency or software vendor that sells the same services as Nument?",
+        "hint": "the footer says 'we build websites'",
+        "facts": [{k: v for k, v in _FACT.items()}],
+        "pages": [{"url": "https://x.in/", "text": "Sunrise Dental. Two branches in Baner."}],
+    },
+    "judge_lead": {
+        "segment_id": "clinics-in",
+        "domain": "clinics",
+        "country": "in",
+        "city": "Pune",
+        "business_name": "Sunrise Dental",
+        "packaged_outcome_name": "AI front desk",
+        "pitch_mode": "visible_pain",
+        "total": 64.0,
+        "fit": 3,
+        "can_pay": 2.0,
+        "intent": 8.0,
+        "reach": 1.0,
+        "grade": "B",
+        "reasons": {"fit": ["dental"], "can_pay": None, "intent": ["hiring"], "reach": 1.0},
+        "rule_note": "",
+        "facts": [_FACT],
+        "signals": [_SIGNAL],
+        "contacts_summary": ["mobile (website)"],
+        "allowed_angles": ["missed_calls", "hire_complement"],
+        "angles": [{"key": "missed_calls", "label": "Missed calls", "idea": "answer every call"}],
+    },
+    "write_message": {
+        "segment_id": "clinics-in",
+        "domain": "clinics",
+        "country": "in",
+        "country_name": "India",
+        "city": "Pune",
+        "pitch_mode": "visible_pain",
+        "angle": "hire_complement",
+        "angle_label": "Complement the hire",
+        "angle_idea": "ship v1 now, their hire runs it",
+        "packaged_outcome_name": "AI front desk",
+        "packaged_outcome": "every enquiry answered in seconds",
+        "business_name": "Sunrise Dental",
+        "person_name": None,
+        "person_role": None,
+        "greeting": "Hi,",
+        "seen_where": "your careers page",
+        "need": "",
+        "what_we_saw": "hiring a patient coordinator",
+        "facts": [_FACT],
+        "signals": [{**_SIGNAL, "summary": "hiring a patient coordinator 5 days ago"}],
+        "associate_name": "Aditya",
+        "channel": "whatsapp",
+        "needs_email": False,
+        "country_notes": "",
+        "feedback": ["too long"],
+        "avoid_openers": ["hi, saw your"],
+        "avoid_questions": ["worth a look?"],
+    },
+    "check_message": {
+        "message": "Hi, saw Sunrise Dental is hiring. We're Nument. Worth a look?",
+        "message_alt": "Hi, quick one. We're Nument. Is the role still open?",
+        "greeting": "Hi,",
+        "business_name": "Sunrise Dental",
+        "segment_id": "clinics-in",
+        "country": "in",
+        "pitch_mode": "visible_pain",
+        "angle": "hire_complement",
+        "facts": [_FACT],
+        "signals": [{**_SIGNAL, "summary": "hiring a patient coordinator"}],
+        "writer_model": "gemini-3.8-flash",
+    },
+}
+
+
+@pytest.mark.parametrize("task", sorted(PIPELINE_SHAPES))
+def test_prompts_render_with_the_pipeline_input_shapes(task: str) -> None:
+    prompt = prompts.load(load_registry("balanced").task(task).prompt)
+    system, user = prompt.render(**PIPELINE_SHAPES[task])
+    assert "{{" not in system + user
+    for fact_id in ("f-1",):
+        assert fact_id in user
+    if task == "write_message":
+        assert "Greeting to start with: Hi," in user and "too long" in user and "worth a look?" in user
+    if task == "judge_lead":
+        assert "rule grade B" in user and "- fit:" in user and "Contacts we have: mobile (website)" in user
+
+
+@pytest.mark.parametrize("task", ["judge_lead", "write_message", "check_message", "verify_flagged"])
+def test_appendix_a_minimum_inputs_are_enough(task: str) -> None:
+    """Only the required inputs: every optional part of the template must be guarded."""
+    prompt = prompts.load(load_registry("balanced").task(task).prompt)
+    minimal = {name: PIPELINE_SHAPES[task][name] for name in prompt.inputs}
+    if task == "judge_lead":
+        minimal["signals"] = [{"id": "s-1", "type": "news"}]
+        minimal["facts"] = [{"id": "f-1", "field": "branches", "value": 2}]
+    if task == "write_message":
+        minimal["signals"] = [{"id": "s-1", "type": "news"}]
+    prompt.render(**minimal)

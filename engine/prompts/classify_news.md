@@ -2,7 +2,7 @@
 task: classify_news
 version: 1
 output: NewsClassification
-inputs: [segment_id, domain, country, url, title, text]
+inputs: [segment_id, url, title, text]
 description: Decide whether a news article reports a growth event at a small or medium business we target.
 ---
 [system]
@@ -20,7 +20,7 @@ How to fill each field:
 - confidence: from 0 to 1.
 
 [user]
-Segment: {{ segment_id }} ({{ domain }}, {{ country }})
+Segment: {{ segment_id }}{% if domain is defined and domain %} ({{ domain }}{% if country is defined and country %}, {{ country }}{% endif %}){% endif %}
 Article URL: {{ url }}
 {% if published is defined and published %}Published: {{ published }}
 {% endif %}

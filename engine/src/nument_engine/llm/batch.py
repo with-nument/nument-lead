@@ -242,7 +242,7 @@ def submit(
                 result.deferred.append(item.key)
                 continue
             try:
-                res = router.run(task, item.inputs)
+                res = router.run_result(task, item.inputs)
             except BudgetExceeded as exc:
                 result.reasons.append(f"budget: {exc.reason}")
                 result.deferred.extend(i.key for i in remaining[index:])
@@ -307,7 +307,11 @@ def collect(
                 pending.append(batch_id)
                 continue
             if state == "succeeded":
-                out.results.extend(_ingest(router, row, meta, rebuild_inputs))
+                try:
+                    out.results.extend(_ingest(router, row, meta, rebuild_inputs))
+                except (ProviderError, OSError) as exc:  # results not readable yet: try again next run
+                    log.warning("llm.batch_fetch_failed", batch=batch_id, error=str(exc)[:300])
+                    pending.append(batch_id)
                 continue
             keys = list(meta.get("keys") or [])
             out.failed_keys.extend(keys)
@@ -410,7 +414,7 @@ def _ingest(
                 results.append(ItemResult(key=key, error=why))
                 continue
             try:
-                res = router.run(task, inputs, models=chain, use_cache=False)
+                res = router.run_result(task, inputs, models=chain, use_cache=False)
             except BudgetExceeded as exc:
                 results.append(ItemResult(key=key, error=f"{why}; retry skipped: {exc.reason}"))
                 continue

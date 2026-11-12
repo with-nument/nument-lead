@@ -2,7 +2,7 @@
 task: check_message
 version: 1
 output: MessageCheck
-inputs: [message, facts, signals]
+inputs: [message, facts]
 description: Strict reviewer score out of 10 for a first WhatsApp message.
 ---
 [system]
@@ -28,15 +28,21 @@ Message:
 """
 {{ message }}
 """
+{% if greeting is defined and greeting %}
+It should start with: {{ greeting }}
+{% endif %}
+{% if pitch_mode is defined and pitch_mode %}
+Pitch mode: {{ pitch_mode }}{% if angle is defined and angle %}, angle {{ angle }}{% endif %}
+
+{% endif %}
 
 Facts it may use:
 {% for f in facts %}
 - [{{ f.id }}] {{ f.field }}: {{ f.value | tojson }}
 {% endfor %}
+{% if signals is defined and signals %}
 Signals it may use:
 {% for s in signals %}
-- [{{ s.id }}] {{ s.type }}: {{ s.summary }}
+- [{{ s.id }}] {{ s.type }}: {{ s.summary if s.summary is defined and s.summary else (s.quote | default("")) }}
 {% endfor %}
-{% if pitch_mode is defined and pitch_mode %}
-Pitch mode: {{ pitch_mode }}
 {% endif %}

@@ -68,7 +68,7 @@ class TextOutput(BaseModel):
 
 @dataclass
 class AIResult[T: BaseModel]:
-    """What `Router.run` returns. `output` is the validated pydantic object."""
+    """What `Router.run_result` returns: the validated pydantic `output` plus who produced it and the cost."""
 
     task: str
     output: T
@@ -80,12 +80,24 @@ class AIResult[T: BaseModel]:
     usage: Usage = field(default_factory=Usage)
     inr: float = 0.0  # what this call cost (0 for a cache hit)
     grounding: dict[str, Any] | None = None  # search tasks: {"queries", "sources": [{"uri", "title"}], ...}
-    preferred_model_excluded: bool = False  # exclude_models could not be honoured (Step 12.9: flag the lead)
 
     @property
     def tag(self) -> str:
         """`provider:model#task.vN`, stored with every AI output (facts.model, leads.message_model, ...)."""
         return f"{self.provider}:{self.model}#{self.task}.v{self.prompt_version}"
+
+    def meta(self) -> dict[str, Any]:
+        """The fields `Router.last_meta` exposes."""
+        return {
+            "task": self.task,
+            "provider": self.provider,
+            "model": self.model,
+            "prompt_version": self.prompt_version,
+            "fallback_from": self.fallback_from,
+            "tag": self.tag,
+            "cached": self.cached,
+            "inr": round(self.inr, 4),
+        }
 
 
 def build_providers(settings: Settings) -> dict[str, LLMProvider]:
@@ -104,6 +116,11 @@ def build_providers(settings: Settings) -> dict[str, LLMProvider]:
 
         providers["openai"] = OpenAIProvider(settings.openai_api_key.get_secret_value())
     return providers
+
+
+def for_run(rc: Any, **kwargs: Any) -> Router:
+    """The router for a pipeline run: `nument_engine.llm.router.for_run(rc)` (the Steps 10 to 12 seam)."""
+    return Router.for_run(rc, **kwargs)
 
 
 def _as_provider_error(exc: BaseException, req: LLMRequest) -> ProviderError:
@@ -161,13 +178,21 @@ class Router:
         self._sleep = sleep
         self._lock = threading.RLock()
         self._limit_used: dict[str, tuple[float, int]] = {}
+        self._local = threading.local()
 
     @classmethod
     def for_run(cls, rc: Any, **kwargs: Any) -> Router:
-        """Router for a pipeline run (`rc` is a RunContext)."""
+        """Router for a pipeline run (`rc` is a RunContext): its run id, --max-spend-inr, stats and dry run."""
         return cls(
             run_id=rc.run_id, max_spend_inr=rc.opts.max_spend_inr, stats=rc.stats, dry_run=rc.opts.dry_run, **kwargs
         )
+
+    @property
+    def last_meta(self) -> dict[str, Any] | None:
+        """Who answered the last successful `run` in this thread: task, provider, model, prompt_version,
+        fallback_from, tag, cached, inr. None before the first answer and after a failed call."""
+        meta: dict[str, Any] | None = getattr(self._local, "meta", None)
+        return meta
 
     # ------------------------------------------------------------------ public
 
@@ -200,35 +225,69 @@ class Router:
         lead_id: str | None = None,
         cache_extra: str = "",
         models: Sequence[ModelRef] | None = None,
+        exclude_model: str | None = None,
+        exclude_models: Collection[str] = (),
+        use_cache: bool = True,
+    ) -> Any:
+        """Run one AI task and return its validated pydantic output (Step 4.1.2 rule 2).
+
+        Who answered is in `last_meta` afterwards; `run_result` returns output and metadata together.
+        Arguments are the same as for `run_result`.
+        """
+        return self.run_result(
+            task,
+            inputs,
+            lead_id=lead_id,
+            cache_extra=cache_extra,
+            models=models,
+            exclude_model=exclude_model,
+            exclude_models=exclude_models,
+            use_cache=use_cache,
+        ).output
+
+    def run_result(
+        self,
+        task: str,
+        inputs: dict[str, Any],
+        *,
+        lead_id: str | None = None,
+        cache_extra: str = "",
+        models: Sequence[ModelRef] | None = None,
+        exclude_model: str | None = None,
         exclude_models: Collection[str] = (),
         use_cache: bool = True,
     ) -> AIResult[Any]:
-        """Run one AI task and return its validated output.
+        """Run one AI task and return an AIResult (output, provider, model, prompt version, tag, cost).
 
         lead_id         for write_message and judge_lead: records an `ai_output` activity on the lead
         cache_extra     extra text mixed into the cache key (for example a page text hash)
         models          force these models instead of the task's chain (evals and the smoke test)
-        exclude_models  model ids to avoid when another model can do it (the critic must not be the writer);
-                        they are tried last, and the result says so in `preferred_model_excluded`
-        Raises BudgetExceeded, AllProvidersDown, or KeyError for a missing prompt input.
+        exclude_model   a model id never to use for this call, for example the writer's model when the
+                        critic runs (Step 12.9); the next model in the chain answers instead
+        exclude_models  the same for several model ids
+        Raises BudgetExceeded, AllProvidersDown (also when every model is excluded), or KeyError for a
+        missing prompt input.
         """
+        self._local.meta = None
+        excluded = {*exclude_models, *([exclude_model] if exclude_model else [])}
         cfg = self.registry.task(task)
-        chain = self._chain(cfg, models, exclude_models)
+        chain = self._chain(cfg, models, excluded)
         prompt, system, user = self.render(task, inputs)
         schema = cfg.schema_model
         key = self.cache_key(task, prompt.version, system, user, cache_extra)
         caching = use_cache and cfg.cache_ttl_days > 0
         if caching:
             cached = self._from_cache(cfg, store.cache_get(key))
-            if cached is not None:
+            if cached is not None and cached.model not in excluded:
                 self.budget.record("cache", cached.model, task, calls=1, usd=0.0)
                 self._count("cache_hits", task)
                 log.info("llm.cache_hit", task=task, model=cached.model)
+                self._local.meta = cached.meta()
                 return cached
         self._check_daily_limit(cfg)
 
-        attempts: list[str] = []
-        for ref, excluded in chain:
+        attempts: list[str] = [f"{m} excluded for this call" for m in sorted(excluded)]
+        for ref in chain:
             reason = self.skip_reason(ref)
             if reason:
                 attempts.append(f"{ref} skipped ({reason})")
@@ -258,7 +317,6 @@ class Router:
                 )
                 continue
             self.availability.record_success(ref.provider, ref.model)
-            result.preferred_model_excluded = excluded
             if fallback_from:
                 self._count("fallbacks", task)
             if lead_id and task in LEAD_LEVEL_TASKS:
@@ -285,6 +343,7 @@ class Router:
                 output_tokens=result.usage.output_tokens,
                 inr=round(result.inr, 4),
             )
+            self._local.meta = result.meta()
             return result
         self._count("all_providers_down", task)
         raise AllProvidersDown(task, attempts)
@@ -303,17 +362,12 @@ class Router:
 
     # ------------------------------------------------------------- internals
 
-    def _chain(
-        self, cfg: TaskConfig, models: Sequence[ModelRef] | None, exclude: Collection[str]
-    ) -> list[tuple[ModelRef, bool]]:
+    def _chain(self, cfg: TaskConfig, models: Sequence[ModelRef] | None, exclude: Collection[str]) -> list[ModelRef]:
         chain = list(models) if models is not None else cfg.chain
         for ref in chain:
             if ref not in self.registry.specs:
                 raise KeyError(f"{cfg.name}: model {ref} is not declared under models: in tasks.yaml")
-        if not exclude:
-            return [(ref, False) for ref in chain]
-        preferred = [(ref, False) for ref in chain if ref.model not in exclude]
-        return preferred + [(ref, True) for ref in chain if ref.model in exclude]
+        return [ref for ref in chain if ref.model not in exclude]
 
     def request(
         self,

@@ -163,32 +163,54 @@ SMOKE_INPUTS: dict[str, dict[str, Any]] = {
     "verify_flagged": {
         "business_name": "Sunrise Dental Clinic",
         "field": "branches",
+        "question": "These facts about branches disagree. Which one does the page text support?",
         "facts": [
             {
                 "id": "F1",
+                "field": "branches",
                 "value": {"count": 2},
                 "quote": "Two branches in Baner and Kothrud",
                 "url": "https://example.com/",
             },
-            {"id": "F2", "value": {"count": 1}, "quote": "our clinic in Baner", "url": "https://example.com/about"},
+            {
+                "id": "F2",
+                "field": "branches",
+                "value": {"count": 1},
+                "quote": "our clinic in Baner",
+                "url": "https://example.com/about",
+            },
         ],
+        "pages": [{"url": "https://example.com/", "text": "Sunrise Dental Clinic. Two branches in Baner and Kothrud."}],
     },
     "judge_lead": {
         "segment_id": "clinics-in",
+        "domain": "clinics",
         "country": "in",
         "city": "Pune",
+        "business_name": "Sunrise Dental Clinic",
+        "packaged_outcome_name": "AI front desk",
         "pitch_mode": "visible_pain",
-        "rule_grade": "B",
-        "packaged_outcome": "AI front desk",
-        "score": {"total": 64, "fit": 3, "can_pay": 2, "intent": 8, "reach": 1.0},
-        "reasons": ["hiring a front desk coordinator 5 days ago", "2 branches"],
+        "total": 64.0,
+        "fit": 3,
+        "can_pay": 2.0,
+        "intent": 8.0,
+        "reach": 1.0,
+        "grade": "B",
+        "reasons": {"fit": "dental clinic with 2 branches", "intent": "hiring a patient coordinator 5 days ago"},
         "facts": [
-            {"id": "F1", "field": "branches", "value": {"count": 2}, "quote": "Two branches in Baner and Kothrud"},
+            {
+                "id": "F1",
+                "field": "branches",
+                "value": {"count": 2},
+                "quote": "Two branches in Baner and Kothrud",
+                "url": "https://example.com/",
+            },
             {
                 "id": "F2",
                 "field": "decision_maker",
                 "value": {"name": "Dr. Asha Mehta", "role": "Chief Dentist"},
                 "quote": "Founded by Dr. Asha Mehta, Chief Dentist",
+                "url": "https://example.com/",
             },
         ],
         "signals": [
@@ -198,31 +220,44 @@ SMOKE_INPUTS: dict[str, dict[str, Any]] = {
                 "category": "visible_pain",
                 "age_days": 5,
                 "quote": "We are hiring a Patient Coordinator for our Baner clinic.",
+                "url": "https://example.com/careers",
                 "details": {},
             },
         ],
         "allowed_angles": ["missed_calls", "hire_complement", "after_hours"],
-        "contacts": ["mobile (website)"],
+        "contacts_summary": ["mobile (website)"],
     },
     "write_message": {
         "segment_id": "clinics-in",
+        "domain": "clinics",
         "country": "in",
+        "country_name": "India",
+        "city": "Pune",
         "pitch_mode": "visible_pain",
         "angle": "hire_complement",
+        "angle_idea": "we ship the first version now, their new hire runs it",
+        "packaged_outcome_name": "AI front desk",
+        "packaged_outcome": "every enquiry answered within seconds, followed up until it books",
         "business_name": "Sunrise Dental",
+        "person_name": "Dr. Asha Mehta",
+        "person_role": "Chief Dentist",
         "greeting": "Hi Dr. Mehta,",
         "seen_where": "your careers page",
         "what_we_saw": "hiring a patient coordinator for the Baner clinic",
-        "idea": "an AI front desk that answers every WhatsApp enquiry within seconds and books the slot",
         "facts": [{"id": "F1", "field": "branches", "value": {"count": 2}}],
         "signals": [{"id": "S1", "type": "hiring_frontdesk", "summary": "hiring a patient coordinator in Baner"}],
         "associate_name": "Aditya",
-        "need_email": False,
+        "needs_email": False,
+        "feedback": [],
+        "avoid_openers": [],
+        "avoid_questions": [],
     },
     "check_message": {
         "message": "Hi Dr. Mehta, saw on your careers page that you're hiring a patient coordinator for Baner. "
         "We're Nument, a small dev team. We could set up an AI front desk that answers WhatsApp enquiries "
         "in seconds and books slots, so your new hire starts with less load. Worth a look?",
+        "greeting": "Hi Dr. Mehta,",
+        "pitch_mode": "visible_pain",
         "facts": [{"id": "F1", "field": "branches", "value": {"count": 2}}],
         "signals": [{"id": "S1", "type": "hiring_frontdesk", "summary": "hiring a patient coordinator in Baner"}],
     },
@@ -272,7 +307,7 @@ def llm_smoke(router: Router, *, primaries_only: bool = False, tasks: list[str] 
             report.rows.append(SmokeRow(name, ref.provider, ref.model, role, None, f"skip ({reason})"))
             continue
         try:
-            res = router.run(name, SMOKE_INPUTS[name], models=[ref], use_cache=False)
+            res = router.run_result(name, SMOKE_INPUTS[name], models=[ref], use_cache=False)
         except BudgetExceeded as exc:
             report.rows.append(SmokeRow(name, ref.provider, ref.model, role, None, f"skip (budget: {exc.reason})"))
             continue

@@ -2,7 +2,7 @@
 task: judge_lead
 version: 1
 output: LeadJudgement
-inputs: [segment_id, country, pitch_mode, rule_grade, score, reasons, facts, signals, allowed_angles, packaged_outcome]
+inputs: [segment_id, pitch_mode, total, fit, can_pay, intent, reach, grade, facts, signals, allowed_angles]
 description: Second opinion from the strongest model on a rule-graded lead.
 ---
 [system]
@@ -13,33 +13,58 @@ You review one lead for Nument, a small AI-first software studio that builds cus
 Rules for this task:
 - Use ONLY the facts and signals listed. Cite their ids in cited_ids exactly as shown in square brackets. Do not add any fact that is not listed.
 - Grades: A means contact today, a strong need and they can pay. B is a good lead. C means wait for a new signal. D means drop.
-- You may move the grade by at most one step from the rule grade {{ rule_grade }}.
+- You may move the grade by at most one step from the rule grade {{ grade }}.
 - Downgrade for: a big corporate, a chain run by a head office, a hospital, an agency or software vendor, an in-house tech team, no real need, or no way to reach them.
 - judge_note: at most two short, plain sentences a busy founder can read in five seconds, saying why this lead is worth contacting now. No dashes. Only numbers and names that appear in the cited facts or signals.
 - best_angle: exactly one of: {{ allowed_angles | join(", ") }}.
 - risks: up to 3 short phrases. Say so here if it looks like an agency, a big chain or a hospital.
 - confidence: from 0 to 1.
+{% if angles is defined and angles %}
+
+What each angle means:
+{% for a in angles %}
+- {{ a.key }}: {{ a.idea if a.idea is defined else a }}
+{% endfor %}
+{% endif %}
 
 [user]
-Segment: {{ segment_id }} ({{ country }}){% if city is defined and city %}, city {{ city }}{% endif %}
+Segment: {{ segment_id }}{% if country is defined and country %} ({{ country }}){% endif %}{% if city is defined and city %}, city {{ city }}{% endif %}
 
+{% if business_name is defined and business_name %}
+Business: {{ business_name }}
+{% endif %}
 Pitch mode: {{ pitch_mode }}
-Packaged outcome for this field: {{ packaged_outcome }}
-Rule score: total {{ score.total }} (fit {{ score.fit }}, can pay {{ score.can_pay }}, intent {{ score.intent }}, reach {{ score.reach }}), rule grade {{ rule_grade }}
+{% if packaged_outcome_name is defined and packaged_outcome_name %}
+Packaged outcome for this field: {{ packaged_outcome_name }}
+{% endif %}
+Rule score: total {{ total }} (fit {{ fit }}, can pay {{ can_pay }}, intent {{ intent }}, reach {{ reach }}), rule grade {{ grade }}
+{% if reasons is defined and reasons %}
 Why the rules scored it this way:
-{% for r in reasons %}
-- {{ r }}
+{% if reasons is mapping %}
+{% for key, value in reasons.items() %}
+- {{ key }}: {{ value | tojson }}
 {% endfor %}
+{% else %}
+{% for reason in reasons %}
+- {{ reason }}
+{% endfor %}
+{% endif %}
+{% endif %}
+{% if rule_note is defined and rule_note %}
+Rule note: {{ rule_note }}
+{% endif %}
 
 Verified facts:
 {% for f in facts %}
-- [{{ f.id }}] {{ f.field }}: {{ f.value | tojson }}{% if f.quote %} ("{{ f.quote }}"){% endif %}
+- [{{ f.id }}] {{ f.field }}: {{ f.value | tojson }}{% if f.quote is defined and f.quote %} ("{{ f.quote }}"){% endif %}
 
 {% endfor %}
 Active signals:
 {% for s in signals %}
-- [{{ s.id }}] {{ s.type }} ({{ s.category }}{% if s.age_days is defined and s.age_days is not none %}, {{ s.age_days }} days old{% endif %}): {{ s.quote or (s.details | tojson) }}
+- [{{ s.id }}] {{ s.type }}{% if s.category is defined and s.category %} ({{ s.category }}{% if s.age_days is defined and s.age_days is not none %}, {{ s.age_days }} days old{% endif %}){% endif %}: {{ s.quote if s.quote is defined and s.quote else (s.details | default({}) | tojson) }}
 {% endfor %}
-{% if contacts is defined and contacts %}
+{% if contacts_summary is defined and contacts_summary %}
+Contacts we have: {{ contacts_summary | join(", ") }}
+{% elif contacts is defined and contacts %}
 Contacts we have: {{ contacts | join(", ") }}
 {% endif %}

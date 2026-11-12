@@ -219,3 +219,19 @@ def test_cancel_open_cancels_and_releases(llm_db: str) -> None:
     assert batch.cancel_open(router) == [job.llm_batch_id]
     assert gemini.cancelled == [job.provider_batch_id] and _batches()[0]["status"] == "cancelled"
     assert "submitted" in batch.describe(batch.SubmitResult())
+
+
+def test_a_batch_whose_results_cannot_be_read_stays_pending(llm_db: str) -> None:
+    gemini = FakeProvider("gemini")
+    router = make_router({"gemini": gemini})
+    job = batch.submit(router, "extract_facts", _items()).jobs[0]
+    gemini.batches[job.provider_batch_id].state = "succeeded"
+
+    def broken(batch_id: str) -> list[BatchRow]:
+        raise err("transient", "download failed")
+
+    gemini.fetch_batch = broken  # type: ignore[method-assign]
+    out = batch.collect(router, "extract_facts")
+    assert out.pending == [job.llm_batch_id] and out.results == []
+    assert _batches()[0]["status"] == "submitted"
+    assert store.items_in_flight("extract_facts", KEYS) == set(KEYS)

@@ -2,7 +2,7 @@
 task: extract_facts
 version: 1
 output: FactsExtraction
-inputs: [business_name, segment_id, country, website, pages]
+inputs: [segment_id, business_name, website, pages]
 description: Pull facts from a business's own pages, each with an exact quote and the URL it came from.
 ---
 [system]
@@ -24,12 +24,20 @@ Rules for this task:
 - Respect the list limits: at most 5 decision makers, 6 phones, 4 emails, 12 services, 10 price points, 10 careers roles, 4 languages, 3 sales notes.
 
 [user]
-Segment: {{ segment_id }} ({{ country }})
+Segment: {{ segment_id }}{% if country is defined and country %} ({{ country }}){% endif %}
+
 Business: {{ business_name }}
 Website: {{ website }}
 {% if context is defined and context %}
 Already known from the site's code (do not repeat these unless a page states them):
 {{ context | tojson }}
+{% endif %}
+{% if structured_data is defined and structured_data %}
+Structured data found on the site (JSON-LD), for orientation only; quote the page text, not this:
+{{ structured_data | tojson }}
+{% endif %}
+{% if tech_flags is defined and tech_flags %}
+Tech detected on the site: {{ tech_flags | tojson }}
 {% endif %}
 
 {% for page in pages %}
