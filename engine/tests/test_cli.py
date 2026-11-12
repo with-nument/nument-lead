@@ -158,9 +158,23 @@ def test_eval_finds_the_evals_package(
 
 
 def test_orchestrated_runs_record_their_kind(engine_db: str) -> None:
+    """The night run starts with the essential health phase: a FAIL (no Gemini key here) stops it, exit 1."""
     result = runner.invoke(app, ["run", "night"])
-    assert result.exit_code == 2 and "Built in Step 14" in result.output
-    assert db.scalar("select kind from public.runs order by started_at desc limit 1") == "night"
+    assert result.exit_code == 1 and "essential phase 'health' failed" in plain(result.output)
+    row = db.fetch_one("select kind, status, stats, error from public.runs order by started_at desc limit 1")
+    assert row is not None and (row["kind"], row["status"]) == ("night", "failed")
+    assert "HealthCheckFailed" in row["stats"]["phases"]["health"]["error"] and "GEMINI_API_KEY" in row["error"]
+
+
+def test_a_healthy_night_run_goes_on_until_an_unbuilt_essential_stage(
+    engine_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key-not-used")
+    result = runner.invoke(app, ["run", "night"])
+    assert result.exit_code == 2 and "not built yet (Built in Step 8)" in plain(result.output)
+    phases = db.scalar("select stats -> 'phases' from public.runs order by started_at desc limit 1")
+    assert phases["health"]["status"] in ("ok", "info", "warn", "alert")
+    assert phases["universe"]["skipped"] == "not built" and phases["prefilter"]["skipped"] == "not built"
 
 
 def test_db_commands(engine_db: str) -> None:

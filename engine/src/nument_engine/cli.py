@@ -160,7 +160,9 @@ def _execute(ctx: typer.Context, kind: str, work: Callable[[RunContext], object]
     import psycopg_pool
 
     from . import db
-    from .pipeline.runs import run_context
+    from .pipeline.runs import EssentialPhaseFailed, run_context
+    from .sheet.client import SheetsApiError
+    from .sheet.push import SheetNotAdopted
 
     opts = _bootstrap(ctx)
     try:
@@ -169,6 +171,10 @@ def _execute(ctx: typer.Context, kind: str, work: Callable[[RunContext], object]
     except NotImplementedError as exc:
         typer.secho(f"{ctx.command_path}: not built yet ({exc}).", err=True, fg=typer.colors.YELLOW)
         raise typer.Exit(code=2) from None
+    except EssentialPhaseFailed as exc:
+        raise _fail(f"{ctx.command_path}: {exc}. The run is marked failed; see runs.error for the traceback.") from None
+    except (SheetNotAdopted, SheetsApiError) as exc:
+        raise _fail(f"{ctx.command_path}: {exc}") from None
     except (psycopg.OperationalError, psycopg_pool.PoolTimeout) as exc:
         raise _fail(
             f"{ctx.command_path}: cannot reach the database ({type(exc).__name__}). "
@@ -276,33 +282,99 @@ def message(ctx: typer.Context) -> None:
 # ---------------------------------------------------------------------------
 
 
+LIGHT_HELP = "Rebuild Lead details only when leads were added or removed (the daytime schedule)."
+
+
 @sheet_app.command("push")
-def sheet_push(ctx: typer.Context) -> None:
-    """Database to sheet (Step 13)."""
+def sheet_push(
+    ctx: typer.Context,
+    light: Annotated[bool, typer.Option("--light", help=LIGHT_HELP)] = False,
+    resort: Annotated[bool, typer.Option("--resort", help="Re-rank every row, best first. Only on request.")] = False,
+) -> None:
+    """Database to sheet (Step 13). Honours --dry-run (build and validate, write nothing)."""
     from .sheet import push as m
 
-    _execute(ctx, "sheet_sync", m.run)
+    _execute(ctx, "sheet_sync", lambda rc: _record(rc, "push", m.run(rc, light=light, resort=resort)))
 
 
 @sheet_app.command("pull")
-def sheet_pull(ctx: typer.Context) -> None:
-    """Sheet to database (Step 13)."""
+def sheet_pull(
+    ctx: typer.Context,
+    seed_snapshots: Annotated[
+        bool,
+        typer.Option(
+            "--seed-snapshots",
+            help="Adopt sheets the old engine wrote: record a baseline, then pull (Step 20.6). Writes no lead data.",
+        ),
+    ] = False,
+    legacy_root: Annotated[
+        Path | None, typer.Option("--legacy-root", help="Old lead-engine folder (default ~/Desktop/lead-engine).")
+    ] = None,
+) -> None:
+    """Sheet to database (Step 13). Honours --dry-run (report the edits, write nothing)."""
     from .sheet import pull as m
 
-    _execute(ctx, "sheet_sync", m.run)
-
-
-def _sheet_sync(rc: RunContext) -> None:
-    from .sheet import pull, push
-
-    pull.run(rc)  # always pull people's edits first
-    push.run(rc)
+    _execute(
+        ctx,
+        "sheet_sync",
+        lambda rc: _record(rc, "pull", m.run(rc, seed_snapshots=seed_snapshots, legacy_root=legacy_root)),
+    )
 
 
 @sheet_app.command("sync")
-def sheet_sync(ctx: typer.Context) -> None:
+def sheet_sync(ctx: typer.Context, light: Annotated[bool, typer.Option("--light", help=LIGHT_HELP)] = False) -> None:
     """Pull people's edits, then push (Step 13)."""
-    _execute(ctx, "sheet_sync", _sheet_sync)
+    from .sheet import sync as m
+
+    _execute(ctx, "sheet_sync", lambda rc: _record(rc, "sheet", m.run(rc, light=light)))
+
+
+@sheet_app.command("render")
+def sheet_render(
+    ctx: typer.Context,
+    out: Annotated[Path, typer.Option("--out", help="Folder for the PDFs.", file_okay=False)],
+) -> None:
+    """Export every tab of every view to PDF for a visual check (Step 13)."""
+    from .sheet import render as m
+
+    _execute(ctx, "manual", lambda rc: _echo_files(m.run(rc, out=out)))
+
+
+@sheet_app.command("check")
+def sheet_check(ctx: typer.Context) -> None:
+    """Can the service account open each sheet this environment writes, and is it set up yet? (Step 13.4)"""
+    import json
+
+    from .sheet import client
+    from .sheet import state as st
+
+    _bootstrap(ctx)
+    try:
+        api = client.GoogleSheetsApi()
+        rows = client.check_targets(api, st.states())
+    except client.SheetsApiError as exc:
+        raise _fail(f"sheet check: {exc}") from None
+    finally:
+        from . import db
+
+        db.close_pool()
+    for row in rows:
+        typer.echo(json.dumps(row, ensure_ascii=False))
+    if not all(r["ok"] for r in rows):
+        raise typer.Exit(code=1)
+
+
+def _record(rc: RunContext, key: str, stats: object) -> None:
+    """Keep a command's stats in the run row and print them (one JSON line) for the person running it."""
+    import json
+
+    rc.stats[key] = stats
+    typer.echo(json.dumps(stats, default=str, ensure_ascii=False))
+
+
+def _echo_files(result: dict[str, list[str]]) -> None:
+    for name in result.get("files", []):
+        typer.echo(name)
 
 
 # ---------------------------------------------------------------------------
@@ -473,19 +545,29 @@ def health(
 
 
 @app.command()
-def backup(ctx: typer.Context) -> None:
+def backup(
+    ctx: typer.Context,
+    out: Annotated[
+        Path | None, typer.Option("--out", help="Where to write the encrypted dump (default: the engine cache folder).")
+    ] = None,
+) -> None:
     """Encrypted dump of the public schema to the private backups bucket (Step 14.5.6)."""
     from .ops import backup as m
 
-    _execute(ctx, "manual", m.run)
+    _execute(ctx, "manual", lambda rc: _record(rc, "backup", m.run(rc, out=out)))
 
 
 @app.command(name="migrate-legacy")
-def migrate_legacy(ctx: typer.Context) -> None:
-    """One-time import from the old lead-engine folder (Step 20)."""
+def migrate_legacy(
+    ctx: typer.Context,
+    root: Annotated[
+        Path | None, typer.Option("--root", help="Old lead-engine folder (default ~/Desktop/lead-engine). Read only.")
+    ] = None,
+) -> None:
+    """One-time import from the old lead-engine folder (Step 20). Safe to re-run; --dry-run rolls back."""
     from .ops import migrate_legacy as m
 
-    _execute(ctx, "manual", m.run)
+    _execute(ctx, "manual", lambda rc: _record(rc, "migrate_legacy", m.run(rc, root=root)))
 
 
 # ---------------------------------------------------------------------------
@@ -510,37 +592,27 @@ def run_morning(ctx: typer.Context) -> None:
 
 
 @run_app.command("sheet")
-def run_sheet(ctx: typer.Context) -> None:
-    """Daytime two-way sheet sync (Step 14)."""
-    _execute(ctx, "sheet_sync", _sheet_sync)
+def run_sheet(ctx: typer.Context, light: Annotated[bool, typer.Option("--light", help=LIGHT_HELP)] = False) -> None:
+    """Daytime: late batch items at 09:00, then the two-way sheet sync (Step 14)."""
+    from .pipeline import runs
 
-
-def _weekly(rc: RunContext) -> None:
-    """Learning, then the audit, then the report, so the report includes this week's audit (16.6.2)."""
-    from .learn import report, reweight
-    from .ops import audit
-
-    for name, stage in (("learn", reweight.run), ("audit", audit.weekly)):
-        try:
-            stage(rc)
-        except Exception as exc:  # not essential, even if not built yet: record it, the report still goes out (14.4.1)
-            rc.failed_stages.append(name)
-            rc.stats[f"{name}_error"] = f"{type(exc).__name__}: {str(exc)[:300]}"
-    report.weekly(rc)
+    _execute(ctx, "sheet_sync", lambda rc: runs.sheet(rc, light=light))
 
 
 @run_app.command("weekly")
 def run_weekly(ctx: typer.Context) -> None:
-    """Monday: learning, report and audit (Step 14)."""
-    _execute(ctx, "weekly", _weekly)
+    """Monday: learning, report, audit and page-text retention (Step 14)."""
+    from .pipeline import runs
+
+    _execute(ctx, "weekly", runs.weekly)
 
 
 @run_app.command("monthly")
 def run_monthly(ctx: typer.Context) -> None:
-    """Monthly universe refresh (Step 14)."""
-    from .pipeline import universe as m
+    """Monthly universe refresh and page-text retention (Step 14)."""
+    from .pipeline import runs
 
-    _execute(ctx, "monthly", lambda rc: m.run(rc, monthly=True))
+    _execute(ctx, "monthly", runs.monthly)
 
 
 # ---------------------------------------------------------------------------

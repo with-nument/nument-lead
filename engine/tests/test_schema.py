@@ -101,7 +101,13 @@ def test_seed_settings_with_openai_and_practo_off(db_conn: Conn) -> None:
     assert settings["sources_enabled"]["practo"] is False and settings["sources_enabled"]["adzuna"] is False
     assert set(settings["segment_weights"]) == set(settings["segments_enabled"]) == WAVE1
     assert settings["places_details_cap_in"] == 230 and settings["places_details_cap_global"] == 30
-    assert settings["sheet_state"] == {"master": {"state": "ok"}, "caller": {"state": "ok"}}
+    assert settings["sheet_state"] == {
+        "master": {"state": "ok"},
+        "caller": {"state": "ok"},
+        "staging_master": {"state": "ok"},
+        "staging_caller": {"state": "ok"},
+    }
+    assert (settings["send_per_day"], settings["today_rows_max"], settings["weekly_contact_target"]) == (50, 60, 150)
     for key in ("overture_release", "budget_alert_day", "score_weights", "score_weights_frozen"):
         assert key in settings, key
 
