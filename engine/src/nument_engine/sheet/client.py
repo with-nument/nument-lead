@@ -91,6 +91,8 @@ def targets(settings: Settings | None = None) -> list[Target]:
     """The views this environment writes. Dev writes both views into the staging spreadsheet only (13.3.1)."""
     s = settings or get_settings()
     if s.app_env == "prod":
+        if not s.sheet_master_id:
+            return []  # no sheet configured: the web app is the only view
         return [Target("master", "master", s.sheet_master_id), Target("caller", "caller", s.sheet_caller_id)]
     if not s.sheet_staging_id:
         raise SheetsApiError("SHEET_STAGING_ID is not set: dev only writes the staging spreadsheet")

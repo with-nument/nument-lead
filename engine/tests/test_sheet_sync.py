@@ -569,3 +569,16 @@ def test_check_reports_reachability_and_adoption(sheets: FakeSheets, monkeypatch
     settings_module.get_settings.cache_clear()
     missing, _ = client.check_targets(sheets, st.states())
     assert missing["ok"] is False and "as Editor" in missing["fix"]
+
+
+def test_a_prod_run_without_a_sheet_skips_the_sync(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Founder, 12 Nov: the old sheets stay as they are; with no sheet ids the web app is the only view."""
+    from datetime import UTC, datetime
+
+    from nument_engine.pipeline.runs import Options, RunContext
+    from nument_engine.sheet import client as gs
+    from nument_engine.sheet import sync
+
+    monkeypatch.setattr(gs, "targets", lambda settings=None: [])
+    rc = RunContext(run_id="r1", kind="morning", opts=Options(env="prod"), started_at=datetime.now(UTC))
+    assert sync.run(rc)["skipped"].startswith("no sheet configured")

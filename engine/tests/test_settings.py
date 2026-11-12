@@ -19,11 +19,13 @@ def test_dev_refuses_live_sheet_ids() -> None:
         Settings(app_env="dev", database_url="postgresql://x", sheet_caller_id="LIVE")
 
 
-def test_prod_needs_both_live_sheets() -> None:
-    with pytest.raises(ValidationError, match="needs SHEET_MASTER_ID and SHEET_CALLER_ID"):
+def test_prod_writes_both_live_sheets_or_none() -> None:
+    with pytest.raises(ValidationError, match="needs both SHEET_MASTER_ID and SHEET_CALLER_ID, or neither"):
         Settings(app_env="prod", database_url="postgresql://x", sheet_master_id="M")
     prod = Settings(app_env="prod", database_url="postgresql://x", sheet_master_id="M", sheet_caller_id="C")
     assert prod.target_sheets() == {"master": "M", "caller": "C"}
+    web_only = Settings(app_env="prod", database_url="postgresql://x")
+    assert web_only.target_sheets() == {}
 
 
 def test_dev_writes_only_the_staging_sheet() -> None:

@@ -66,8 +66,9 @@ class Settings(BaseSettings):
         # Dev must never hold live sheet ids: protects the founder's real sheets.
         if self.app_env == "dev" and (self.sheet_master_id or self.sheet_caller_id):
             raise ValueError("APP_ENV=dev must not set SHEET_MASTER_ID or SHEET_CALLER_ID (use SHEET_STAGING_ID)")
-        if self.app_env == "prod" and not (self.sheet_master_id and self.sheet_caller_id):
-            raise ValueError("APP_ENV=prod needs SHEET_MASTER_ID and SHEET_CALLER_ID")
+        # Prod writes both views or none: with no sheet ids the web app is the only view (founder, 12 Nov).
+        if self.app_env == "prod" and bool(self.sheet_master_id) != bool(self.sheet_caller_id):
+            raise ValueError("APP_ENV=prod needs both SHEET_MASTER_ID and SHEET_CALLER_ID, or neither")
         return self
 
     def service_account_info(self) -> dict[str, Any]:
@@ -81,10 +82,12 @@ class Settings(BaseSettings):
         raise RuntimeError("Set GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_FILE")
 
     def target_sheets(self) -> dict[str, str]:
-        """Which sheets this environment writes. Dev writes only the staging sheet."""
+        """Which sheets this environment writes (none when no sheet id is set). Dev writes only the staging sheet."""
         if self.app_env == "prod":
+            if not self.sheet_master_id:
+                return {}
             return {"master": self.sheet_master_id, "caller": self.sheet_caller_id}
-        return {"master": self.sheet_staging_id}
+        return {"master": self.sheet_staging_id} if self.sheet_staging_id else {}
 
 
 def env_file_for(env: str) -> Path:
