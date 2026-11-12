@@ -16,13 +16,15 @@ cities:
      localities: [Al Nahda Sharjah, Al Taawun, University City, Al Majaz, Muwaileh]}
 
 overture:
-  categories:
-    - educational_services      # verify at build
-    - tutoring_center           # verify at build
-    - test_preparation          # verify at build
-    - language_school           # verify at build
-    - vocational_and_technical_school   # verify at build
-    - educational_consultant    # verify at build
+  categories:                   # checked against the Overture taxonomy of release 2026-10-21.0
+    - educational_service       # includes test_preparation, tutoring_service and college_counseling
+    - tutoring_service
+    - test_preparation
+    - college_counseling        # study-abroad and admissions consultants
+    - language_school
+    - vocational_and_technical_school
+    - computer_coaching
+    - academy                   # includes civil_examinations_academy (UPSC and state exam coaching)
 
 places:
   queries:
@@ -63,19 +65,20 @@ size_rules:
 signal_points: {hiring_frontdesk: 9, ads_running: 5}
 
 fit:
-  categories: [educational_services, tutoring_center, test_preparation, language_school,
-               vocational_and_technical_school, educational_consultant]
+  categories: [educational_service, tutoring_service, test_preparation, college_counseling, language_school,
+               vocational_and_technical_school, computer_coaching, academy, civil_examinations_academy]
   service_keywords: [ielts, pte, toefl, sat, gmat, gre, university admissions, study abroad,
                      tutoring, test preparation, professional certification]
   min_reviews: 50
   min_staff: 2
 
 ticket_class:
-  study_abroad:       {match: [educational_consultant, education consultant, study abroad,
+  study_abroad:       {match: [college_counseling, education consultant, study abroad,
                                university admissions], points: 5}
-  coaching_institute: {match: [test_preparation, ielts, sat, gmat, gre, pte, toefl], points: 4}
+  coaching_institute: {match: [test_preparation, civil_examinations_academy, computer_coaching, ielts, sat,
+                               gmat, gre, pte, toefl], points: 4}
   academy:            {match: [vocational_and_technical_school, training institute, academy, institute], points: 3}
-  tutoring:           {match: [tutoring_center, language_school, tutoring, tuition, language institute], points: 2}
+  tutoring:           {match: [tutoring_service, language_school, tutoring, tuition, language institute], points: 2}
 
 can_pay:
   premium_price: {other: 10000}        # AED, any course fee
