@@ -70,24 +70,30 @@ def task_runner(rc: Any) -> TaskRunner:
 
 
 def quote_checker() -> QuoteChecker:
-    """`pipeline.verify.check_quote(quote, page_text) -> (ok, score, reason)` as a yes or no (Step 10.2)."""
+    """`pipeline.verify.check_quote(quote, page_text) -> QuoteCheck(ok, score, why)` as a yes or no (Step 10.2)."""
     check = _require("nument_engine.pipeline.verify", "check_quote", "Step 10")
 
     def checker(quote: str, page_text: str) -> bool:
-        return bool(check(quote, page_text)[0])
+        result = check(quote, page_text)
+        return bool(result.ok if hasattr(result, "ok") else result[0])
 
     return checker
 
 
 def message_linter() -> Linter:
-    """`pipeline.message.lint(text, kind) -> problems` (Step 12.5)."""
-    lint: Linter = _require("nument_engine.pipeline.message", "lint", "Step 12")
+    """`pipeline.lint.lint(text, kind) -> problems` (Step 12.5)."""
+    lint: Linter = _require("nument_engine.pipeline.lint", "lint", "Step 12")
     return lint
 
 
 def business_scorer() -> Scorer:
-    """`pipeline.score.score_business(business, facts, signals, contacts, segment)` (Step 11.6)."""
-    scorer: Scorer = _require("nument_engine.pipeline.score", "score_business", "Step 11")
+    """`(business, facts, signals, contacts, segment) -> ScoreResult` with the weights in force (Step 11.6).
+
+    Backed by `pipeline.score.Scorer`, which adds the config, exclusions, suppression and clock that
+    `score_business` needs, and reads the weights on every call so `use_weights` blocks apply.
+    """
+    scorer_cls = _require("nument_engine.pipeline.score", "Scorer", "Step 11")
+    scorer: Scorer = scorer_cls.load().score_rows
     return scorer
 
 

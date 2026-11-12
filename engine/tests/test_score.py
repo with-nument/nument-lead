@@ -107,6 +107,10 @@ def test_example_1_ivf_clinic_pune_is_b() -> None:
     r = score_business(b, facts, signals, [mobile()], SEGMENTS["clinics-in"], cfg("clinics-in"), EXCL, NOW)
     assert (r.fit, r.can_pay, r.intent, r.reach) == (3, 30, 14.2, 0.85)
     assert (r.total, r.grade) == (58, "B")
+    # The learning loop reads the earned proxies as keys, not by parsing the reason text (16.2).
+    assert {"branches_2plus", "reviews_300plus", "premium_price", "pays_for_software"} <= set(
+        r.reasons["can_pay_proxies"]
+    )
     assert (r.pitch_mode, r.angle, r.test_group) == (
         "visible_pain",
         "frontdesk_load",
@@ -337,3 +341,31 @@ def test_reasons_and_rule_note_are_readable_and_dash_free() -> None:
     assert any("ticket class ivf_fertility" in why for why in r.reasons["can_pay"])
     fit_only = score_business(b, [LIVE], [], [mobile()], SEGMENTS["clinics-in"], cfg("clinics-in"), EXCL, NOW)
     assert rule_note(fit_only, b, [LIVE], NOW).startswith("No buying signal yet, but a strong fit: 420 Google reviews")
+
+
+def test_proposed_weights_change_the_config_only_inside_use_weights() -> None:
+    """The eval gate's `use_weights` block must reach production scoring (one weights loader, 16.3)."""
+    from nument_engine.learn.weights import use_weights
+    from nument_engine.pipeline.score import segment_configs
+
+    seg = SEGMENTS["clinics-in"]
+    base = cfg("clinics-in")
+    proposed = {"version": 99, "can_pay_points": {"clinics-in": {"pays_for_software": 1.0}}, "signal_points": {}}
+    with use_weights(proposed):
+        inside = segment_configs({"clinics-in": seg})["clinics-in"]
+    assert inside.pays_for_software == 1.0
+    assert base.pays_for_software != 1.0
+
+
+def test_learned_type_weight_scales_each_signal_and_defaults_change_nothing() -> None:
+    from nument_engine.pipeline.score import signal_points
+
+    seg = SEGMENTS["clinics-in"]
+    strong = {"type": "review_pain", "points": 7}  # 3 reviews mention it: stronger than the default 6
+    default = seg.signal_points.get("review_pain", 6)
+    assert signal_points(strong, seg, cfg("clinics-in")) == 7
+    same = cfg("clinics-in", {"signal_points": {"clinics-in": {"review_pain": default}}})
+    assert signal_points(strong, seg, same) == 7
+    up = cfg("clinics-in", {"signal_points": {"clinics-in": {"review_pain": default * 1.1}}})
+    assert signal_points(strong, seg, up) == pytest.approx(7.7)
+    assert signal_points({"type": "review_pain", "points": 0}, seg, up) == pytest.approx(default * 1.1)

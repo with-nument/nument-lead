@@ -17,7 +17,6 @@ from typing import Any, Final
 
 from .. import db
 from ..ops import bindings
-from ..segments import Segment, load_segments
 from .weights import Doc, use_weights
 
 TOP_K: Final[int] = 50
@@ -61,22 +60,20 @@ def grade_metrics(scored: list[tuple[str, float, str]], labels: Mapping[str, str
 
 
 def production_score_fn(conn: Any = None) -> ScoreFn:
-    """Score one stored business with Step 11's `score_business` and whatever weights are active."""
-    score_business = bindings.business_scorer()
-    segments: dict[str, Segment] = load_segments()
+    """Score one stored business exactly as `nlead score` does, with whatever weights are active.
+
+    Uses `pipeline.score.Scorer` (all verified facts, active signals, usable contacts, exclusions and
+    suppression), so the gate measures the same numbers production would write.
+    """
+    scorer_cls = bindings.optional_attr("nument_engine.pipeline.score", "Scorer")
+    if scorer_cls is None:
+        raise NotImplementedError("pipeline.score.Scorer is not built yet (Step 11)")
+    scorer = scorer_cls.load(conn)
 
     def score(business_id: str) -> tuple[float, str]:
-        b = db.fetch_one("select * from public.businesses where id = %s", [business_id], conn=conn)
-        if b is None:
+        result = scorer.score(business_id, conn=conn)
+        if result is None:
             raise LookupError(f"golden business {business_id} no longer exists")
-        facts = db.fetch_all("select * from public.v_verified_facts where business_id = %s", [business_id], conn=conn)
-        signals = db.fetch_all(
-            "select * from public.signals where business_id = %s and expires_at > now()", [business_id], conn=conn
-        )
-        contacts = db.fetch_all(
-            "select * from public.contacts where business_id = %s and not do_not_contact", [business_id], conn=conn
-        )
-        result = score_business(b, facts, signals, contacts, segments[b["segment_id"]])
         return float(result.total), str(result.grade)
 
     return score
