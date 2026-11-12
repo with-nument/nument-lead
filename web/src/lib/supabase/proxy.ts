@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import type { Database } from '@/lib/database.types'
 import { mustChangePassword } from '@/lib/password-flag'
+import { timed, timedFetch } from '@/lib/perf'
 
 /** Paths anyone can open. Everything else needs a session. */
 export const PUBLIC_PATHS = ['/login', '/reset-password', '/auth/confirm', '/api/health'] as const
@@ -17,11 +18,13 @@ export function isPublicPath(path: string) {
  */
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request })
+  const fetch = timedFetch('proxy')
 
   const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      ...(fetch ? { global: { fetch } } : {}),
       cookies: {
         getAll: () => request.cookies.getAll(),
         setAll: (list) => {
@@ -34,7 +37,7 @@ export async function updateSession(request: NextRequest) {
   )
 
   // getClaims() refreshes an expired session and verifies the JWT signature locally (asymmetric keys).
-  const { data } = await supabase.auth.getClaims()
+  const { data } = await timed('proxy', `getClaims ${request.nextUrl.pathname}`, () => supabase.auth.getClaims())
   const claims = data?.claims
   const path = request.nextUrl.pathname
   const publicPath = isPublicPath(path)

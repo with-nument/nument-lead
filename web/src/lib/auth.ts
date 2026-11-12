@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { mustChangePassword } from '@/lib/password-flag'
 import { isRole, type Role } from '@/lib/roles'
 import { completedAtOf } from '@/lib/tour'
+import { timed } from '@/lib/perf'
 
 export type SessionUser = {
   id: string
@@ -25,7 +26,7 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   // Per-request work: token checks read the clock, so keep it out of any prerender or prefetch.
   await connection()
   const supabase = await createClient()
-  const { data: claimsData } = await supabase.auth.getClaims()
+  const { data: claimsData } = await timed('server', 'getClaims', () => supabase.auth.getClaims())
   const sub = claimsData?.claims?.sub
   if (!sub) return null
 
