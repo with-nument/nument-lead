@@ -369,3 +369,15 @@ def test_learned_type_weight_scales_each_signal_and_defaults_change_nothing() ->
     up = cfg("clinics-in", {"signal_points": {"clinics-in": {"review_pain": default * 1.1}}})
     assert signal_points(strong, seg, up) == pytest.approx(7.7)
     assert signal_points({"type": "review_pain", "points": 0}, seg, up) == pytest.approx(default * 1.1)
+
+
+def test_review_pain_lines_name_where_and_what() -> None:
+    from nument_engine.pipeline.score import _signal_line
+
+    base = {"type": "review_pain", "observed_at": NOW - timedelta(days=3)}
+    practo_line = _signal_line(
+        {**base, "source": "practo", "details": {"flags": ["unanswered_calls", "long_wait"]}}, NOW
+    )
+    assert practo_line == "Recent Practo patient stories mention unanswered calls and long waits"
+    places_line = _signal_line({**base, "source": "places", "details": {}}, NOW)
+    assert places_line == "Recent Google reviews mention missed calls or slow replies"

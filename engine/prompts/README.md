@@ -43,6 +43,7 @@ present. Lists of facts and signals are dicts with the keys shown.
 | `structure_public_asks.md` | `grounded_search` (structuring call) | `PublicAskResults` | answer, sources (filled by the router) | queries |
 | `lookup_reviews.md` | `lookup_reviews` (search call) | free text with citations | name, city, country, kind | website, practo |
 | `structure_reviews.md` | `lookup_reviews` (structuring call) | `ReviewLookup` | answer, sources (filled by the router) | queries |
+| `classify_reviews.md` | `classify_reviews` | `ReviewPainClassification` | business_name, source, reviews `[{n, age, text}]` | rating per review |
 | `weekly_audit.md` | `weekly_audit` | `AuditResult` | business_name, segment_id, grade, pitch_mode, message, facts, pages | judge_note |
 
 `nument_engine.llm.health.SMOKE_INPUTS` has one complete, working example of the inputs for every task.

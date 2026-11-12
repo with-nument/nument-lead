@@ -19,6 +19,7 @@ from nument_engine.models import (
     PublicAskItem,
     PublicAskResults,
     ReviewLookup,
+    ReviewPainClassification,
     SignalClassification,
     TextFact,
 )
@@ -103,6 +104,12 @@ OUTPUTS: dict[str, BaseModel] = {
         practo_story_count=None,
         practo_quote=None,
         complaint=None,
+    ),
+    "classify_reviews": ReviewPainClassification(
+        has_pain=True,
+        flags=["unanswered_calls"],
+        complaining_reviews=[1],
+        quote="Called five times to book, nobody picked up.",
     ),
     "grounded_search": PublicAskResults(
         items=[
