@@ -251,7 +251,9 @@ def test_gemini_batch_submit_poll_fetch_and_cancel() -> None:
     src = created["src"]
     assert [r.metadata for r in src] == [{"key": "k1"}, {"key": "k2"}]
     assert src[1].contents[0].parts[0].text == "second"
-    assert src[0].config.response_json_schema == provider_schema(SignalClassification)
+    assert src[0].config.response_json_schema is None  # the Batch API ignores it (verified 2026-11-12)
+    assert src[0].config.response_schema == gemini_mod.batch_schema(SignalClassification)
+    assert src[0].config.response_schema.properties["employer_name"].nullable is True
     assert src[0].config.http_options is None
 
     assert provider.poll_batch(name) == "pending"

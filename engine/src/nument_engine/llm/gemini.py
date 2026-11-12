@@ -9,7 +9,8 @@ Verified on 2026-11-12 against the API (Gemini 3.5 Flash-Lite, 3.8 Flash, 4 Argo
 - Gemini 3.8 Flash and Gemini 4 refuse thinking level "minimal" (400 INVALID_ARGUMENT);
 - `temperature` is ignored by Gemini 3.5 and newer, so the router only sends it to models that use it;
 - combining the google_search tool with a response schema returns no grounding metadata, so the router never
-  does that for a task that needs citations.
+  does that for a task that needs citations;
+- the Batch API ignores `response_json_schema`, so batch requests send `response_schema` instead.
 """
 
 from __future__ import annotations
@@ -17,12 +18,14 @@ from __future__ import annotations
 import json
 import threading
 from collections.abc import Callable
+from functools import lru_cache
 from typing import Any
 
 import httpx
 from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types
+from pydantic import BaseModel
 
 from ..logging import get_logger
 from .schema import provider_schema
@@ -47,6 +50,14 @@ _JOB_STATES: dict[str, BatchState] = {
     "JOB_STATE_CANCELLED": "cancelled",
     "JOB_STATE_EXPIRED": "expired",
 }
+
+
+@lru_cache(maxsize=32)
+def batch_schema(model: type[BaseModel]) -> types.Schema:
+    """The provider schema converted to Gemini's Schema type (nullable fields, upper-case types)."""
+    return types.Schema.from_json_schema(
+        json_schema=types.JSONSchema.model_validate(provider_schema(model)), api_option="GEMINI_API"
+    )
 
 
 def classify_error(exc: BaseException, model: str = "") -> ProviderError:
@@ -260,7 +271,12 @@ class GeminiProvider:
             cfg["thinking_config"] = types.ThinkingConfig(thinking_level=types.ThinkingLevel(req.thinking.upper()))
         if req.schema is not None:
             cfg["response_mime_type"] = "application/json"
-            cfg["response_json_schema"] = provider_schema(req.schema)
+            if for_batch:
+                # Verified 2026-11-12: the Batch API ignores responseJsonSchema (answers came back in free-form
+                # JSON), so batch requests carry the same schema as Gemini's own responseSchema.
+                cfg["response_schema"] = batch_schema(req.schema)
+            else:
+                cfg["response_json_schema"] = provider_schema(req.schema)
         if "web_search" in req.tools:
             cfg["tools"] = [types.Tool(google_search=types.GoogleSearch())]
         if req.service_tier == "flex":
