@@ -17,6 +17,10 @@ It reads and writes the same Supabase database as the engine and the Google Shee
 | **Inbox** `/inbox` | admin | Paste a public post where someone asks for help. The engine works from the pasted text and never opens LinkedIn or X. |
 | **Settings** `/settings` | everyone | Name, password, sign out other devices. Admins also manage users and roles and the Do not contact list. |
 
+### Product tour
+
+A short tour opens by itself on a user's first visit, once any forced password change is done. It walks through the pages that user's role can open (callers never get Engine, Inbox, users, Do not contact or the deal card), highlights each part and docks to the screen edge on a phone. Where a part is missing, for example with no leads yet, it shows a centred card that says what will appear there. Skip, Esc or Done closes it for good: the time is saved as `tour_completed_at` in the user's own `user_metadata` (harmless if a user edits it, it only hides the tour) and mirrored in localStorage so it never flashes back. The help button in the top bar and **Take the tour** in the account menu replay it. Steps and copy live in `src/lib/tour.ts`; the component is `src/components/tour/product-tour.tsx`; pages mark what it highlights with `data-tour="..."`.
+
 ### Roles
 
 | | Admin | Caller | Viewer |
@@ -102,6 +106,9 @@ pnpm dev                     # http://localhost:3000
 | `founder.spec.ts` | `E2E_FOUNDER_EMAIL`, `E2E_FOUNDER_PASSWORD` | Sign in with a temporary password lands on the forced password change, other pages send you back, log out. It never submits a new password. |
 | `app.spec.ts` | `E2E_ADMIN_EMAIL`, `E2E_ADMIN_PASSWORD` (a dev test admin without a temporary password) | Seeds five clearly marked test leads and deletes them after: mark sent and undo (one `stage_change` row, written by the trigger), stage change on the lead page and the board, lint blocking save, axe checks (WCAG 2 A and AA), the admin deal value. With `E2E_ALLOW_USER_CREATION=1` it also creates a temporary caller through the UI, checks the caller never sees money (page, `/engine`, CSV, direct queries) and deletes the caller. |
 | `mobile.spec.ts` | the admin above for the signed-in part | iPhone 14 size: sign in and Today with the WhatsApp app button first and no sideways scroll |
+| `tour.spec.ts` | the temporary tour users | The tour opens on a first visit with the right steps for a caller and an admin, finishing or skipping sticks across reloads and browsers, replay from the help button and the account menu, arrow keys, Esc and the focus trap, axe on the card, and no tour until a temporary password is changed |
+
+Screenshots for a visual review: `SHOTS_DIR=/abs/path pnpm exec playwright test -c playwright.screens.config.ts` captures every page and every tour step as admin and caller, desktop and phone. Add `E2E_FIXTURE_LEADS=0 SHOTS_TAG=empty` to see the app with no leads at all.
 
 ## Deploy on Render
 
