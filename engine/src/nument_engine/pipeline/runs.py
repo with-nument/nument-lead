@@ -3,8 +3,8 @@
 A run is a list of phases. Each phase calls one stage entry point (`module.run(rc)` and friends), reads only
 work that is still pending, and returns a small stats dict, so re-running a crashed run simply continues.
 
-- Essential phases (health, prefilter, verify, score, sheet sync, summary) cost nothing. If one fails, the run
-  is `failed` and stops; `nlead` exits 1.
+- Essential phases (health, prefilter, verify, score, sheet sync, summary, report) cost nothing. If one fails,
+  the run is `failed` and stops; `nlead` exits 1. Health stops a run only on a FAIL (`check_all(fail_fast=True)`).
 - Other phases that fail are recorded and the run goes on; it ends `partial` and `nlead` exits 0.
 - Paid phases have a budget priority (Step 19.5): a phase starts only while today's spend is under its share
   of the daily cap. A cap reached inside a phase (`BudgetStop`) stops it cleanly; the run is `partial`.
@@ -22,7 +22,6 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta, timezone
-from decimal import Decimal
 from typing import Any, Final
 
 from .. import db
@@ -282,54 +281,15 @@ def _another_run(rc: RunContext) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Small phases owned by the orchestration
+# Phases owned by the orchestration
 # ---------------------------------------------------------------------------
-def housekeeping(rc: RunContext) -> dict[str, Any]:
-    """Delete expired AI cache rows (Step 4) before the night's work."""
-    if rc.opts.dry_run:
-        return {"expired_cache_rows": db.scalar("select count(*) from public.llm_cache where expires_at < now()")}
-    return {"expired_cache_rows_deleted": db.execute("delete from public.llm_cache where expires_at < now()")}
+def summary(rc: RunContext) -> Mapping[str, Any]:
+    """The morning report (19.8): health plus today's numbers; the markdown goes to the job summary."""
+    from ..ops import health
 
-
-PRUNE_WHERE: Final = """
-where p.text is not null
-  and p.fetched_at < now() - make_interval(days => case
-        when exists (select 1 from public.leads l where l.business_id = p.business_id) then 90 else 30 end)
-"""
-
-
-def prune_pages(rc: RunContext) -> dict[str, Any]:
-    """Raw page text is kept 30 days, 90 for businesses that became leads (A.13.5 rule 13).
-
-    The row stays with its url, title and text_hash, so change detection keeps working; facts keep the quotes.
-    """
-    if rc.opts.dry_run:
-        return {"pages_to_trim": db.scalar("select count(*) from public.pages p" + PRUNE_WHERE)}
-    return {"pages_trimmed": db.execute("update public.pages p set text = null" + PRUNE_WHERE)}
-
-
-def daily_summary(rc: RunContext) -> dict[str, Any]:
-    """Morning numbers for the job summary and the Engine page (Step 19.8)."""
-    row = db.fetch_one(
-        """
-        select (select inr from public.v_spend_today)                                         as spend_today_inr,
-               (select coalesce(sum(inr), 0) from public.costs
-                 where at >= date_trunc('month', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata')
-                                                                                              as spend_month_inr,
-               (select count(*) from public.leads
-                 where created_at >= date_trunc('day', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata')
-                                                                                              as leads_created_today,
-               (select count(*) from public.leads where stage = 'new' and grade in ('A', 'B'))  as new_ab_waiting,
-               (select count(*) from public.leads where stage not in
-                  ('new','won','retainer','lost','not_now','not_a_fit','wrong_contact'))      as in_conversation,
-               (select value from public.settings where key = 'daily_cap_inr')                as daily_cap_inr
-        """
-    )
-    summary = {k: (float(v) if isinstance(v, Decimal) else v) for k, v in (row or {}).items()}
-    sheet_state = db.get_setting("sheet_state", {}) or {}
-    summary["sheet_state"] = {k: v.get("state") for k, v in sheet_state.items() if isinstance(v, dict)}
-    rc.stats["summary"] = summary
-    return summary
+    markdown = health.daily_summary(rc)
+    rc.stats.setdefault("summary", {})["markdown_lines"] = markdown.count("\n")
+    return dict(rc.stats["summary"])
 
 
 def sheet_sync(light: bool) -> PhaseFn:
@@ -379,8 +339,7 @@ def catch_up(rc: RunContext) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 def night_phases() -> list[Phase]:
     return [
-        Phase("health", stage("ops.health"), essential=True),
-        Phase("housekeeping", housekeeping),
+        Phase("health", stage("ops.health", "check_all", fail_fast=True), essential=True),  # only a FAIL stops it
         Phase("universe", stage("pipeline.universe"), priority=2),
         Phase("signals", stage("pipeline.signals"), priority=3),
         Phase("prefilter", stage("pipeline.prefilter"), essential=True),
@@ -391,14 +350,15 @@ def night_phases() -> list[Phase]:
 
 def morning_phases() -> list[Phase]:
     return [
-        Phase("health", stage("ops.health"), essential=True),
+        Phase("health", stage("ops.health", "check_all", fail_fast=True), essential=True),
         Phase("extract_collect", stage("pipeline.extract", "collect")),  # already paid at submission
         Phase("verify", stage("pipeline.verify"), essential=True),
         Phase("score", stage("pipeline.score"), essential=True),
         Phase("judge", stage("pipeline.judge"), priority=4),
         Phase("message", stage("pipeline.message"), priority=5),
         Phase("sheet_sync", sheet_sync(light=False), essential=True),
-        Phase("summary", daily_summary, essential=True),
+        Phase("prune", stage("ops.health", "prune_run")),  # daily, so 30-day Places content never overstays
+        Phase("summary", summary, essential=True),
     ]
 
 
@@ -410,18 +370,18 @@ def sheet_phases(light: bool) -> list[Phase]:
 
 
 def weekly_phases() -> list[Phase]:
+    """Learning, then the audit, then the report, so the report includes this week's audit (16.6.2)."""
     return [
         Phase("learn", stage("learn.reweight")),
+        Phase("audit", stage("ops.audit", "weekly"), priority=4),
         Phase("report", stage("learn.report", "weekly"), essential=True),
-        Phase("audit", stage("learn.metrics", "audit"), priority=4),
-        Phase("prune", prune_pages),
     ]
 
 
 def monthly_phases() -> list[Phase]:
     return [
         Phase("universe", stage("pipeline.universe", monthly=True), priority=2),
-        Phase("prune", prune_pages, essential=True),
+        Phase("prune", stage("ops.health", "prune_run"), essential=True),
     ]
 
 
@@ -431,7 +391,7 @@ def night(rc: RunContext) -> None:
 
 
 def morning(rc: RunContext) -> None:
-    """06:00 IST pipeline part 2: extract collect, verify, score, judge, message, sheet sync, summary."""
+    """06:00 IST pipeline part 2: extract collect, verify, score, judge, message, sheet sync, prune, summary."""
     execute(rc, morning_phases())
 
 
@@ -441,10 +401,10 @@ def sheet(rc: RunContext, *, light: bool = False) -> None:
 
 
 def weekly(rc: RunContext) -> None:
-    """Monday: learning, report, audit, page-text retention."""
+    """Monday: learning, the audit, then the weekly report."""
     execute(rc, weekly_phases())
 
 
 def monthly(rc: RunContext) -> None:
-    """1st of the month: universe refresh from the new release, page-text retention."""
+    """1st of the month: universe refresh from the new release, then the retention rules."""
     execute(rc, monthly_phases())

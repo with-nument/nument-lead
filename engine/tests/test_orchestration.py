@@ -187,61 +187,53 @@ def test_phase_tables_follow_the_plan() -> None:
     names = {k: [p.name for p in f()] for k, f in {
         "night": runs.night_phases, "morning": runs.morning_phases, "weekly": runs.weekly_phases, "monthly": runs.monthly_phases,
     }.items()}  # fmt: skip
-    assert names["night"] == [
-        "health",
-        "housekeeping",
-        "universe",
-        "signals",
-        "prefilter",
-        "research",
-        "extract_submit",
-    ]
+    assert names["night"] == ["health", "universe", "signals", "prefilter", "research", "extract_submit"]
     assert names["morning"] == [
-        "health",
-        "extract_collect",
-        "verify",
-        "score",
-        "judge",
-        "message",
-        "sheet_sync",
-        "summary",
-    ]
+        "health", "extract_collect", "verify", "score", "judge", "message", "sheet_sync", "prune", "summary",
+    ]  # fmt: skip
+    assert names["weekly"] == ["learn", "audit", "report"]  # the report includes this week's audit (16.6.2)
+    assert names["monthly"] == ["universe", "prune"]
     essential = {p.name for p in runs.morning_phases() if p.essential}
     assert essential == {"health", "verify", "score", "sheet_sync", "summary"}
+    assert {p.name for p in runs.weekly_phases() if p.essential} == {"report"}
     assert [p.name for p in runs.sheet_phases(light=True)] == ["catch_up", "sheet_sync"]
     for phases in (runs.night_phases(), runs.morning_phases()):
         assert all(p.priority is None or 1 <= p.priority <= 5 for p in phases)
 
 
-def test_housekeeping_and_page_retention(clean_costs: None) -> None:
-    with db.tx() as conn:
-        conn.execute(
-            "insert into public.llm_cache (key, task, model, response, expires_at) values (%s, 't', 'm', '{}', now() - interval '1 day')",
-            [f"orch-{uuid.uuid4()}"],
-        )
-        biz = conn.execute(
-            "insert into public.businesses (segment_id, name, norm_name, country) values ('clinics-in', 'Prune Test', 'prune test', 'in') "
-            "returning id"
-        ).fetchone()["id"]  # type: ignore[index]
-        conn.execute(
-            "insert into public.pages (business_id, url, fetched_at, text, text_hash) values "
-            "(%s, %s, now() - interval '40 days', 'old text', 'h1'), (%s, %s, now() - interval '5 days', 'new text', 'h2')",
-            [biz, f"https://prune.example/{uuid.uuid4()}", biz, f"https://prune.example/{uuid.uuid4()}"],
-        )
-    rc = RunContext(
-        run_id=str(uuid.uuid4()), kind="weekly", opts=Options(dry_run=True), started_at=dt.datetime.now(dt.UTC)
-    )
-    assert runs.prune_pages(rc)["pages_to_trim"] >= 1
-    assert runs.housekeeping(rc)["expired_cache_rows"] >= 1
-    rc.opts.dry_run = False
-    assert runs.prune_pages(rc)["pages_trimmed"] >= 1
-    assert runs.housekeeping(rc)["expired_cache_rows_deleted"] >= 1
-    texts = {r["text"] for r in db.fetch_all("select text from public.pages where business_id = %s", [biz])}
-    assert texts == {None, "new text"}  # url and hash stay; only old raw text goes (A.13.5 rule 13)
+def test_phases_call_the_real_entry_points(clean_costs: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each phase reaches the quality step's real function with the run context (and fail_fast for health)."""
+    from nument_engine.learn import report, reweight
+    from nument_engine.ops import audit, health
+
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    def spy(name: str, result: Any = None) -> Any:
+        def fn(rc: RunContext, **kwargs: Any) -> Any:
+            calls.append((name, kwargs))
+            return {"ok": 1} if result is None else result
+
+        return fn
+
+    monkeypatch.setattr(health, "check_all", spy("check_all"))
+    monkeypatch.setattr(reweight, "run", spy("reweight"))
+    monkeypatch.setattr(audit, "weekly", spy("audit"))
+    monkeypatch.setattr(report, "weekly", spy("report"))
+    with run_context("weekly", Options()) as rc:
+        runs.weekly(rc)
+    assert [c[0] for c in calls] == ["reweight", "audit", "report"]
+    calls.clear()
+    runs.night_phases()[0].fn(rc)
+    assert calls == [("check_all", {"fail_fast": True})]
 
 
-def test_daily_summary(clean_costs: None) -> None:
-    rc = RunContext(run_id=str(uuid.uuid4()), kind="morning", opts=Options(), started_at=dt.datetime.now(dt.UTC))
-    summary = runs.daily_summary(rc)
-    assert {"spend_today_inr", "leads_created_today", "new_ab_waiting", "sheet_state"} <= set(summary)
-    assert rc.stats["summary"] is summary
+def test_health_failure_stops_the_morning_run(clean_costs: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    from nument_engine.ops import health
+
+    def failing(rc: RunContext, **kwargs: Any) -> dict[str, Any]:
+        raise health.HealthCheckFailed("database: unreachable")
+
+    monkeypatch.setattr(health, "check_all", failing)
+    with pytest.raises(EssentialPhaseFailed, match="health"), run_context("morning", Options()) as rc:
+        runs.morning(rc)
+    assert _row(rc.run_id)["status"] == "failed"
