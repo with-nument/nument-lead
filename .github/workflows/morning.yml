@@ -58,8 +58,10 @@ jobs:
       ASSOCIATE_NAME: ${{ vars.ASSOCIATE_NAME }}
       USER_AGENT: ${{ vars.USER_AGENT }}
       ALERT_EMAIL: ${{ vars.ALERT_EMAIL }}
-      ALERT_EMAIL_FROM: ${{ vars.ALERT_EMAIL_FROM }}
-      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }} # optional: alerts and reports by email (14.7)
+      ALERT_EMAIL_FROM: ${{ vars.ALERT_EMAIL_FROM }} # empty = Nument Leads <leads@nument.in>
+      ALERT_REPLY_TO: ${{ vars.ALERT_REPLY_TO }} # empty = the founder's address
+      APP_URL: ${{ vars.APP_URL }} # links in emails; empty = the Render URL
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }} # morning list, alerts and weekly report by email
       IN_SEGMENT: ${{ inputs.segment }}
       IN_LIMIT: ${{ inputs.limit }}
       IN_DRY_RUN: ${{ inputs.dry_run }}
@@ -85,7 +87,7 @@ jobs:
       - name: Email new alerts
         if: always()
         working-directory: engine
-        run: uv run nlead health --notify --env "$APP_ENV" || true # quiet unless ALERT_EMAIL and RESEND_API_KEY are set
+        run: uv run nlead health --notify --env "$APP_ENV" || true # quiet without RESEND_API_KEY; recipients: Settings > Email recipients
 
       - name: Report the failure
         if: failure() && github.event_name == 'schedule'

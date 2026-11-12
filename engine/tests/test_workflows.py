@@ -133,3 +133,17 @@ def test_monthly_minutes_stay_under_the_free_allowance() -> None:
     sheet_cron = load(WORKFLOWS / "sheet-sync.yml")["on"]["schedule"][0]["cron"]
     hours = range(3, 16, 2)
     assert sheet_cron == "30 3-15/2 * * *" and len(hours) == 7
+
+
+@pytest.mark.parametrize("name", ["night.yml", "morning.yml", "weekly.yml"])
+def test_email_settings_reach_the_runs(name: str) -> None:
+    """The morning list, the weekly report and the failure alerts need the key and the sender settings."""
+    data = load(WORKFLOWS / name)
+    env = next(iter(data["jobs"].values()))["env"]
+    assert env["RESEND_API_KEY"] == "${{ secrets.RESEND_API_KEY }}"
+    for var in ("ALERT_EMAIL", "ALERT_EMAIL_FROM", "ALERT_REPLY_TO", "APP_URL"):
+        assert env[var] == f"${{{{ vars.{var} }}}}"
+    by_name = {s.get("name"): s for s in steps(data)}
+    alert = by_name["Email new alerts"]
+    assert "nlead health --notify" in alert["run"] and alert["if"] in ("always()", "failure()")
+    assert by_name["Report the failure"]["uses"] == "./.github/actions/notify-failure"  # the issue stays

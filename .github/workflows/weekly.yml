@@ -48,8 +48,10 @@ jobs:
       SHEET_CALLER_ID: ${{ (inputs.env || 'prod') == 'prod' && vars.SHEET_CALLER_ID || '' }}
       SHEET_STAGING_ID: ${{ (inputs.env || 'prod') == 'dev' && vars.SHEET_STAGING_ID || '' }}
       ALERT_EMAIL: ${{ vars.ALERT_EMAIL }}
-      ALERT_EMAIL_FROM: ${{ vars.ALERT_EMAIL_FROM }}
-      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }} # optional: alerts and reports by email (14.7)
+      ALERT_EMAIL_FROM: ${{ vars.ALERT_EMAIL_FROM }} # empty = Nument Leads <leads@nument.in>
+      ALERT_REPLY_TO: ${{ vars.ALERT_REPLY_TO }} # empty = the founder's address
+      APP_URL: ${{ vars.APP_URL }} # links in emails; empty = the Render URL
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }} # morning list, alerts and weekly report by email
       IN_DRY_RUN: ${{ inputs.dry_run }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -62,6 +64,11 @@ jobs:
           args=(--env "$APP_ENV")
           if [ "$IN_DRY_RUN" = "true" ]; then args+=(--dry-run); fi
           uv run nlead run weekly "${args[@]}"
+
+      - name: Email new alerts
+        if: failure()
+        working-directory: engine
+        run: uv run nlead health --notify --env "$APP_ENV" || true # a failed weekly run reaches the alert list
 
       - name: Report the failure
         if: failure() && github.event_name == 'schedule'
