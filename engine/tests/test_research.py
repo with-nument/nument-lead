@@ -157,6 +157,16 @@ def test_groups(links: list[tuple[str, str]], group: str) -> None:
     assert group in pagelib.choose_pages("https://a.in/", links)
 
 
+def test_a_treatment_page_is_not_a_booking_page() -> None:
+    """Seen live: /cerec-single-visit-crowns/ was picked as the booking page because of the word "visit"."""
+    chosen = pagelib.choose_pages("https://a.in/", [("https://a.in/cerec-single-visit-crowns/", "Single visit crowns")])
+    assert "booking" not in chosen
+    assert (
+        pagelib.choose_pages("https://a.in/", [("https://a.in/visit-us", "Visit us")])["booking"]
+        == "https://a.in/visit-us"
+    )
+
+
 def test_skip_patterns() -> None:
     chosen = pagelib.choose_pages(
         "https://a.in/",

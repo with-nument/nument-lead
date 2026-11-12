@@ -60,7 +60,8 @@ GROUPS: dict[str, list[str]] = {
         "properties",
         "rooms",
     ],
-    "booking": ["book", "booking", "appointment", "schedule", "enquiry", "enquire", "consultation", "visit"],
+    # "visit" alone matched treatment pages such as "single visit crowns" on a live site: only "visit us" counts.
+    "booking": ["book", "booking", "appointment", "schedule", "enquiry", "enquire", "consultation", "visit us"],
     "about": ["about", "about us", "story", "who we are", "our story", "overview", "من نحن"],
 }
 GROUP_ORDER = list(GROUPS)
