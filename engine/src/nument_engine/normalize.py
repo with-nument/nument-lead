@@ -85,6 +85,12 @@ def plain_text(raw: str | None) -> str:
     return _SPACES.sub(" ", s).strip()
 
 
+def compact_name(raw: str | None) -> str:
+    """`norm_name` without generic words or spaces, in the original order: `Dr. Ali's Dentacare` and
+    `Dralisdentacare` both become `dralisdentacare`. Used for an exact match within one city."""
+    return "".join(t for t in norm_name(raw).split() if t not in GENERIC_WORDS)
+
+
 def match_key(raw: str | None) -> str:
     """`norm_name` without generic words, tokens sorted: used only for fuzzy matching."""
     tokens = [t for t in norm_name(raw).split() if t not in GENERIC_WORDS]

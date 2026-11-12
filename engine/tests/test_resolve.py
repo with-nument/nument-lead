@@ -317,3 +317,21 @@ def test_a_chain_across_cities_takes_the_city_of_most_branches(clean_db: str) ->
     assert row["extra"]["city_counts"] == {"Delhi": 1, "Bengaluru": 3}
     assert single_city(row) == ""  # the message names no city for a chain spread over cities
     assert single_city({"city": "Pune", "extra": {"city_counts": {"Pune": 4}}}) == "Pune"
+
+
+def test_a_job_post_without_a_point_matches_the_one_business_of_that_name_in_its_city(clean_db: str) -> None:
+    """Live finding 12 Nov: Apna hiring signals created bare duplicates of clinics already in the universe."""
+    with Resolver(SEG) as r:
+        known, _ = r.resolve(
+            cand(
+                "overture", "ov-cn1", "Dralisdentacare", website="https://dralisdentacare-cn.com/", lat=18.52, lng=73.85
+            )
+        ) or ("", "")
+        r.resolve(cand("overture", "ov-cn2", "Dental Clinic", lat=18.53, lng=73.86))
+        r.resolve(cand("overture", "ov-cn3", "Dental Clinic", lat=18.60, lng=73.90))
+        job = r.resolve(cand("apna", "apna:cn-1", "Dr. Ali's Dentacare"))
+        generic = r.resolve(cand("apna", "apna:cn-2", "Dental Clinic"))
+        other_city = r.resolve(cand("apna", "apna:cn-3", "Dr. Ali's Dentacare", city="Mumbai"))
+    assert job == (known, "matched") and r.stats["rule.compact_name"] == 1
+    assert generic is not None and generic[1] == "created"  # too common to pick one clinic
+    assert other_city is not None and other_city[1] == "created"

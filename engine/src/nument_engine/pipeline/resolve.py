@@ -31,7 +31,7 @@ from rapidfuzz import fuzz, process
 
 from .. import db
 from ..models import SOURCE_NAMES
-from ..normalize import homepage, match_key, meters, norm_name, phone, web_domain
+from ..normalize import compact_name, homepage, match_key, meters, norm_name, phone, web_domain
 from ..segments import Segment
 from ..sources.base import SourceRecord
 from ..sources.places import listing_url
@@ -39,6 +39,7 @@ from ..sources.places import listing_url
 BRANCH_METERS = 300.0
 NAME_RATIO = 92
 NAME_RATIO_NO_POINT = 96
+MIN_COMPACT_NAME = 8  # letters in a compact name before it may identify one business in a city
 SHARED_PHONE_MIN = 5  # a number on this many businesses is a call centre, aggregator or franchise line
 MAX_PHONE_HINTS = 5
 MAX_POINTS = 50
@@ -217,6 +218,7 @@ class Resolver:
         self.by_domain: dict[str, str] = {}
         self.by_phone: dict[str, set[str]] = {}
         self.city_keys: dict[str | None, dict[str, str]] = {}
+        self.city_compact: dict[str | None, dict[str, set[str]]] = {}
         self.grid: dict[tuple[int, int], set[str]] = {}
         self.records: dict[tuple[str, str], str | None] = {}
         self._sources_loaded: set[str] = set()
@@ -244,6 +246,7 @@ class Resolver:
         key = match_key(row["name"])
         if key:
             self.city_keys.setdefault(row.get("city"), {})[bid] = key
+        self._index_compact(row.get("city"), row["name"], bid)
         for lat, lng in self._points(row):
             self.grid.setdefault(_cell(lat, lng), set()).add(bid)
         for e164 in (row.get("extra") or {}).get("phone_hints", []):
@@ -353,6 +356,23 @@ class Resolver:
                 return str(bid)
         return None
 
+    def _index_compact(self, city: str | None, name: str | None, bid: str) -> None:
+        compact = compact_name(name)
+        if len(compact) >= MIN_COMPACT_NAME:
+            self.city_compact.setdefault(city, {}).setdefault(compact, set()).add(bid)
+
+    def _by_compact_name(self, c: Candidate) -> str | None:
+        """A candidate without a map point (a job post, a public ask): the same name once spaces, punctuation,
+        "&"/"and" and generic words are ignored, held by exactly one business in the same city. Live check
+        12 Nov: "Dr. Ali's Dentacare" (Apna) is "Dralisdentacare" (Overture, with its website)."""
+        if c.has_point or not c.city:
+            return None
+        compact = compact_name(c.name)
+        if len(compact) < MIN_COMPACT_NAME:
+            return None  # "Dental Clinic" is "dental": too common to identify one business
+        owners = self.city_compact.get(c.city, {}).get(compact, set())
+        return next(iter(owners)) if len(owners) == 1 else None
+
     def match(self, c: Candidate) -> tuple[str | None, str]:
         """(business_id, rule) for rules 2 to 5, or (None, "")."""
         if c.place_id and c.place_id in self.by_place:
@@ -368,6 +388,9 @@ class Resolver:
         bid = self._by_name(c)
         if bid:
             return bid, "name"
+        bid = self._by_compact_name(c)
+        if bid:
+            return bid, "compact_name"
         return None, ""
 
     def _far_branch(self, bid: str, c: Candidate) -> bool:
@@ -431,6 +454,7 @@ class Resolver:
             key = match_key(c.name)
             if key:
                 self.city_keys.setdefault(row.get("city"), {})[bid] = key
+            self._index_compact(row.get("city"), c.name, bid)
         dom = c.domain
         if c.website and dom and (row.get("web_domain") in (None, dom)) and self._better(row, "website", src):
             if row.get("web_domain") is None and dom in self.by_domain and self.by_domain[dom] != bid:
