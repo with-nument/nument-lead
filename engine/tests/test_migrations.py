@@ -23,6 +23,7 @@ EXPECTED_FILES = [
     "0008_llm.sql",
     "0009_sheet_targets.sql",
     "0010_review_sources.sql",
+    "0011_notify_recipients.sql",
 ]
 
 

@@ -293,6 +293,26 @@ def test_saved_views_own_and_shared(db_conn: Conn, rls_world: RlsWorld) -> None:
     assert [r["name"] for r in db_conn.execute("select name from public.saved_views").fetchall()] == ["team"]
 
 
+def test_email_recipients_are_admin_only(db_conn: Conn, rls_world: RlsWorld) -> None:
+    """Settings > Email recipients: admins read and write the list; callers, viewers and visitors get nothing."""
+    act_as(db_conn, "authenticated", rls_world.admin)
+    db_conn.execute("insert into public.notify_recipients (email, name) values ('team@example.com', 'Team')")
+    assert _count(db_conn, "select count(*) from public.notify_recipients") == 1
+    assert db_conn.execute("update public.notify_recipients set morning = false").rowcount == 1
+    with pytest.raises(errors.UniqueViolation), db_conn.transaction():
+        db_conn.execute("insert into public.notify_recipients (email) values ('team@example.com')")
+    with pytest.raises(errors.CheckViolation), db_conn.transaction():
+        db_conn.execute("insert into public.notify_recipients (email) values ('Team@Example.com')")
+    for user in (rls_world.caller, rls_world.viewer):
+        act_as(db_conn, "authenticated", user)
+        assert _count(db_conn, "select count(*) from public.notify_recipients") == 0
+        assert db_conn.execute("update public.notify_recipients set active = false").rowcount == 0
+        assert db_conn.execute("delete from public.notify_recipients").rowcount == 0
+        _denied(db_conn, "insert into public.notify_recipients (email) values ('spoof@example.com')")
+    act_as(db_conn, "anon")
+    _denied(db_conn, "select * from public.notify_recipients")
+
+
 # ---------------------------------------------------------------------------
 # Storage: private proposals and backups buckets
 # ---------------------------------------------------------------------------
