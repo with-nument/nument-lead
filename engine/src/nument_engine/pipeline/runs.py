@@ -36,7 +36,7 @@ IST: Final = timezone(timedelta(hours=5, minutes=30))
 DRY_RUN_LIMIT: Final = 5  # items per stage in a dry run when --limit is not given (14.4.3)
 # Minutes a run may take before non-essential phases are skipped: each workflow's timeout minus a margin, so
 # the run closes its row itself instead of being killed with the row left 'running'.
-DEADLINE_MIN: Final[dict[str, int]] = {"night": 40, "morning": 26, "sheet_sync": 8, "weekly": 26, "monthly": 55}
+DEADLINE_MIN: Final[dict[str, int]] = {"night": 80, "morning": 26, "sheet_sync": 8, "weekly": 26, "monthly": 55}
 # A 'running' row older than this was killed (timeout or cancel) and is closed as failed by the next run.
 STALE_MIN: Final[dict[str, int]] = {
     "night": 50,
