@@ -223,7 +223,8 @@ def build_inputs(business: dict[str, Any], seg: Segment, pages: list[PageIn]) ->
 
 ITEMS_SQL = """
 select b.id::text as id, b.segment_id, b.name, b.website, b.place_id, b.branches_count, b.extra,
-       exists (select 1 from public.contacts c where c.business_id = b.id) as has_contact
+       exists (select 1 from public.contacts c where c.business_id = b.id) as has_contact,
+       coalesce((b.extra #>> '{crawl,at}')::timestamptz >= b.queued_at, false) as crawled_since_queued
 from public.businesses b
 where b.status = 'queued' and b.queued_at > now() - interval '1 day' and b.segment_id = any(%(segments)s)
   and coalesce((b.extra #>> '{extract,submitted_at}')::timestamptz, 'epoch') < now() - interval '20 hours'
@@ -241,6 +242,9 @@ def build_items(
     for b in db.fetch_all(ITEMS_SQL, {"segments": list(segments), "limit": limit}):
         pages = load_pages(b)
         if not pages:
+            if not b["crawled_since_queued"]:
+                stats["waiting_for_research"] += 1  # research has not reached it yet: never reject it unread
+                continue
             if b["place_id"] or b["has_contact"]:
                 stats["researched_without_pages"] += 1  # Places, registry and signal data only (Step 9.4.1)
                 if not dry_run:

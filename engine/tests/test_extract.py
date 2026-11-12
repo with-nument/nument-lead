@@ -3,7 +3,7 @@ submit and collect through the router contract, the sync retry and the no_bookin
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -198,16 +198,22 @@ def test_submit_builds_items_and_marks_them(clean_db: str, monkeypatch: pytest.M
 def test_submit_dry_run_and_settled_businesses(clean_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
     seed_business()
     fake = batch(monkeypatch, FakeBatch())
+    queued = datetime.now(UTC) - timedelta(minutes=5)
+    crawled = {"crawl": {"at": datetime.now(UTC).isoformat(), "state": "robots_disallowed"}}
     no_pages = insert_business(
-        name="No Pages Clinic", status="queued", queued_at=datetime.now(UTC), place_id="ChIJnp-1"
+        name="No Pages Clinic", status="queued", queued_at=queued, place_id="ChIJnp-1", extra=crawled
     )
-    nothing = insert_business(name="Nothing Clinic", status="queued", queued_at=datetime.now(UTC))
+    nothing = insert_business(name="Nothing Clinic", status="queued", queued_at=queued, extra=crawled)
+    unread = insert_business(name="Unread Clinic", status="queued", queued_at=queued)  # research not there yet
     out = extract.submit(run_context(segments=["clinics-in"], dry_run=True), router=FakeRouter())
     assert out["would_submit"] >= 1 and fake.submitted == []  # a dry run never submits
     assert db.scalar("select status from public.businesses where id = %s", [no_pages]) == "queued"
     extract.submit(run_context(segments=["clinics-in"]), router=FakeRouter())
     assert db.scalar("select status from public.businesses where id = %s", [no_pages]) == "researched"
     assert db.scalar("select reject_reason from public.businesses where id = %s", [nothing]) == "no_research_material"
+    assert (
+        db.scalar("select status from public.businesses where id = %s", [unread]) == "queued"
+    )  # never rejected unread
 
 
 def test_a_refused_batch_leaves_the_queue_alone(clean_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
