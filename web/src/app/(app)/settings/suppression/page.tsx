@@ -44,7 +44,7 @@ async function Suppression() {
       </Card>
       <Card aria-labelledby="list-title">
         <CardHeader id="list-title" title={`Do not contact · ${rows.length}`} />
-        <div className="mt-3 overflow-x-auto border-t border-line-2">
+        <div className="relative mt-3 overflow-x-auto border-t border-line-2">
           {rows.length ? (
             <table className="w-full text-left text-base">
               <thead>

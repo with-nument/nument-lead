@@ -104,7 +104,7 @@ export function Board({ cards, canEdit, isAdmin }: { cards: CardView[]; canEdit:
   }
 
   const columns = (
-    <div className="flex gap-3 overflow-x-auto pb-4" role="list" aria-label="Pipeline stages">
+    <div className="relative flex gap-3 overflow-x-auto pb-4" role="list" aria-label="Pipeline stages">
       {BOARD_STAGES.map((s) => (
         <Column key={s.value} stage={s.value} label={s.label} closed={s.closed} cards={byStage.get(s.value) ?? []} canEdit={canEdit} isAdmin={isAdmin} />
       ))}
@@ -164,7 +164,7 @@ function Column({ stage, label, closed, cards, canEdit, isAdmin }: { stage: stri
         </span>
         <span className="tabular text-sm text-tx-3">{cards.length}</span>
       </header>
-      <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
+      <ul className="relative flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
         {cards.map((c) => (
           <DraggableCard key={c.id} card={c} canEdit={canEdit} isAdmin={isAdmin} compact={closed} />
         ))}
