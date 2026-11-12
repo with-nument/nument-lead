@@ -4,7 +4,7 @@ import { BoardFilters } from '@/components/pipeline/board-filters'
 import { Board, type CardView } from '@/components/pipeline/board'
 import { AutoRefresh } from '@/components/shell/auto-refresh'
 import { PageHeader } from '@/components/ui/page-header'
-import { Skeleton } from '@/components/ui/skeleton'
+import { BoardBody, PIPELINE_DESCRIPTION, PIPELINE_TITLE } from '@/components/skeletons'
 import { claimedUserId, early, requireUser } from '@/lib/auth'
 import { dueState, formatDate, istDate } from '@/lib/dates'
 import { canEdit, canSeeMoney } from '@/lib/roles'
@@ -18,8 +18,8 @@ const UUID = /^[0-9a-f-]{36}$/i
 export default function PipelinePage({ searchParams }: PageProps<'/pipeline'>) {
   return (
     <>
-      <PageHeader title="Pipeline" description="Every lead after the first message. Drag a card to change its stage." />
-      <Suspense fallback={<BoardSkeleton />}>
+      <PageHeader title={PIPELINE_TITLE} description={PIPELINE_DESCRIPTION} />
+      <Suspense fallback={<BoardBody />}>
         <Pipeline searchParams={searchParams} />
       </Suspense>
     </>
@@ -61,7 +61,7 @@ async function Pipeline({ searchParams }: Pick<PageProps<'/pipeline'>, 'searchPa
   })
   return (
     <>
-      <AutoRefresh seconds={60} />
+      <AutoRefresh />
       <BoardFilters
         value={filters}
         segments={segments.map((s) => ({ id: s.id, label: s.label }))}
@@ -71,19 +71,5 @@ async function Pipeline({ searchParams }: Pick<PageProps<'/pipeline'>, 'searchPa
       />
       <Board cards={views} canEdit={canEdit(user.role)} isAdmin={isAdmin} />
     </>
-  )
-}
-
-function BoardSkeleton() {
-  return (
-    <div className="flex gap-3 overflow-hidden" aria-busy>
-      {Array.from({ length: 5 }, (_, i) => (
-        <div key={i} className="w-72 shrink-0 rounded-2xl border border-line-2 bg-surface-2/60 p-3">
-          <Skeleton className="h-5 w-24" />
-          <Skeleton className="mt-3 h-16 w-full rounded-xl" />
-          <Skeleton className="mt-2 h-16 w-full rounded-xl" />
-        </div>
-      ))}
-    </div>
   )
 }

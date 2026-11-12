@@ -9,8 +9,7 @@ import { FactsCard, PagesCard, SignalsCard, TechCard, Timeline, WhyCard } from '
 import { FollowupsCard, MessageCard } from '@/components/lead/message-editor'
 import { DealCard, FeedbackCard, NotesCard } from '@/components/lead/side-cards'
 import { GradeBadge, StageBadge } from '@/components/ui/badge'
-import { Card } from '@/components/ui/card'
-import { Skeleton, SkeletonRows } from '@/components/ui/skeleton'
+import { LeadSkeleton } from '@/components/skeletons'
 import { early, requireUser } from '@/lib/auth'
 import { formatDate } from '@/lib/dates'
 import { hostOf, safeUrl } from '@/lib/format'
@@ -192,24 +191,3 @@ async function Lead({ params, searchParams }: Pick<PageProps<'/leads/[id]'>, 'pa
     </>
   )
 }
-
-function LeadSkeleton() {
-  return (
-    <div aria-busy>
-      <Skeleton className="mb-4 h-4 w-16" />
-      <Skeleton className="h-8 w-2/3 max-w-md" />
-      <Skeleton className="mt-3 h-4 w-1/3" />
-      <Skeleton className="mt-6 h-20 w-full rounded-2xl" />
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <Card>
-          <SkeletonRows rows={5} />
-        </Card>
-        <Card>
-          <SkeletonRows rows={3} />
-        </Card>
-      </div>
-    </div>
-  )
-}
-
-

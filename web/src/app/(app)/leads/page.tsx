@@ -12,7 +12,7 @@ import { buttonClasses } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/ui/page-header'
-import { Skeleton, SkeletonRows } from '@/components/ui/skeleton'
+import { LeadsSkeleton } from '@/components/skeletons'
 import { claimedUserId, early, requireUser } from '@/lib/auth'
 import { dueState, formatDate, istDate, relativeAge } from '@/lib/dates'
 import { formatNumber, hostOf } from '@/lib/format'
@@ -138,26 +138,5 @@ async function Leads({ searchParams }: Pick<PageProps<'/leads'>, 'searchParams'>
         </div>
       </div>
     </>
-  )
-}
-
-function LeadsSkeleton() {
-  return (
-    <div aria-busy>
-      <PageHeader title="Leads" />
-      <div className="lg:grid lg:grid-cols-[208px_minmax(0,1fr)] lg:gap-6">
-        <div className="hidden space-y-3 lg:block">
-          {Array.from({ length: 8 }, (_, i) => (
-            <Skeleton key={i} className="h-4 w-3/4" />
-          ))}
-        </div>
-        <div>
-          <Skeleton className="mb-3 h-10 w-full rounded-full" />
-          <Card>
-            <SkeletonRows rows={8} />
-          </Card>
-        </div>
-      </div>
-    </div>
   )
 }

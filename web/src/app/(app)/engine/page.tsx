@@ -6,7 +6,7 @@ import { Tag, type Tone } from '@/components/ui/badge'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/ui/page-header'
-import { Skeleton } from '@/components/ui/skeleton'
+import { ENGINE_DESCRIPTION, ENGINE_TITLE, EngineBody } from '@/components/skeletons'
 import { early, requireRole } from '@/lib/auth'
 import { formatDateTime, relativeAge } from '@/lib/dates'
 import { formatInr, formatNumber } from '@/lib/format'
@@ -27,8 +27,8 @@ const td = 'h-11 px-3 align-middle first:pl-4 last:pr-4 sm:first:pl-5 sm:last:pr
 export default function EnginePage() {
   return (
     <>
-      <PageHeader title="Engine" description="Segments, budget, sources and runs. Changes apply from the next run." />
-      <Suspense fallback={<EngineSkeleton />}>
+      <PageHeader title={ENGINE_TITLE} description={ENGINE_DESCRIPTION} />
+      <Suspense fallback={<EngineBody />}>
         <Engine />
       </Suspense>
     </>
@@ -223,18 +223,6 @@ async function Engine() {
           ) : null}
         </CardBody>
       </Card>
-    </div>
-  )
-}
-
-function EngineSkeleton() {
-  return (
-    <div className="flex flex-col gap-6" aria-busy>
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Skeleton className="h-64 rounded-2xl" />
-        <Skeleton className="h-64 rounded-2xl" />
-      </div>
-      <Skeleton className="h-72 rounded-2xl" />
     </div>
   )
 }

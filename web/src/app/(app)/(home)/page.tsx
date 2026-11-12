@@ -3,7 +3,7 @@ import { Suspense } from 'react'
 import { AutoRefresh } from '@/components/shell/auto-refresh'
 import { Card, CardHeader } from '@/components/ui/card'
 import { PageHeader } from '@/components/ui/page-header'
-import { Skeleton, SkeletonRows } from '@/components/ui/skeleton'
+import { TodaySkeleton } from '@/components/skeletons'
 import { FollowupList, type FollowupItem } from '@/components/today/followup-list'
 import { SendList, type SendItem } from '@/components/today/send-list'
 import { TodayKpiTiles } from '@/components/today/today-kpis'
@@ -94,7 +94,7 @@ async function Today() {
 
   return (
     <>
-      <AutoRefresh seconds={60} />
+      <AutoRefresh />
       <PageHeader title="Today" actions={<span className="text-md text-tx-3">{formatWeekday(now)}</span>} />
       <TodayKpiTiles kpis={kpis} />
 
@@ -116,27 +116,5 @@ async function Today() {
         </div>
       </Card>
     </>
-  )
-}
-
-function TodaySkeleton() {
-  return (
-    <div aria-busy>
-      <PageHeader title="Today" />
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
-        {Array.from({ length: 6 }, (_, i) => (
-          <div key={i} className="rounded-xl border border-line-2 bg-surface px-4 py-3">
-            <Skeleton className="h-3 w-20" />
-            <Skeleton className="mt-3 h-7 w-12" />
-          </div>
-        ))}
-      </div>
-      <Card className="mt-6">
-        <CardHeader title="Send list" />
-        <div className="mt-2 border-t border-line-2">
-          <SkeletonRows rows={4} />
-        </div>
-      </Card>
-    </div>
   )
 }
