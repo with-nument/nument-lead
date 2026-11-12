@@ -64,21 +64,21 @@ models:
     cached_input: 0.025
 
   # ---- OpenAI (disabled while the key is unavailable; prices read from the pricing page) ----
-  gpt-5.4:
+  gpt-6.1-sol:              # ET gateway guide, 3 Nov 2026
     provider: openai
-    input: 2.50
-    output: 15.00           # reasoning tokens are billed as output
-    cached_input: 0.25
-  gpt-5-mini:
+    input: 2.00
+    output: 10.00           # reasoning tokens are billed as output
+    cached_input: 0.10
+  gpt-6.1-terra:
     provider: openai
-    input: 0.25
-    output: 2.00
-    cached_input: 0.025
-  gpt-5-nano:
+    input: 1.00
+    output: 5.00
+    cached_input: 0.05
+  gpt-6-luna:
     provider: openai
-    input: 0.05
-    output: 0.40
-    cached_input: 0.005
+    input: 0.10
+    output: 0.50
+    cached_input: 0.01
 
 search:
   # Gemini 3 and newer: billed per search query the model runs. 5,000 free a month, shared by all models,

@@ -350,7 +350,7 @@ class FakeOpenAI:
 
         class Models:
             def list(self) -> list[Any]:
-                return [SimpleNamespace(id="gpt-5-mini"), SimpleNamespace(id="gpt-5-nano")]
+                return [SimpleNamespace(id="gpt-6.1-terra"), SimpleNamespace(id="gpt-6-luna")]
 
         self.responses = Responses()
         self.files = Files()
@@ -375,9 +375,11 @@ def _oai(fake: FakeOpenAI) -> OpenAIProvider:
 
 def test_openai_request_uses_strict_schema_reasoning_and_tools() -> None:
     fake = FakeOpenAI([oresp(search_calls=2)])
-    resp = _oai(fake).generate(_req(provider="openai", model="gpt-5-mini", schema=LeadJudgement, tools=["web_search"]))
+    resp = _oai(fake).generate(
+        _req(provider="openai", model="gpt-6.1-terra", schema=LeadJudgement, tools=["web_search"])
+    )
     body = fake.calls[0]
-    assert body["model"] == "gpt-5-mini" and body["instructions"] == "sys" and body["input"] == "user text"
+    assert body["model"] == "gpt-6.1-terra" and body["instructions"] == "sys" and body["input"] == "user text"
     assert body["reasoning"] == {"effort": "low"} and "temperature" not in body
     assert body["tools"] == [{"type": "web_search"}] and body["timeout"] == 30
     fmt = body["text"]["format"]
@@ -410,7 +412,7 @@ def _http_error(cls: type[openai.APIStatusError], status: int, message: str = "e
     ],
 )
 def test_openai_errors_are_classified_and_redacted(exc: BaseException, kind: str) -> None:
-    err = openai_mod.classify_error(exc, "gpt-5-mini")
+    err = openai_mod.classify_error(exc, "gpt-6.1-terra")
     assert err.kind == kind
     assert "abcdefghijklmnop" not in err.message
 
@@ -419,14 +421,16 @@ def test_openai_content_filter_is_blocked() -> None:
     resp = SimpleNamespace(output_text="", usage=None, status="incomplete",
                            incomplete_details=SimpleNamespace(reason="content_filter"), output=[])  # fmt: skip
     with pytest.raises(ProviderError) as caught:
-        _oai(FakeOpenAI([resp])).generate(_req(provider="openai", model="gpt-5-mini"))
+        _oai(FakeOpenAI([resp])).generate(_req(provider="openai", model="gpt-6.1-terra"))
     assert caught.value.kind == "blocked"
 
 
 def test_openai_batch_round_trip() -> None:
     fake = FakeOpenAI()
     provider = _oai(fake)
-    batch_id = provider.submit_batch("gpt-5-mini", [_req(provider="openai", model="gpt-5-mini", key="k1")], "nlead")
+    batch_id = provider.submit_batch(
+        "gpt-6.1-terra", [_req(provider="openai", model="gpt-6.1-terra", key="k1")], "nlead"
+    )
     assert batch_id == "batch_1" and fake.batch_kwargs["endpoint"] == "/v1/responses"
     line = json.loads(fake.files_created[0].strip())
     assert line["custom_id"] == "k1" and line["url"] == "/v1/responses" and line["body"]["text"]["format"]["strict"]
@@ -435,7 +439,7 @@ def test_openai_batch_round_trip() -> None:
     fake.file_contents["out"] = json.dumps({
         "custom_id": "k1",
         "response": {"status_code": 200, "body": {
-            "model": "gpt-5-mini-2025-08-07", "status": "completed",
+            "model": "gpt-6.1-terra-2025-08-07", "status": "completed",
             "output": [{"type": "message", "content": [{"type": "output_text", "text": "{\"a\": 1}"}]}],
             "usage": {"input_tokens": 9, "output_tokens": 4}}},
     })  # fmt: skip
@@ -445,7 +449,7 @@ def test_openai_batch_round_trip() -> None:
     assert rows[0].key == "k1" and rows[0].response is not None and rows[0].response.text == '{"a": 1}'
     assert rows[0].response.usage.input_tokens == 9
     assert rows[1].key == "k2" and rows[1].response is None
-    assert [m.name for m in provider.list_models()] == ["gpt-5-mini", "gpt-5-nano"]
+    assert [m.name for m in provider.list_models()] == ["gpt-6.1-terra", "gpt-6-luna"]
 
 
 def test_redact_removes_keys_and_tokens() -> None:
@@ -453,3 +457,24 @@ def test_redact_removes_keys_and_tokens() -> None:
     out = redact(text)
     assert "AIzaSy" not in out and "sk-proj-abcdefghij" not in out and "SECRET1" not in out
     assert "[redacted]" in out and len(redact("x" * 900)) == 500
+
+
+def test_the_gateway_falls_back_to_the_direct_key_when_it_errors() -> None:
+    """ET AI Gateway first: its outages and shared rate limits move the call to the direct Gemini key."""
+    gateway = FakeGenaiClient([api_error(502, "could not reach", "UNAVAILABLE")])
+    direct = FakeGenaiClient([gresp("hello")])
+    by_key = {"gateway-key": gateway, "direct-key": direct}
+    provider = GeminiProvider(
+        ["gateway-key", "direct-key"],
+        client_factory=lambda key: by_key[key],
+        base_urls=["https://gateway.example/gemini", None],
+    )
+    assert provider.generate(_req(schema=None)).text == "hello"
+    assert provider.active_key == 2
+
+
+def test_a_direct_key_does_not_fall_back_on_a_transient_error() -> None:
+    first = FakeGenaiClient([api_error(503, "overloaded", "UNAVAILABLE")])
+    second = FakeGenaiClient([gresp("never used")])
+    with pytest.raises(ProviderError):
+        _provider(first, second).generate(_req(schema=None))

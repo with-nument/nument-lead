@@ -34,9 +34,9 @@ models:
   g_flash: {provider: gemini, model: gemini-3.8-flash, thinking_levels: [low, medium, high]}
   g_flash_prev: {provider: gemini, model: gemini-3.6-flash, thinking_levels: [minimal, low, medium, high]}
   g_lite:  {provider: gemini, model: gemini-3.5-flash-lite, thinking_levels: [minimal, low, medium, high]}
-  o_top:   {provider: openai, model: gpt-5.4, thinking_levels: [low, medium, high]}
-  o_mini:  {provider: openai, model: gpt-5-mini, thinking_levels: [minimal, low, medium, high]}
-  o_nano:  {provider: openai, model: gpt-5-nano, thinking_levels: [minimal, low, medium, high]}
+  o_top:   {provider: openai, model: gpt-6.1-sol, thinking_levels: [low, medium, high]}
+  o_mini:  {provider: openai, model: gpt-6.1-terra, thinking_levels: [minimal, low, medium, high]}
+  o_nano:  {provider: openai, model: gpt-6-luna, thinking_levels: [minimal, low, medium, high]}
 
 # Field meanings (Step 4.2.1):
 #   primary, fallbacks       chain tried in order; disabled, keyless or tripped providers are skipped

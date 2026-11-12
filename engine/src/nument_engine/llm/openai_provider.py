@@ -132,10 +132,14 @@ class OpenAIProvider:
 
     name: Provider = "openai"
 
-    def __init__(self, api_key: str, *, client_factory: Callable[[str], Any] | None = None) -> None:
+    def __init__(
+        self, api_key: str, *, client_factory: Callable[[str], Any] | None = None, base_url: str | None = None
+    ) -> None:
         if not api_key:
             raise ValueError("OpenAIProvider needs an API key")
-        self._client = (client_factory or (lambda key: openai.OpenAI(api_key=key, timeout=120, max_retries=0)))(api_key)
+        self._client = (
+            client_factory or (lambda key: openai.OpenAI(api_key=key, base_url=base_url, timeout=120, max_retries=0))
+        )(api_key)
 
     def generate(self, req: LLMRequest) -> LLMResponse:
         body = _body(req, req.model)

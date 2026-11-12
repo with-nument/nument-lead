@@ -99,20 +99,76 @@ def check_migrations(conn: Any) -> Check:
     return Check("migrations", "ok", f"{len(rows)} applied", {"applied": len(rows)})
 
 
+AUTO_OPENAI_KEY = "providers_auto.openai"  # false = the founder decides by hand; default: switch by itself
+
+
+def probe_openai(timeout_s: float = 20.0) -> bool | None:
+    """True when OpenAI answers a model-list call (free), False when the key is refused, None when unsure."""
+    import httpx
+
+    s = get_settings()
+    gateway = s.et_gateway_key.get_secret_value() if s.et_gateway_key is not None else ""
+    direct = s.openai_api_key.get_secret_value() if s.openai_api_key is not None else ""
+    key = gateway or direct
+    if not key:
+        return None
+    base = f"{s.gateway_base_url.rstrip('/')}/openai/v1" if gateway else "https://api.openai.com/v1"
+    try:
+        r = httpx.get(f"{base}/models", headers={"Authorization": f"Bearer {key}"}, timeout=timeout_s)
+    except httpx.HTTPError:
+        return None
+    if r.status_code == 200:
+        return True
+    return False if r.status_code in (401, 403) else None
+
+
+def auto_switch_openai(conn: Any, probe: Any = None) -> Check | None:
+    """Turn OpenAI on the day the gateway (or a direct key) lets it answer, and off again when it is refused.
+
+    Runs with every health check (start of the night and morning runs), so no code or setting change is needed
+    when OpenAI goes live. Sends one alert email on each switch. `providers_auto.openai = false` stops it.
+    """
+    if db.get_setting(AUTO_OPENAI_KEY, True, conn=conn) is False:
+        return None
+    works = (probe or probe_openai)()
+    if works is None:
+        return None
+    enabled = dict(db.get_setting("providers_enabled", {}, conn=conn) or {})
+    if bool(enabled.get("openai", False)) == works:
+        return None
+    enabled["openai"] = works
+    db.set_setting("providers_enabled", enabled, conn=conn)
+    detail = (
+        "switched on by itself: OpenAI now answers, so it shares the work with Gemini"
+        if works
+        else "switched off by itself: OpenAI refused the key; Gemini runs every task"
+    )
+    log.warning("ai.openai_auto_switch", on=works)
+    try:
+        from . import emails
+
+        if notify.email_configured():
+            emails.send_alerts([emails.alert_item("ai.openai", "warn", detail)])
+    except Exception as exc:  # the switch itself must never fail a run
+        log.warning("ai.openai_switch_email_failed", error=f"{type(exc).__name__}: {str(exc)[:200]}")
+    return Check("ai.openai.switch", "info", detail)
+
+
 def check_providers(conn: Any) -> list[Check]:
     s = get_settings()
     enabled = db.get_setting("providers_enabled", {}, conn=conn) or {}
     out: list[Check] = []
     if not enabled.get("gemini", False):
         out.append(Check("ai.gemini", "fail", "providers_enabled.gemini is off: Gemini must run every task (A.2.4)"))
-    elif not s.gemini_api_key:
-        out.append(Check("ai.gemini", "fail", "GEMINI_API_KEY is not set"))
+    elif not (s.gemini_api_key or s.et_gateway_key):
+        out.append(Check("ai.gemini", "fail", "neither ET_GATEWAY_KEY nor GEMINI_API_KEY is set"))
     else:
         backup = "with a backup key" if s.gemini_api_key_backup else "no backup key"
         out.append(Check("ai.gemini", "ok", f"on, key set, {backup}"))
     if enabled.get("openai", False):
-        status: Status = "ok" if s.openai_api_key else "warn"
-        out.append(Check("ai.openai", status, "on" + ("" if s.openai_api_key else ", but OPENAI_API_KEY is missing")))
+        has_key = bool(s.openai_api_key or s.et_gateway_key)
+        status: Status = "ok" if has_key else "warn"
+        out.append(Check("ai.openai", status, "on" + ("" if has_key else ", but no OpenAI or gateway key is set")))
     else:
         out.append(Check("ai.openai", "info", "off (providers_enabled.openai = false); Gemini runs every task"))
     breakers = db.fetch_all(
@@ -286,6 +342,9 @@ def collect(conn: Any = None, *, now: datetime | None = None) -> list[Check]:
     now = now or datetime.now(UTC)
     env = get_settings().app_env
     checks = [check_database(conn), check_migrations(conn)]
+    switched = auto_switch_openai(conn)
+    if switched is not None:
+        checks.append(switched)
     checks += check_providers(conn)
     checks += check_keys()
     checks.append(check_spend(conn))

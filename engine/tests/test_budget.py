@@ -33,7 +33,7 @@ def test_prices_file_is_valid_and_dated() -> None:
     prices = load_prices()
     assert prices.verified_on >= date(2026, 11, 12)
     assert prices.batch_discount == 0.5
-    for name in ("gemini-4-argon", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gpt-5-mini"):
+    for name in ("gemini-4-argon", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gpt-6.1-terra"):
         assert name in prices.models
 
 
@@ -282,12 +282,12 @@ def test_record_writes_usd_inr_and_fallback(llm_db: str) -> None:
     budget = Budget(run_id, clock=FakeClock())
     inr = budget.record(
         "gemini", "gemini-3.8-flash", "write_message", input_tokens=10, output_tokens=5, usd=0.01,
-        fallback_from="openai:gpt-5-mini",
+        fallback_from="openai:gpt-6.1-terra",
     )  # fmt: skip
     assert inr == pytest.approx(0.88)
     row = db.fetch_one("select * from public.costs where run_id = %s", [run_id])
     assert row is not None
-    assert (row["provider"], row["task"], row["fallback_from"]) == ("gemini", "write_message", "openai:gpt-5-mini")
+    assert (row["provider"], row["task"], row["fallback_from"]) == ("gemini", "write_message", "openai:gpt-6.1-terra")
     assert float(row["usd"]) == pytest.approx(0.01) and float(row["inr"]) == pytest.approx(0.88)
     assert row["at"] == budget.clock()
 

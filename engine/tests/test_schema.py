@@ -229,7 +229,7 @@ def test_known_values_are_accepted(db_conn: Conn) -> None:
         )
     for provider in ("gemini", "openai", "cache", "google_places", "google_search", "pagespeed", "other"):
         db_conn.execute(
-            "insert into public.costs (provider, task, fallback_from) values (%s, 'probe', 'openai:gpt-5-mini')",
+            "insert into public.costs (provider, task, fallback_from) values (%s, 'probe', 'openai:gpt-6.1-terra')",
             [provider],
         )
     for status in ("new", "processing", "processed", "researched", "lead_created", "rejected"):

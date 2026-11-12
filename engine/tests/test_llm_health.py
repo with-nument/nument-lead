@@ -32,7 +32,7 @@ def test_model_check_passes_when_every_gemini_model_exists(llm_db: str) -> None:
     lines = "\n".join(c.line for c in checks)
     assert "OK    gemini: 5 models listed" in lines
     assert "WARN  openai: skipped (providers_enabled.openai = false)" in lines
-    assert "WARN  write_message primary openai:gpt-5-mini skipped. Will use gemini:gemini-3.8-flash" in lines
+    assert "WARN  write_message primary openai:gpt-6.1-terra skipped. Will use gemini:gemini-3.8-flash" in lines
 
 
 def test_model_check_fails_on_a_missing_gemini_model(llm_db: str) -> None:

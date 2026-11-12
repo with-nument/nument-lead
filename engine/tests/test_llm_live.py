@@ -96,12 +96,12 @@ def _end_to_end(router: Router) -> None:
     res = router.run_result("write_message", health.SMOKE_INPUTS["write_message"], lead_id=lead_id)
     print(f"write_message: {res.tag} fallback_from={res.fallback_from} inr={res.inr:.4f}")
     print(f"  message: {res.output.message}")
-    assert res.provider == "gemini" and res.fallback_from == "openai:gpt-5-mini"
+    assert res.provider == "gemini" and res.fallback_from == "openai:gpt-6.1-terra"
     assert db.scalar("select count(*) from public.activities where lead_id = %s and type = 'ai_output'", [lead_id]) == 1
     assert (
         db.scalar(
             "select count(*) from public.costs where run_id = %s and task = 'write_message' "
-            "and fallback_from = 'openai:gpt-5-mini'",
+            "and fallback_from = 'openai:gpt-6.1-terra'",
             [router.run_id],
         )
         == 1

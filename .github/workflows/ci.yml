@@ -125,6 +125,7 @@ jobs:
         env:
           APP_ENV: dev
           DATABASE_URL: ${{ secrets.DEV_DATABASE_URL || secrets.DATABASE_URL }}
+          ET_GATEWAY_KEY: ${{ secrets.ET_GATEWAY_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_API_KEY_BACKUP: ${{ secrets.GEMINI_API_KEY_BACKUP }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

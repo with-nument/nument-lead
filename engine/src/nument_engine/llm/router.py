@@ -108,17 +108,26 @@ class AIResult[T: BaseModel]:
 def build_providers(settings: Settings) -> dict[str, LLMProvider]:
     """Provider clients for every key that is set. Whether a provider is used is decided by Availability."""
     providers: dict[str, LLMProvider] = {}
-    gemini_keys = [
-        k.get_secret_value() for k in (settings.gemini_api_key, settings.gemini_api_key_backup) if k is not None
-    ]
-    gemini_keys = [k for k in gemini_keys if k]
-    if gemini_keys:
+    gateway = settings.et_gateway_key.get_secret_value() if settings.et_gateway_key is not None else ""
+    base = settings.gateway_base_url.rstrip("/")
+    keys: list[str] = []
+    urls: list[str | None] = []
+    if gateway:  # the ET AI Gateway first, the direct keys as the automatic backup
+        keys.append(gateway)
+        urls.append(f"{base}/gemini")
+    for k in (settings.gemini_api_key, settings.gemini_api_key_backup):
+        if k is not None and k.get_secret_value():
+            keys.append(k.get_secret_value())
+            urls.append(None)
+    if keys:
         from .gemini import GeminiProvider
 
-        providers["gemini"] = GeminiProvider(gemini_keys)
-    if settings.openai_api_key is not None and settings.openai_api_key.get_secret_value():
-        from .openai_provider import OpenAIProvider
+        providers["gemini"] = GeminiProvider(keys, base_urls=urls)
+    from .openai_provider import OpenAIProvider
 
+    if gateway:
+        providers["openai"] = OpenAIProvider(gateway, base_url=f"{base}/openai/v1")
+    elif settings.openai_api_key is not None and settings.openai_api_key.get_secret_value():
         providers["openai"] = OpenAIProvider(settings.openai_api_key.get_secret_value())
     return providers
 

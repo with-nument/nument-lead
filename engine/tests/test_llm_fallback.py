@@ -29,9 +29,9 @@ def test_openai_switched_off_write_message_is_answered_by_gemini(llm_db: str) ->
     router = make_router({"gemini": gemini, "openai": openai}, clock=clock, enabled={"gemini": True, "openai": False})
     res = router.run_result("write_message", SMOKE_INPUTS["write_message"])
     assert openai.calls == []
-    assert (res.provider, res.model, res.fallback_from) == ("gemini", "gemini-3.8-flash", "openai:gpt-5-mini")
+    assert (res.provider, res.model, res.fallback_from) == ("gemini", "gemini-3.8-flash", "openai:gpt-6.1-terra")
     row = db.fetch_one("select provider, model, fallback_from from public.costs where at = %s", [clock()])
-    assert row == {"provider": "gemini", "model": "gemini-3.8-flash", "fallback_from": "openai:gpt-5-mini"}
+    assert row == {"provider": "gemini", "model": "gemini-3.8-flash", "fallback_from": "openai:gpt-6.1-terra"}
 
 
 def test_openai_key_missing_gives_the_same_result(llm_db: str) -> None:
@@ -39,14 +39,14 @@ def test_openai_key_missing_gives_the_same_result(llm_db: str) -> None:
     gemini = FakeProvider("gemini", [reply(OUTPUTS["write_message"])])
     router = make_router({"gemini": gemini}, enabled={"gemini": True, "openai": True})
     res = router.run_result("write_message", SMOKE_INPUTS["write_message"])
-    assert (res.model, res.fallback_from) == ("gemini-3.8-flash", "openai:gpt-5-mini")
+    assert (res.model, res.fallback_from) == ("gemini-3.8-flash", "openai:gpt-6.1-terra")
 
 
 def test_openai_is_used_when_switched_on_and_working(llm_db: str) -> None:
     openai = FakeProvider("openai", [reply(OUTPUTS["write_message"], provider="openai")])
     router = make_router({"gemini": FakeProvider("gemini"), "openai": openai}, enabled={"gemini": True, "openai": True})
     res = router.run_result("write_message", SMOKE_INPUTS["write_message"])
-    assert (res.provider, res.model, res.fallback_from) == ("openai", "gpt-5-mini", None)
+    assert (res.provider, res.model, res.fallback_from) == ("openai", "gpt-6.1-terra", None)
     assert openai.calls[0].thinking == "low" and openai.calls[0].temperature is None
 
 
@@ -129,7 +129,7 @@ def test_every_model_failing_raises_all_providers_down(llm_db: str) -> None:
         router.run_result("classify_signal", SMOKE_INPUTS["classify_signal"])
     text = str(caught.value)
     assert "gemini:gemini-3.5-flash-lite bad_request" in text
-    assert "openai:gpt-5-nano skipped (providers_enabled.openai = false)" in text
+    assert "openai:gpt-6-luna skipped (providers_enabled.openai = false)" in text
     assert stats["all_providers_down"] == {"classify_signal": 1}
 
 

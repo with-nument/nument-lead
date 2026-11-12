@@ -255,3 +255,29 @@ def test_prune_dry_run_counts_and_keeps_everything(db_conn: Conn) -> None:
         )
         == 7
     )
+
+
+@pytest.mark.parametrize(
+    ("probe", "start", "end", "switched"),
+    [
+        (True, False, True, True),
+        (False, True, False, True),
+        (None, False, False, False),  # unsure (network): leave it as it is
+        (True, True, True, False),  # already on: nothing to do
+    ],
+)
+def test_openai_switches_itself_on_and_off(
+    db_conn: Conn, probe: bool | None, start: bool, end: bool, switched: bool
+) -> None:
+    db.set_setting("providers_enabled", {"gemini": True, "openai": start}, conn=db_conn)
+    check = health.auto_switch_openai(db_conn, probe=lambda: probe)
+    assert (check is not None) is switched
+    assert db.get_setting("providers_enabled", {}, conn=db_conn)["openai"] is end
+
+
+def test_openai_auto_switch_can_be_turned_off(db_conn: Conn) -> None:
+    db.set_setting("providers_enabled", {"gemini": True, "openai": False}, conn=db_conn)
+    db.set_setting(health.AUTO_OPENAI_KEY, False, conn=db_conn)
+    assert health.auto_switch_openai(db_conn, probe=lambda: True) is None
+    assert db.get_setting("providers_enabled", {}, conn=db_conn)["openai"] is False
+    db.set_setting(health.AUTO_OPENAI_KEY, True, conn=db_conn)

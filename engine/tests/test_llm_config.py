@@ -41,7 +41,7 @@ def test_balanced_tier_matches_the_plan() -> None:
         "classify_signal": ("gemini-3.5-flash-lite", "sync", 4),
         "extract_facts": ("gemini-3.8-flash", "batch", 3),
         "judge_lead": ("gemini-4-argon", "sync", 2),
-        "write_message": ("gpt-5-mini", "sync", 1),
+        "write_message": ("gpt-6.1-terra", "sync", 1),
         "check_message": ("gemini-3.8-flash", "sync", 1),
         "grounded_search": ("gemini-3.8-flash", "sync", 5),
         "weekly_audit": ("gemini-4-argon", "sync", 6),

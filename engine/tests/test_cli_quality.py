@@ -92,7 +92,7 @@ def test_eval_skipped_for_budget_exits_3(engine_db: str, tmp_path: Path, monkeyp
 
 def test_health_exit_codes_and_summary(engine_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
     failing = runner.invoke(app, ["health"])  # no GEMINI_API_KEY in tests: Gemini cannot run
-    assert failing.exit_code == 1 and "FAIL" in failing.output and "GEMINI_API_KEY is not set" in failing.output
+    assert failing.exit_code == 1 and "FAIL" in failing.output and "nor GEMINI_API_KEY is set" in failing.output
     monkeypatch.setenv("GEMINI_API_KEY", "test-key-not-real")
     settings_module.get_settings.cache_clear()
     healthy = runner.invoke(app, ["health"])

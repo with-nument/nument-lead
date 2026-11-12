@@ -214,12 +214,28 @@ class GeminiProvider:
 
     name: Provider = "gemini"
 
-    def __init__(self, api_keys: list[str], *, client_factory: Callable[[str], Any] | None = None) -> None:
-        keys = [k for k in api_keys if k]
-        if not keys:
+    def __init__(
+        self,
+        api_keys: list[str],
+        *,
+        client_factory: Callable[[str], Any] | None = None,
+        base_urls: list[str | None] | None = None,
+    ) -> None:
+        pairs = [(k, (base_urls or [])[i] if i < len(base_urls or []) else None) for i, k in enumerate(api_keys)]
+        pairs = [(k, u) for k, u in pairs if k]
+        if not pairs:
             raise ValueError("GeminiProvider needs at least one API key")
-        self._keys = keys
-        self._factory = client_factory or (lambda key: genai.Client(api_key=key))
+        self._keys = [k for k, _ in pairs]
+        self._urls: list[str | None] = [u for _, u in pairs]
+        if client_factory is not None:
+            self._factory = client_factory
+        else:
+            urls = dict(pairs)
+            self._factory = lambda key: (
+                genai.Client(api_key=key, http_options={"base_url": urls[key]})
+                if urls.get(key)
+                else genai.Client(api_key=key)
+            )
         self._clients: dict[int, Any] = {}
         self._active = 0
         self._lock = threading.Lock()
@@ -248,7 +264,11 @@ class GeminiProvider:
                 return call(self._client(index))
             except Exception as exc:
                 err = classify_error(exc, model)
-                if err.kind not in ("auth", "quota") or index + 1 >= len(self._keys):
+                # A gateway key also falls back on its own outages and shared rate limits (transient errors):
+                # the direct keys reach Google without it.
+                via_gateway = self._urls[index] is not None
+                movable = err.kind in ("auth", "quota") or (via_gateway and err.kind == "transient")
+                if not movable or index + 1 >= len(self._keys):
                     raise err from None
                 last = err
                 with self._lock:

@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     supabase_service_role_key: SecretStr | None = None
 
     # AI
+    # ET AI Gateway (founder, 13 Nov): one key for Gemini and OpenAI through one address, tried first;
+    # the direct Gemini keys below stay as the automatic backup.
+    et_gateway_key: SecretStr | None = None
+    gateway_base_url: str = "https://etaiprod.indiatimes.com/studio/gateway"
     gemini_api_key: SecretStr | None = None
     gemini_api_key_backup: SecretStr | None = None  # second key, used when the first hits its quota (A.13.4)
     openai_api_key: SecretStr | None = None
