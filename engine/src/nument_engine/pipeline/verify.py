@@ -143,6 +143,7 @@ _SERVICE_COMPETITOR: Final = re.compile(
     r"placement|outsourcing|crm|erp)\b",
     re.I,
 )
+AGENCY_FIELDS: Final = ("business_name", "is_agency_or_vendor", "service", "sales_note", "in_house_tech")
 AGENCY_QUESTION: Final = (
     "Is this business an agency or software vendor that sells the same services as Nument "
     "(websites, apps, software, automation, marketing or hiring services)?"
@@ -1113,7 +1114,10 @@ def plan_business(
                 "field": "is_agency_or_vendor",
                 "question": AGENCY_QUESTION,
                 "hint": hints[0],
-                "facts": [_fact_payload(f, by_id, by_url) for f in verified][:20],
+                "facts": [
+                    {k: v for k, v in _fact_payload(f, by_id, by_url).items() if k != "context"}
+                    for f in evidence.by_field(verified, *AGENCY_FIELDS)
+                ][:12],
                 "pages": [
                     {"url": p["url"], "text": (p.get("text") or "")[:CONTEXT_CHARS]}
                     for p in bundle.pages
@@ -1428,7 +1432,16 @@ def run(rc: RunContext, router: ai.AIRouter | None = None, deps: VerifyDeps | No
             if seg is None:
                 stats["skipped.unknown_segment"] += 1
                 continue
-            plan = plan_business(bundle, seg, excl, suppressed, asker, deps)
+            try:
+                plan = plan_business(bundle, seg, excl, suppressed, asker, deps)
+            except Exception as exc:  # one odd record must not stop the morning run; it is retried tomorrow
+                stats["errors"] += 1
+                log.error(
+                    "verify.business_failed",
+                    business_id=str(bundle.business["id"]),
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+                continue
             plans.append(plan)
             stats.update(plan.stats)
         if plans and not rc.opts.dry_run:

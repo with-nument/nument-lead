@@ -740,6 +740,7 @@ def score_ids(
     excl: Exclusions,
     suppressed: Suppression,
     now: datetime,
+    errors: Counter[str] | None = None,
 ) -> list[Scored]:
     """Score a chunk of businesses in memory."""
     biz = evidence.businesses(ids)
@@ -753,17 +754,23 @@ def score_ids(
         seg = segments.get(str((b or {}).get("segment_id")))
         if b is None or seg is None:
             continue
-        r = score_business(
-            b,
-            facts.get(bid, []),
-            signals.get(bid, []),
-            contacts.get(bid, []),
-            seg,
-            configs[seg.id],
-            excl,
-            now,
-            suppressed,
-        )
+        try:
+            r = score_business(
+                b,
+                facts.get(bid, []),
+                signals.get(bid, []),
+                contacts.get(bid, []),
+                seg,
+                configs[seg.id],
+                excl,
+                now,
+                suppressed,
+            )
+        except Exception as exc:  # one odd record must not stop the run; it is scored again next run
+            if errors is not None:
+                errors["errors"] += 1
+            log.error("score.business_failed", business_id=bid, error=f"{type(exc).__name__}: {exc}")
+            continue
         prev = latest.get(bid)
         if prev is not None and same_result(prev, r):
             judged = (prev.get("reasons") or {}).get("judge") or {}
@@ -820,7 +827,7 @@ def run(rc: RunContext, *, all_businesses: bool = False, fetch: leads.Fetcher | 
     ids = pending_ids(list(segments), rc.opts.limit, all_businesses)
     scored: list[Scored] = []
     for start in range(0, len(ids), CHUNK):
-        scored += score_ids(ids[start : start + CHUNK], segments, configs, excl, suppressed, now)
+        scored += score_ids(ids[start : start + CHUNK], segments, configs, excl, suppressed, now, errors=stats)
     states = leads.load_states([str(s.business["id"]) for s in scored])
     pct = {sid: cfg.fit_only_max_pct for sid, cfg in configs.items()}
     plans = leads.plan_all(candidates(scored), states, pct, now, fetch=fetch, stats=stats)

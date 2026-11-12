@@ -595,16 +595,21 @@ def run(rc: RunContext, router: ai.AIRouter | None = None) -> dict[str, Any]:
         b, seg = biz.get(lead["business_id"]), segments.get(str(lead["segment_id"]))
         if b is None or seg is None:
             continue
-        li = build_input(
-            lead,
-            b,
-            seg,
-            facts.get(lead["business_id"], []),
-            signals.get(lead["business_id"], []),
-            contacts.get(lead["business_id"], []),
-            configs[seg.id],
-            now,
-        )
+        try:
+            li = build_input(
+                lead,
+                b,
+                seg,
+                facts.get(lead["business_id"], []),
+                signals.get(lead["business_id"], []),
+                contacts.get(lead["business_id"], []),
+                configs[seg.id],
+                now,
+            )
+        except Exception as exc:  # bad data for one lead must not stop the others
+            stats["errors"] += 1
+            log.error("message.input_failed", lead_id=lead["id"], error=f"{type(exc).__name__}: {exc}")
+            continue
         try:
             drafts = writer.write(li)
         except ai.AIBudgetStop:

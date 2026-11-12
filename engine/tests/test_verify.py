@@ -295,7 +295,9 @@ def test_one_competitor_sign_asks_verify_flagged(is_competitor: bool, status: st
     phone = _fact("c", "phone", {"number": "+91 98765 43210"}, "Call +91 98765 43210 for appointments.", HOME)
     plan = plan_business(_bundle([phone], pages=[page]), CLINICS, EXCL, NO_SUPPRESSION, asker, DEPS)
     assert router.tasks() == ["verify_flagged"]
-    assert "question" in router.calls[0].inputs and router.calls[0].inputs["field"] == "is_agency_or_vendor"
+    asked = router.calls[0].inputs
+    assert "question" in asked and asked["field"] == "is_agency_or_vendor"
+    assert all("context" not in f for f in asked["facts"]) and len(asked["pages"]) <= 4
     assert plan.status == status
 
 
