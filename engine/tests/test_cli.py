@@ -2,28 +2,15 @@
 
 from __future__ import annotations
 
-import re
-
 import pytest
 from typer.testing import CliRunner
 
 from nument_engine import db
 from nument_engine.cli import app, hoist_global_options
 
+from .cli_text import plain
+
 runner = CliRunner()
-
-_ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
-_BOX = re.compile(r"[\u2500-\u257f]")
-
-
-def plain(text: str) -> str:
-    """Rich output as plain words: no colour codes, no panel borders, single spaces.
-
-    Typer colours its output when GITHUB_ACTIONS or FORCE_COLOR is set, which splits flags like
-    `--limit` with escape codes and wraps panels at 80 columns. Comparing plain text keeps these
-    tests identical on a laptop and in CI.
-    """
-    return " ".join(_BOX.sub(" ", _ANSI.sub("", text)).split())
 
 
 TOP_LEVEL = [

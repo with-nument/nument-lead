@@ -25,6 +25,7 @@ from typing import Any, Final, cast
 from psycopg import Connection
 
 from .. import db
+from ..learn.weights import active_document
 from ..logging import get_logger
 from ..models import SIGNAL_CATEGORY, PitchMode, make_test_group
 from ..segments import Segment, load_segments, scoring_config
@@ -189,14 +190,23 @@ def decay(observed_at: datetime, expires_at: datetime, now: datetime) -> float:
 
 
 def signal_points(signal: Mapping[str, Any], seg: Segment, cfg: ScoringConfig) -> float:
-    """Learned weight first (Step 16), then the stored points (segment override applied by Step 7), then A.12.3."""
+    """Points for one signal: its own stored points (Step 7 may give a strong signal more than the type's
+    default), scaled by what learning did to its type (Step 16.3).
+
+    The type default is the segment override, else A.12.3. A learned type weight acts as a multiplier
+    `learned / default`, so per-signal strength survives re-weighting and the version 0 document (learned
+    equals default) changes nothing. A type whose default is 0 takes the learned value as is.
+    """
     kind = str(signal["type"])
-    if kind in cfg.signal_points:
-        return cfg.signal_points[kind]
+    default = float(seg.signal_points.get(kind, DEFAULT_SIGNAL_POINTS.get(kind, 0)))  # type: ignore[call-overload]
     stored = float(signal.get("points") or 0)
-    if stored > 0:
-        return stored
-    return float(seg.signal_points.get(kind, DEFAULT_SIGNAL_POINTS.get(kind, 0)))  # type: ignore[call-overload]
+    own = stored if stored > 0 else default
+    learned = cfg.signal_points.get(kind)
+    if learned is None:
+        return own
+    if default <= 0:
+        return float(learned)
+    return own * float(learned) / default
 
 
 def intent_score(
@@ -348,31 +358,54 @@ def can_pay_points(
     cfg: ScoringConfig,
 ) -> tuple[float, list[str]]:
     """0 to 30 from measurable signs the business can pay Rs 50K or more (11.3)."""
+    total, why, _ = can_pay_breakdown(b, facts, active, seg, cfg)
+    return total, why
+
+
+def can_pay_breakdown(
+    b: Mapping[str, Any],
+    facts: Sequence[Row],
+    active: Sequence[Mapping[str, Any]],
+    seg: Segment,
+    cfg: ScoringConfig,
+) -> tuple[float, list[str], list[str]]:
+    """`can_pay_points` plus the proxy keys the business earned (`branches_2plus`, `pays_for_software`, ...).
+
+    The keys go into `scores.reasons.can_pay_proxies`, where the learning loop measures each proxy's
+    outcomes (Step 16.2). A matched tier is listed even when its points are 0, so it can still be learned.
+    """
     why: list[str] = []
+    proxies: list[str] = []
     total = 0.0
-    for label, column, fact_field, tiers in (
-        ("branches_count", "branches_count", "branches", cfg.branches),
-        ("staff_count", "staff_count", "staff_or_doctors", cfg.staff),
-        ("review_count", "review_count", "", cfg.reviews),
+    for label, group, column, fact_field, tiers in (
+        ("branches_count", "branches", "branches_count", "branches", cfg.branches),
+        ("staff_count", "staff", "staff_count", "staff_or_doctors", cfg.staff),
+        ("review_count", "reviews", "review_count", "", cfg.reviews),
     ):
         value = business_count(b, facts, column, fact_field) if fact_field else b.get(column)
         tier = _tier_points(value, tiers)
-        if tier is not None and tier.points:
+        if tier is None:
+            continue
+        proxies.append(f"{group}_{int(tier.min)}plus")
+        if tier.points:
             total += tier.points
             why.append(f"{label}={value} (+{tier.points:g})")
     price = premium_price(facts, seg)
     if price is not None:
         total += cfg.premium_price
+        proxies.append("premium_price")
         why.append(
             f"premium price {fact_text(price)[:40]} (fact {evidence.short_id(price['id'])}, +{cfg.premium_price:g})"
         )
     paid = pays_for_software(facts)
     if paid:
         total += cfg.pays_for_software
+        proxies.append("pays_for_software")
         why.append(f"already pays for software: {paid} (+{cfg.pays_for_software:g})")
     site = custom_website(b, facts)
     if site:
         total += cfg.custom_website
+        proxies.append("custom_website")
         why.append(f"custom website: {site} (+{cfg.custom_website:g})")
     sub = b.get("subcategory") or seg.subcategory_for(b.get("category"), str(b.get("name") or ""))
     ticket = seg.ticket_points(sub)
@@ -382,8 +415,9 @@ def can_pay_points(
     funding = [s for s in active if s["type"] == "funding"]
     if funding:
         total += cfg.funding
+        proxies.append("funding")
         why.append(f"funding signal {evidence.short_id(funding[0]['id'])} (+{cfg.funding:g})")
-    return min(total, cfg.can_pay_cap), why
+    return min(total, cfg.can_pay_cap), why, proxies
 
 
 @dataclass(frozen=True)
@@ -523,7 +557,7 @@ def score_business(
     """The whole Step 11 rule score for one business (no AI)."""
     active = [s for s in signals if evidence.is_active(s, now)]
     fit, fit_why = fit_gate(b, facts, seg, excl)
-    can_pay, pay_why = can_pay_points(b, facts, active, seg, cfg)
+    can_pay, pay_why, pay_proxies = can_pay_breakdown(b, facts, active, seg, cfg)
     intent, kept = intent_score(
         [s for s in active if (s.get("category") or SIGNAL_CATEGORY.get(str(s["type"]))) != "money"], now, cfg, seg
     )
@@ -542,6 +576,7 @@ def score_business(
         "fit": fit_why,
         "fit_gate_failed": gate_failed,
         "can_pay": pay_why,
+        "can_pay_proxies": pay_proxies,
         "intent": [{"signal_id": str(s["id"]), "type": s["type"], "value": round(s["value"], 1)} for s in kept],
         "reach": [reach.reason],
         "reach_kind": reach.kind,
@@ -720,8 +755,60 @@ def pending_ids(
 
 
 def segment_configs(segments: Mapping[str, Segment], conn: Connection[Any] | None = None) -> dict[str, ScoringConfig]:
-    weights = db.get_setting("score_weights", {}, conn=conn) or {}
+    """Resolved configs with the weights in force: `learn.weights.use_weights` inside the eval gate, else
+    `settings.score_weights` completed with the YAML defaults (Step 16.3)."""
+    weights = active_document(conn)
     return {sid: ScoringConfig.for_segment(seg, weights) for sid, seg in segments.items()}
+
+
+@dataclass
+class Scorer:
+    """Score one business at a time, exactly as `nlead score` would, without writing anything.
+
+    Used by the eval gate and replays (Steps 16.4 and 17). Weights are read on every call, so a
+    `use_weights(doc)` block scores with the proposed weights.
+    """
+
+    segments: Mapping[str, Segment]
+    excl: Exclusions
+    suppressed: Suppression
+
+    @classmethod
+    def load(cls, conn: Connection[Any] | None = None) -> Scorer:
+        return cls(load_segments(get_settings().segments_dir), Exclusions.load(), Suppression.load(conn))
+
+    def score_rows(
+        self,
+        b: Mapping[str, Any],
+        facts: Sequence[Row],
+        signals: Sequence[Mapping[str, Any]],
+        contacts: Sequence[Row],
+        seg: Segment,
+        *,
+        now: datetime | None = None,
+    ) -> ScoreResult:
+        cfg = ScoringConfig.for_segment(seg, active_document())
+        return score_business(
+            b, facts, signals, contacts, seg, cfg, self.excl, now or datetime.now(UTC), self.suppressed
+        )
+
+    def score(
+        self, business_id: str, *, now: datetime | None = None, conn: Connection[Any] | None = None
+    ) -> ScoreResult | None:
+        """None when the business or its segment no longer exists."""
+        ids = [business_id]
+        b = evidence.businesses(ids, conn=conn).get(business_id)
+        seg = self.segments.get(str((b or {}).get("segment_id")))
+        if b is None or seg is None:
+            return None
+        return self.score_rows(
+            b,
+            evidence.verified_facts(ids, conn=conn).get(business_id, []),
+            evidence.signals_for(ids, conn=conn).get(business_id, []),
+            evidence.contacts_for(ids, conn=conn).get(business_id, []),
+            seg,
+            now=now,
+        )
 
 
 def enabled_segments(rc: RunContext, conn: Connection[Any] | None = None) -> dict[str, Segment]:

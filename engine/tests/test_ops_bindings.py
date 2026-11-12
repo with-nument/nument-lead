@@ -28,7 +28,7 @@ def test_optional_attr() -> None:
 def test_missing_parts_say_which_step_builds_them(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_module(monkeypatch, "nument_engine.pipeline.verify")
     fake_module(monkeypatch, "nument_engine.pipeline.score")
-    fake_module(monkeypatch, "nument_engine.pipeline.message")
+    fake_module(monkeypatch, "nument_engine.pipeline.lint")
     fake_module(monkeypatch, "nument_engine.llm.router")
     fake_module(monkeypatch, "nument_engine.http")
     for make, step in (
@@ -100,3 +100,29 @@ def test_page_fetcher_uses_the_polite_client_and_skips_failing_hosts(monkeypatch
     assert texts == {"https://ok.example.com/": "Open daily, call 98200 12345"}
     assert calls == ["https://blocked.example.com/", "https://ok.example.com/"]  # no second try at a failed host
     assert PoliteClient.closed
+
+
+def test_real_stage_modules_are_bound() -> None:
+    """After the merge the bindings reach the real Step 10 to 12 code, not stand-ins."""
+    from nument_engine.learn.weights import default_document, use_weights
+    from nument_engine.pipeline.score import Scorer, ScoringConfig
+    from nument_engine.pipeline.verify import Exclusions, Suppression
+    from nument_engine.segments import load_segments
+    from nument_engine.settings import get_settings
+
+    still_there = bindings.quote_checker()
+    assert still_there("Two branches in the city", "We have two branches in the city of Pune.") is True
+    assert still_there("Open 24 hours on Sunday", "We have two branches in the city of Pune.") is False
+
+    problems = bindings.message_linter()("Hello there", "message")
+    assert problems, "a two word message without Nument or a question must fail lint"
+
+    segments = load_segments(get_settings().segments_dir)
+    scorer = Scorer(segments, Exclusions.load(), Suppression(frozenset(), frozenset(), frozenset()))
+    seg = segments["clinics-in"]
+    business = {"id": "b1", "name": "Pune Dental Care", "category": "dental_clinic", "review_count": 320}
+    with use_weights(default_document(segments)):  # pinned weights: no database needed
+        result = scorer.score_rows(business, [], [], [], seg)
+    assert result.grade in {"A", "B", "C", "D"}
+    assert "reviews_300plus" in result.reasons["can_pay_proxies"]
+    assert ScoringConfig.for_segment(seg, None).reviews, "the clinics segment scores review counts"
