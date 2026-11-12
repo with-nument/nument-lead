@@ -233,6 +233,25 @@ tiers:
       cache_ttl_days: 30
       timeout_s: 120
       max_retries: 1
+    classify_reviews:                         # review pain in recent Practo stories and Google Maps reviews
+      primary: g_lite
+      fallbacks: [g_flash, o_nano]
+      mode: sync
+      schema: ReviewPainClassification
+      prompt: classify_reviews.md
+      max_output_tokens: 400
+      temperature: 0.0
+      thinking: "off"
+      tools: []
+      priority: 4
+      est_input_tokens: 2000
+      est_output_tokens: 200
+      cache_ttl_days: 30
+      timeout_s: 60
+      max_retries: 3
+      daily_limit_setting: ai.classify_per_day
+      daily_limit: 1500
+
     weekly_audit:
       primary: g_pro
       fallbacks: [g_flash, o_top]

@@ -141,6 +141,7 @@ class FetchResult:
     content_type: str = ""
     headers: dict[str, str] = field(default_factory=dict)
     truncated: bool = False
+    content: bytes = field(default=b"", repr=False)  # the raw body, for binary files such as gzipped sitemaps
 
     @property
     def ok(self) -> bool:
@@ -516,7 +517,8 @@ class PoliteClient:
                         truncated = True
                         break
                 content_type = response.headers.get("content-type", "")
-                body = _decode(b"".join(chunks)[:limit], content_type)
+                raw = b"".join(chunks)[:limit]
+                body = _decode(raw, content_type)
             except httpx.HTTPError as exc:
                 state, reason = classify(None, "", exc)
                 return FetchResult(redact(url), redact(current), response.status_code, "", state, reason)
@@ -533,6 +535,7 @@ class PoliteClient:
                 content_type=content_type,
                 headers={k.lower(): v for k, v in response.headers.items() if k.lower() in _KEPT_HEADERS},
                 truncated=truncated,
+                content=raw,
             )
             if state == "blocked" and register_block:
                 self.blocked_hosts[host] = reason

@@ -10,7 +10,10 @@ For every business queued in the last day (best first, 6 hosts at a time, pages 
    routes (`tel:` and WhatsApp links as `tel_link`, JSON-LD telephone as `jsonld_phone`, `mailto:` links as
    `mailto_link`, each with the page URL and the raw link as the quote).
 4. A JobPosting for a front-desk or builder role becomes a hiring signal (classified like any job post).
-5. Practo profile for clinics in India, when that source is switched on (stored as a page, never as contacts).
+5. Practo profile for clinics in India, when that source is switched on: the confirmed profile page is stored
+   (never as contacts), code writes its rating, stories, doctors, fees and claim as facts, and recent patient
+   stories that complain about the front desk become a `review_pain` signal. Practo has its own 5 second pace,
+   so its lookups wait outside the crawl slots.
 
 Fact models: contact routes read by verification are `model = 'code'`; the other code facts keep the A.13.2
 label `model = 'rule'`. Both mean "made by code" and are stored as verified.
@@ -42,10 +45,11 @@ from ..research import quality, structured, techstack
 from ..research.browser import Browser
 from ..research.text import main_text_length, page_text
 from ..segments import Segment
-from ..sources import health
+from ..sources import health, review_pain
+from ..sources import practo as practolib
 from ..sources.base import AIRouter, Signal, SourceContext
 from ..sources.jobs import JobPost, classify_job, parse_date, role_from_keywords
-from ..sources.practo import PractoAdapter
+from ..sources.practo import PractoAdapter, PractoMatch
 from .runs import RunContext
 from .selection import active_segments
 from .signals import SignalSink
@@ -107,6 +111,7 @@ class Crawl:
     mailto: list[tuple[str, str]] = field(default_factory=list)
     browser_used: int = 0
     forced_browser: bool = False
+    practo: PractoMatch | None = None
 
 
 @dataclass
@@ -390,6 +395,41 @@ def save_crawl(crawl: Crawl, seg: Segment, business: dict[str, Any], conn: Conne
                    values (%s, %s, %s, %s, %s, %s, %s, true, 100, now())""",
                 rows,
             )
+        if crawl.practo is not None:
+            prof = crawl.practo.page
+            cur.execute(
+                "delete from public.facts where business_id = %s and model = 'rule' and url like %s",
+                [crawl.business_id, f"{practolib.BASE}/%"],
+            )
+            cur.executemany(
+                """insert into public.facts (business_id, field, value, quote, url, page_id, model, verified,
+                                             verify_score, verified_at)
+                   values (%s, %s, %s, %s, %s, %s, %s, true, 100, now())""",
+                [
+                    [
+                        crawl.business_id,
+                        name,
+                        Jsonb(value),
+                        quote[:300],
+                        prof.url,
+                        page_ids.get(canonical_url(crawl.practo.result.final_url)),
+                        RULE,
+                    ]
+                    for name, value, quote in practolib.facts(prof)
+                ],
+            )
+            practo_info = {
+                "at": datetime.now(UTC).isoformat(),
+                "url": prof.url,
+                "how": crawl.practo.how,
+                "rating": prof.rating,
+                "stories": prof.stories,
+                "recent_stories": len(review_pain.recent(crawl.practo.stories)),
+            }
+            cur.execute(
+                "update public.businesses set extra = jsonb_set(extra, '{practo}', %s) where id = %s",
+                [Jsonb(practo_info), crawl.business_id],
+            )
         crawl_info = {
             "at": datetime.now(UTC).isoformat(),
             "state": crawl.state,
@@ -447,7 +487,7 @@ def job_signals(crawl: Crawl, seg: Segment, segments: dict[str, Segment], ctx: S
 # ---------------------------------------------------------------------------------------------------
 
 QUEUE_SQL = """
-select id::text as id, segment_id, name, website, web_domain, city, locality, place_id, extra
+select id::text as id, segment_id, name, website, web_domain, city, locality, address, lat, lng, place_id, extra
 from public.businesses
 where status = 'queued' and queued_at > now() - interval '1 day' and segment_id = any(%(segments)s)
   and (coalesce((extra #>> '{crawl,at}')::timestamptz, 'epoch') < %(recrawl)s or extra ? 'force_browser')
@@ -466,7 +506,7 @@ async def research_all(
     stats: Counter[str] = Counter()
     browser = Browser(health.setting_int("research.browser_pages_per_run", BROWSER_DEFAULT))
     sink = SignalSink(segments, ctx)
-    practo = PractoAdapter(ctx)
+    practo = PractoAdapter(ctx, time_left=time_left)
     practo_on = practo.enabled() and "clinics-in" in segments
     sem = asyncio.Semaphore(CONCURRENCY)
     try:
@@ -480,10 +520,19 @@ async def research_all(
                         stats["deadline_skipped"] += 1
                         return
                     crawl = await crawler.crawl(b)
-                    if practo_on and seg.id == "clinics-in":
-                        profile = await practo.safe_call(practo.profile_page, b, seg)
-                        if profile is not None:
-                            crawl.pages.append(PageOut("practo", profile.final_url, profile.status, profile.text))
+                # Outside the crawl slots: Practo's own 5 second pace must not hold up other sites.
+                if practo_on and seg.id == "clinics-in" and (time_left is None or time_left() > 0):
+                    crawl.practo = await practo.safe_call(practo.match, b, seg)
+                    if crawl.practo is not None:
+                        crawl.pages.append(
+                            PageOut(
+                                "practo",
+                                crawl.practo.result.final_url,
+                                crawl.practo.result.status,
+                                crawl.practo.result.text,
+                            )
+                        )
+                        stats["practo_matched"] += 1
                 stats[f"crawl_{crawl.state}"] += 1
                 stats["pages"] += sum(1 for p in crawl.pages if p.html)
                 stats["forced_browser"] += crawl.forced_browser
@@ -492,6 +541,16 @@ async def research_all(
                         save_crawl(crawl, seg, b, conn)
                 for sig in job_signals(crawl, seg, segments, ctx):
                     sink.add(sig, seg)
+                if crawl.practo is not None:
+                    pain = review_pain.classify(
+                        ctx, crawl.practo.stories, business_name=str(b["name"]), source="practo"
+                    )
+                    if pain is not None:
+                        sig = review_pain.pain_signal(
+                            pain, source="practo", business_id=crawl.business_id, url=crawl.practo.page.url, seg=seg
+                        )
+                        sink.add(sig, seg)
+                        stats["practo_review_pain"] += 1
 
             results = await asyncio.gather(*(one(b) for b in queue), return_exceptions=True)
             for res in results:

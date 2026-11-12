@@ -120,7 +120,7 @@ def test_monthly_minutes_stay_under_the_free_allowance() -> None:
         "backup.yml": 4.3,
     }
     minutes_a_run = {
-        "night.yml": 27,
+        "night.yml": 31,  # 27, plus at most 4 minutes of Google Maps lookups (maps_reviews.minutes_per_run)
         "morning.yml": 12,
         "sheet-sync.yml": 2,
         "weekly.yml": 8,

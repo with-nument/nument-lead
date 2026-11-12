@@ -618,6 +618,8 @@ SOURCE_LABELS: Final[dict[str, str]] = {
     "adzuna": "on a job board",
     "careers_watch": "on their careers page",
     "places": "in Google reviews",
+    "maps_reviews": "in Google reviews",
+    "practo": "in Practo patient stories",
     "grounded_search": "in a public post",
     "inbox": "in a public post",
     "gdelt": "in the news",
@@ -631,6 +633,21 @@ SOURCE_LABELS: Final[dict[str, str]] = {
 def _age(observed_at: datetime, now: datetime) -> str:
     days = max(0, (now - observed_at).days)
     return "today" if days == 0 else "yesterday" if days == 1 else f"{days} days ago"
+
+
+PAIN_WORDS: Final[dict[str, str]] = {
+    "unanswered_calls": "unanswered calls",
+    "slow_replies": "slow replies",
+    "slow_whatsapp": "slow WhatsApp replies",
+    "booking_trouble": "booking trouble",
+    "long_wait": "long waits",
+    "rude_front_desk": "a rude front desk",
+}
+
+
+def _pain_words(flags: Any) -> str:
+    words = [PAIN_WORDS[f] for f in flags or [] if f in PAIN_WORDS][:2]
+    return " and ".join(words) if words else "missed calls or slow replies"
 
 
 def _signal_line(s: Mapping[str, Any], now: datetime) -> str:
@@ -648,7 +665,8 @@ def _signal_line(s: Mapping[str, Any], now: datetime) -> str:
     elif kind == "tender":
         text = f"Tender out for {what or 'software work'}"
     elif kind == "review_pain":
-        text = "Recent Google reviews mention missed calls or slow replies"
+        where = "Practo patient stories" if s.get("source") == "practo" else "Google reviews"
+        text = f"Recent {where} mention {_pain_words(details.get('flags'))}"
     elif kind == "ads_running":
         text = "Running ads"
     elif kind == "no_booking":

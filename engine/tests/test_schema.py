@@ -94,11 +94,13 @@ def test_seed_segments_and_quotas(db_conn: Conn) -> None:
     assert all(r["enabled"] for r in rows)
 
 
-def test_seed_settings_with_openai_and_practo_off(db_conn: Conn) -> None:
+def test_seed_settings_with_openai_off_and_review_sources_on(db_conn: Conn) -> None:
     settings = {r["key"]: r["value"] for r in db_conn.execute("select key, value from public.settings").fetchall()}
     assert settings["daily_cap_inr"] == 750 and settings["research_per_day"] == 300
     assert settings["providers_enabled"] == {"gemini": True, "openai": False}
-    assert settings["sources_enabled"]["practo"] is False and settings["sources_enabled"]["adzuna"] is False
+    assert settings["sources_enabled"]["adzuna"] is False
+    assert settings["sources_enabled"]["practo"] is True and settings["sources_enabled"]["maps_reviews"] is True
+    assert settings["practo.pages_per_day"] == 150 and settings["maps_reviews.lookups_per_day"] == 100
     assert set(settings["segment_weights"]) == set(settings["segments_enabled"]) == WAVE1
     assert settings["places_details_cap_in"] == 230 and settings["places_details_cap_global"] == 30
     assert settings["sheet_state"] == {
@@ -117,8 +119,8 @@ def test_seed_source_health(db_conn: Conn) -> None:
         r["source"]: r["enabled"]
         for r in db_conn.execute("select source, enabled from public.source_health").fetchall()
     }
-    assert len(rows) == 12
-    assert {s for s, on in rows.items() if not on} == {"adzuna", "practo", "llm:openai"}
+    assert len(rows) == 13
+    assert {s for s, on in rows.items() if not on} == {"adzuna", "llm:openai"}
 
 
 # ---------------------------------------------------------------------------

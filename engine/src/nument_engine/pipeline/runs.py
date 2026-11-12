@@ -326,6 +326,9 @@ def night_phases() -> list[Phase]:
         Phase("prefilter", stage("pipeline.prefilter"), essential=True),
         Phase("research", stage("pipeline.research"), budget="research"),
         Phase("extract_submit", stage("pipeline.extract", "submit"), budget="extract"),
+        # Google Maps numbers and review pain for tonight's businesses without Places data (uses the research
+        # Chromium, so it runs in the night job; after the batch submission, which must not wait for it).
+        Phase("maps_reviews", stage("pipeline.maps_reviews"), budget="low_priority_research"),
     ]
 
 
@@ -368,7 +371,7 @@ def monthly_phases() -> list[Phase]:
 
 
 def night(rc: RunContext) -> None:
-    """02:00 IST pipeline part 1: universe top-up, signals, pre-filter, research, extract submit."""
+    """02:00 IST pipeline part 1: universe top-up, signals, pre-filter, research, extract submit, Maps reviews."""
     execute(rc, night_phases())
 
 

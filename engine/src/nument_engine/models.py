@@ -195,6 +195,7 @@ SourceName = Literal[
     "careers_watch",
     "adzuna",
     "practo",
+    "maps_reviews",
     "legacy",
     "legacy_skip",
 ]
@@ -216,6 +217,7 @@ AITask = Literal[
     "check_message",
     "grounded_search",
     "lookup_reviews",
+    "classify_reviews",
     "weekly_audit",
 ]
 AI_TASKS: Final[tuple[str, ...]] = get_args(AITask)
@@ -299,6 +301,20 @@ class ReviewLookup(BaseModel):
     practo_story_count: int | None = Field(description="number of Practo patient stories in digits, or null")
     practo_quote: str | None = Field(description="the Practo line copied exactly from the answer, or null")
     complaint: str | None = Field(description="the main complaint in recent reviews as written, or null")
+
+
+ReviewPainFlag = Literal["unanswered_calls", "slow_replies", "booking_trouble", "long_wait", "rude_front_desk"]
+REVIEW_PAIN_FLAGS: Final[tuple[str, ...]] = get_args(ReviewPainFlag)
+
+
+class ReviewPainClassification(BaseModel):
+    """`classify_reviews`: do recent public reviews (Practo patient stories, Google Maps reviews) complain about
+    the front desk: calls not answered, slow replies, booking trouble, long waits or a rude front desk."""
+
+    has_pain: bool = Field(description="true only when at least one review complains about one of the flags")
+    flags: list[ReviewPainFlag] = Field(description="every flag some review complains about; empty when none")
+    complaining_reviews: list[int] = Field(description="numbers of the reviews that complain; empty when none")
+    quote: str | None = Field(description="one sentence copied exactly from a complaining review, or null")
 
 
 # ---- extract_facts (Step 9.12) ---------------------------------------------
@@ -452,5 +468,6 @@ AI_OUTPUT_MODELS: Final[dict[str, type[BaseModel]]] = {
     "check_message": MessageCheck,
     "grounded_search": PublicAskResults,
     "lookup_reviews": ReviewLookup,
+    "classify_reviews": ReviewPainClassification,
     "weekly_audit": AuditResult,
 }

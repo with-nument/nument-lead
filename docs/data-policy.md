@@ -20,8 +20,9 @@ win; this page is updated in the same change.
 
 **Allowed**
 - Public pages and official APIs.
-- Grey-area pages whose terms discourage robots (today: Apna job pages), only at a slow rate, with an honest
-  User-Agent, obeying robots.txt path rules, and stopping when blocked.
+- Grey-area pages whose terms discourage robots (today: Apna job pages and Google Maps listings, both founder
+  approved), only at a slow rate, with an honest User-Agent, obeying robots.txt path rules, and stopping when
+  blocked. Never past a consent wall, a CAPTCHA or a sign-in prompt.
 - Search-engine results that mention LinkedIn or X posts. The snippet is read; the page itself is never opened.
 
 Each source, its pace and what the first live check measured: [sources.md](sources.md).
@@ -70,7 +71,7 @@ and purposeful.
 | Business name, website, address, and phones and emails the business published | Personal mobiles that the person did not publish for the business |
 | The decision maker's name and role as written on the business's own pages | Photos, date of birth, home address, family details |
 | Quotes from the business's own pages and job posts | Anything from personal social profiles |
-| Derived flags from Google reviews ("reviews mention unanswered calls") | Review text or reviewer names |
+| Derived flags from reviews ("reviews mention unanswered calls"), and for Practo stories and Maps reviews one quoted sentence as evidence | Whole review texts, or reviewer names |
 
 Phones: only numbers the business published itself. First choice is its own website; the fallback is its
 own Google listing, shown as "from Google listing".
@@ -87,6 +88,7 @@ Applied by `nlead health --prune` (the monthly workflow; `--dry-run` counts only
 | Page text of businesses that became leads | 90 days | Text deleted; the row stays |
 | Any page text | 20,000 characters | Trimmed |
 | Google Places rating and review count | 30 days after the fetch | Set to null unless refreshed; `place_id` stays |
+| Google rating and review count read from Maps or search | 30 days | Set to null by the morning reviews stage, looked up again |
 | Phones from a Google listing | 30 days unless re-verified | Deleted (do-not-contact rows stay) |
 | Pages of golden-set businesses | While labelled | Never pruned: evals depend on them |
 | Facts and signals | While the business exists | Deleted with the business |
@@ -121,7 +123,9 @@ Applied by `nlead health --prune` (the monthly workflow; `--dry-run` counts only
 3. Review text and reviewer names are never stored. The `review_pain` signal stores a derived description and
    the Google Maps link for the place.
 4. Wherever the app shows a Google rating, it says "Google" next to it.
-5. Only the official Places API (New) is used. The Maps scraper stays off.
+5. Places API content follows these rules. Without a billing account the night also reads public Maps listings
+   for one known business at a time (`maps_reviews`, founder approved): numbers kept 30 days, never over Places
+   data, one quoted review sentence for `review_pain`, no reviewer names, no listing phones.
 
 ## Country rules
 

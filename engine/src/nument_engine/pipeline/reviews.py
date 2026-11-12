@@ -10,6 +10,10 @@ Stored the way Places data is: `businesses.review_count` and `rating` (never ove
 most 30 days, like Places content (A.4.4): older numbers are cleared and looked up again.
 
 Runs in the morning between verify and score, so the businesses researched overnight are scored with them.
+
+Cheaper sources first: a business whose Google numbers the night's Maps lookup confirmed (`extra.maps_reviews`,
+kept 30 days) is skipped, and one whose Practo profile research matched (`extra.practo`) is asked for its Google
+numbers only. Maps numbers expire after 30 days exactly like grounded ones.
 """
 
 from __future__ import annotations
@@ -33,6 +37,7 @@ DEFAULT_PER_DAY: Final = 120
 MAX_DOWN_STREAK: Final = 3  # consecutive "no usable provider" answers before the stage stops
 KEEP_DAYS: Final = 30
 SOURCE: Final = "grounded_search"
+EXPIRING_SOURCES: Final = (SOURCE, "maps_reviews")  # review numbers kept 30 days like Places content
 COUNTRY_NAMES: Final[dict[str, str]] = {"in": "India", "ae": "the UAE", "sa": "Saudi Arabia", "qa": "Qatar"}
 KINDS: Final[dict[str, str]] = {
     "clinics": "clinic",
@@ -47,6 +52,9 @@ select b.id, b.name, b.city, b.country, b.website, b.segment_id, b.extra
    and b.status in ('researched', 'qualified', 'dormant')
    and b.places_fetched_at is null
    and coalesce((b.extra->>'reviews_lookup_at')::timestamptz, 'epoch') < now() - make_interval(days => %(keep)s)
+   and not (coalesce((b.extra #>> '{maps_reviews,matched}')::boolean, false)
+            and (b.extra #>> '{maps_reviews,at}')::timestamptz > now() - make_interval(days => %(keep)s)
+            and b.review_count is not null)
  order by (b.status = 'researched') desc,
           exists (select 1 from public.signals s where s.business_id = b.id and s.expires_at > now()) desc,
           coalesce(b.branches_count, 1) desc,
@@ -112,30 +120,42 @@ def accepted(output: Any, grounding: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def expire_old(conn: Any) -> int:
-    """Grounded review numbers older than KEEP_DAYS are cleared, like Places content (A.4.4)."""
+    """Grounded and Maps review numbers older than KEEP_DAYS are cleared, like Places content (A.4.4)."""
     n = conn.execute(
         """update public.businesses
               set review_count = null, rating = null, extra = extra - 'reviews_at' - 'reviews_src'
-            where extra->>'reviews_src' = %s
+            where extra->>'reviews_src' = any(%s)
+              and places_fetched_at is null
               and (extra->>'reviews_at')::timestamptz < now() - make_interval(days => %s)""",
-        [SOURCE, KEEP_DAYS],
+        [list(EXPIRING_SOURCES), KEEP_DAYS],
     ).rowcount
     conn.execute(
-        "delete from public.facts where field in ('google_reviews', 'practo_reviews') and model like %s "
+        "delete from public.facts where field in ('google_reviews', 'practo_reviews') "
+        "and (model like %s or value->>'source' = 'maps_reviews') "
         "and created_at < now() - make_interval(days => %s)",
         [f"%#{TASK}.%", KEEP_DAYS],
     )
     return int(n or 0)
 
 
-def _inputs(b: dict[str, Any], seg: Segment) -> dict[str, Any]:
+def practo_covered(b: dict[str, Any], now: datetime) -> bool:
+    """Research matched the clinic's Practo profile in the last KEEP_DAYS days (its numbers are facts already)."""
+    at = ((b.get("extra") or {}).get("practo") or {}).get("at")
+    try:
+        return at is not None and (now - datetime.fromisoformat(str(at))).days < KEEP_DAYS
+    except ValueError:
+        return False
+
+
+def _inputs(b: dict[str, Any], seg: Segment, now: datetime | None = None) -> dict[str, Any]:
+    practo = seg.domain == "clinics" and seg.country == "in" and not practo_covered(b, now or datetime.now(UTC))
     return {
         "name": b["name"],
         "city": b.get("city") or "",
         "country": COUNTRY_NAMES.get(seg.country, seg.country.upper()),
         "kind": KINDS.get(seg.domain, seg.domain),
         "website": b.get("website") or "",
-        "practo": seg.domain == "clinics" and seg.country == "in",
+        "practo": practo,
     }
 
 
@@ -174,11 +194,12 @@ def run(rc: RunContext, router: Any = None) -> dict[str, Any]:
         limit = min(limit, rc.opts.limit)
     rows = db.fetch_all(CANDIDATES_SQL, {"segments": list(segments), "keep": KEEP_DAYS, "limit": limit})
     stats["candidates"] = len(rows)
+    if not rc.opts.dry_run:  # every morning, also when nothing needs a lookup (Maps numbers expire here too)
+        with db.tx("engine", {"run_id": rc.run_id, "stage": "reviews"}) as conn:
+            stats["expired"] = expire_old(conn)
     if rc.opts.dry_run or not rows:
         rc.stats["reviews"] = dict(stats)
         return dict(stats)
-    with db.tx("engine", {"run_id": rc.run_id, "stage": "reviews"}) as conn:
-        stats["expired"] = expire_old(conn)
     router = router or ai.router_for(rc)
     run_result = getattr(router, "run_result", None) if router is not None else None
     if run_result is None:
@@ -195,7 +216,9 @@ def run(rc: RunContext, router: Any = None) -> dict[str, Any]:
             break
         seg = segments[b["segment_id"]]
         try:
-            res = run_result(TASK, _inputs(b, seg))
+            inputs = _inputs(b, seg, now)
+            stats["practo_covered"] += seg.domain == "clinics" and seg.country == "in" and not inputs["practo"]
+            res = run_result(TASK, inputs)
         except Exception as exc:  # typed router errors: stop on budget, skip one stubborn business
             name = type(exc).__name__
             stats[f"error.{name}"] += 1

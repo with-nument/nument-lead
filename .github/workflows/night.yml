@@ -1,4 +1,5 @@
-# Night run (Step 14.5.1): health, universe top-up, signals, pre-filter, research, AI batch submit.
+# Night run (Step 14.5.1): health, universe top-up, signals, pre-filter, research (with Practo), AI batch submit,
+# Google Maps reviews (the research Chromium, at most maps_reviews.minutes_per_run minutes).
 # Schedules are off until go-live: set the repository variable SCHEDULES_ENABLED to "true" (Step 21).
 # Inputs reach the script through env only, never through ${{ }} inside `run` (script injection).
 name: Night run
@@ -70,6 +71,18 @@ jobs:
       - uses: ./.github/actions/setup-engine
         with:
           playwright: "true"
+
+      # The Practo clinic profile index (about 1 MB) is rebuilt once a month from Practo's sitemaps; between
+      # rebuilds every night restores it here instead of downloading about 22 sitemaps again.
+      - name: Month for the Practo index
+        id: month
+        run: echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the Practo clinic index
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: engine/.cache/practo
+          key: practo-index-${{ steps.month.outputs.month }}
 
       - name: Night run
         working-directory: engine

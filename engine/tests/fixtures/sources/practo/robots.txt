@@ -1,0 +1,7 @@
+user-agent: *
+Disallow: /search
+Disallow: /*/appointment
+Disallow: /health/api*
+
+Sitemap: https://www.practo.com/profiles-sitemap.xml
+Sitemap: https://www.practo.com/listings-sitemap.xml

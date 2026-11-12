@@ -256,6 +256,14 @@ def reviews(ctx: typer.Context) -> None:
     _execute(ctx, "manual", m.run)
 
 
+@app.command("maps-reviews")
+def maps_reviews(ctx: typer.Context) -> None:
+    """Google Maps review numbers and review pain for tonight's businesses without Places data."""
+    from .pipeline import maps_reviews as m
+
+    _execute(ctx, "manual", m.run)
+
+
 @app.command()
 def score(
     ctx: typer.Context,

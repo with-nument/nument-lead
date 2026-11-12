@@ -269,6 +269,14 @@ SMOKE_INPUTS: dict[str, dict[str, Any]] = {
         "website": "https://sunrisedental.example",
         "practo": True,
     },
+    "classify_reviews": {
+        "business_name": "Sunrise Dental Clinic",
+        "source": "Google Maps reviews",
+        "reviews": [
+            {"n": 1, "age": "3 weeks ago", "rating": 2.0, "text": "Called five times to book, nobody picked up."},
+            {"n": 2, "age": "2 months ago", "rating": 5.0, "text": "Painless root canal, very kind doctor."},
+        ],
+    },
     "grounded_search": {
         "domain": "clinics",
         "country": "India",
