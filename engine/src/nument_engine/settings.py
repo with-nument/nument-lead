@@ -51,6 +51,8 @@ class Settings(BaseSettings):
     associate_name: str = "Aditya"
     user_agent: str = "NumentLeadBot/1.0 (+https://nument.in)"
     alert_email: str | None = None
+    alert_email_from: str = "Nument Leads <onboarding@resend.dev>"  # a sender Resend accepts for this account
+    resend_api_key: SecretStr | None = None  # optional: weekly report and alerts by email (Step 16.6.3)
     backup_passphrase: SecretStr | None = None
 
     # Paths (not from env)

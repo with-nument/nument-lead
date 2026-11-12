@@ -1,0 +1,16 @@
+# gitleaks configuration (Step 18.7.1): the default rules, plus allowlists for values that are known not
+# to be secrets. Add an entry only with a one-line reason; never allowlist a real key.
+title = "nument-leads"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Browser storage key names in the web app are identifiers, not secrets"
+regexTarget = "line"
+regexes = ['''STORAGE_KEY\s*=\s*['"][A-Za-z0-9._:-]+['"]''']
+
+[[allowlists]]
+description = "Throwaway Postgres URLs used only by CI service containers and the test harness"
+regexTarget = "line"
+regexes = ['''postgres(?:ql)?://(?:postgres|ci|nlead-test-guard)(?::(?:postgres|ci))?@(?:localhost|127\.0\.0\.1)''']
