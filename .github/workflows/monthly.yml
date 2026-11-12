@@ -1,0 +1,68 @@
+# Monthly run (Step 14.5.5): universe refresh from the new map release, then page-text retention.
+# 22:30 IST on the 1st, so it ends well before the 02:00 night run.
+# Schedules are off until go-live: set the repository variable SCHEDULES_ENABLED to "true" (Step 21).
+name: Monthly universe refresh
+
+on:
+  schedule:
+    - cron: "0 17 1 * *" # 22:30 IST on the 1st
+  workflow_dispatch:
+    inputs:
+      env:
+        description: Environment
+        type: choice
+        options: [prod, dev]
+        default: prod
+      segment:
+        description: Segment id (empty = every enabled segment)
+        required: false
+        default: ""
+      dry_run:
+        description: Dry run
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nument-pipeline-${{ inputs.env || 'prod' }}
+  cancel-in-progress: false
+
+jobs:
+  monthly:
+    if: github.event_name == 'workflow_dispatch' || vars.SCHEDULES_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: ${{ inputs.env || 'prod' }}
+    permissions:
+      contents: read
+      issues: write
+    env:
+      APP_ENV: ${{ inputs.env || 'prod' }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+      SHEET_MASTER_ID: ${{ vars.SHEET_MASTER_ID }}
+      SHEET_CALLER_ID: ${{ vars.SHEET_CALLER_ID }}
+      SHEET_STAGING_ID: ${{ vars.SHEET_STAGING_ID }}
+      USER_AGENT: ${{ vars.USER_AGENT }}
+      IN_SEGMENT: ${{ inputs.segment }}
+      IN_DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: ./.github/actions/setup-engine
+
+      - name: Monthly run
+        working-directory: engine
+        run: |
+          args=(--env "$APP_ENV")
+          if [ -n "$IN_SEGMENT" ]; then args+=(--segment "$IN_SEGMENT"); fi
+          if [ "$IN_DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          uv run nlead run monthly "${args[@]}"
+
+      - name: Report the failure
+        if: failure() && github.event_name == 'schedule'
+        uses: ./.github/actions/notify-failure
+        with:
+          workflow: Monthly universe refresh

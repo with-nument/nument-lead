@@ -1,0 +1,83 @@
+# Daytime two-way sheet sync (Step 13.8, 14.5.3): pull people's edits, then push. Light on the schedule
+# (Lead details is rebuilt only when leads were added or removed); full when run by hand or from the app.
+# Every 2 hours from 09:00 to 21:00 IST. If the month's Actions minutes trend over 2,000, switch to every
+# 3 hours: "30 3-15/3 * * *" (14.6, first fix).
+# Schedules are off until go-live: set the repository variable SCHEDULES_ENABLED to "true" (Step 21).
+name: Sheet sync
+
+on:
+  schedule:
+    - cron: "30 3-15/2 * * *" # 09:00, 11:00, 13:00, 15:00, 17:00, 19:00, 21:00 IST
+  workflow_dispatch:
+    inputs:
+      env:
+        description: Environment
+        type: choice
+        options: [prod, dev]
+        default: prod
+      full:
+        description: Full push (rebuild Lead details too)
+        type: boolean
+        default: true
+      dry_run:
+        description: Dry run (read and compare, write nothing)
+        type: boolean
+        default: false
+      segment:
+        description: Accepted for the app's Run now button; the sync always covers every lead
+        required: false
+        default: ""
+      limit:
+        description: Accepted for the app's Run now button; not used by the sync
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nument-sheet-${{ inputs.env || 'prod' }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.event_name == 'workflow_dispatch' || vars.SCHEDULES_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ${{ inputs.env || 'prod' }}
+    permissions:
+      contents: read
+      issues: write
+    env:
+      APP_ENV: ${{ inputs.env || 'prod' }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }} # 09:00 catch-up only
+      GEMINI_API_KEY_BACKUP: ${{ secrets.GEMINI_API_KEY_BACKUP }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+      SHEET_MASTER_ID: ${{ vars.SHEET_MASTER_ID }}
+      SHEET_CALLER_ID: ${{ vars.SHEET_CALLER_ID }}
+      SHEET_STAGING_ID: ${{ vars.SHEET_STAGING_ID }}
+      ASSOCIATE_NAME: ${{ vars.ASSOCIATE_NAME }}
+      USER_AGENT: ${{ vars.USER_AGENT }}
+      IN_FULL: ${{ inputs.full }}
+      IN_DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: ./.github/actions/setup-engine
+
+      - name: Sheet sync
+        working-directory: engine
+        run: |
+          args=(--env "$APP_ENV")
+          if [ "$IN_FULL" != "true" ]; then args+=(--light); fi
+          if [ "$IN_DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          uv run nlead run sheet "${args[@]}"
+
+      - name: Report the failure
+        if: failure() && github.event_name == 'schedule'
+        uses: ./.github/actions/notify-failure
+        with:
+          workflow: Sheet sync

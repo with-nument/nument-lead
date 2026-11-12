@@ -1,0 +1,71 @@
+# Weekly run (Step 14.5.4): learning, the weekly report, the audit and page-text retention.
+# Schedules are off until go-live: set the repository variable SCHEDULES_ENABLED to "true" (Step 21).
+name: Weekly learning and report
+
+on:
+  schedule:
+    - cron: "30 1 * * 1" # Monday 07:00 IST
+  workflow_dispatch:
+    inputs:
+      env:
+        description: Environment
+        type: choice
+        options: [prod, dev]
+        default: prod
+      dry_run:
+        description: Dry run
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nument-pipeline-${{ inputs.env || 'prod' }}
+  cancel-in-progress: false
+
+jobs:
+  weekly:
+    if: github.event_name == 'workflow_dispatch' || vars.SCHEDULES_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.env || 'prod' }}
+    permissions:
+      contents: read
+      issues: write
+    env:
+      APP_ENV: ${{ inputs.env || 'prod' }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_API_KEY_BACKUP: ${{ secrets.GEMINI_API_KEY_BACKUP }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+      SHEET_MASTER_ID: ${{ vars.SHEET_MASTER_ID }}
+      SHEET_CALLER_ID: ${{ vars.SHEET_CALLER_ID }}
+      SHEET_STAGING_ID: ${{ vars.SHEET_STAGING_ID }}
+      ALERT_EMAIL: ${{ vars.ALERT_EMAIL }}
+      IN_DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: ./.github/actions/setup-engine
+
+      - name: Weekly run
+        working-directory: engine
+        run: |
+          args=(--env "$APP_ENV")
+          if [ "$IN_DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          uv run nlead run weekly "${args[@]}"
+
+      - name: Report in the job summary
+        if: always()
+        working-directory: engine
+        run: uv run nlead report weekly --format markdown --env "$APP_ENV" >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Report the failure
+        if: failure() && github.event_name == 'schedule'
+        uses: ./.github/actions/notify-failure
+        with:
+          workflow: Weekly learning and report
