@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime as dt
-import types
 import uuid
 from collections.abc import Mapping
 from typing import Any
@@ -91,8 +90,8 @@ def test_budget_gate_skips_paid_phases_by_priority(clean_costs: None) -> None:
         runs.execute(
             rc,
             [
-                Phase("fit_only", ok(), priority=1),  # stops at 60%
-                Phase("signals", ok(), priority=3),  # stops at 85%: still runs
+                Phase("fit_only", ok(), budget="fit_only_research"),  # stops at 60%
+                Phase("signals", ok(), budget="grounded_search"),  # stops at 85%: still runs
                 Phase("free", ok()),
             ],
         )
@@ -108,33 +107,31 @@ def test_per_run_spend_cap(clean_costs: None) -> None:
             "insert into public.costs (run_id, provider, task, usd, inr) values (%s, 'gemini', 'orchestration-test-run', 0.02, 2)",
             [rc.run_id],
         )
-        runs.execute(rc, [Phase("research", ok(), priority=4)])
+        runs.execute(rc, [Phase("research", ok(), budget="research")])
     assert _row(rc.run_id)["stats"]["phases"]["research"]["skipped"] == "budget"
 
 
-def test_budget_stop_inside_a_phase_is_clean(clean_costs: None, monkeypatch: pytest.MonkeyPatch) -> None:
-    class BudgetStop(Exception):
-        pass
+def test_budget_stop_inside_a_phase_is_clean(clean_costs: None) -> None:
+    from nument_engine.budget import BudgetExceeded
 
-    fake_budget = types.ModuleType("nument_engine.budget")
-    fake_budget.BudgetStop = BudgetStop  # type: ignore[attr-defined]
-    monkeypatch.setitem(__import__("sys").modules, "nument_engine.budget", fake_budget)
     with run_context("morning", Options()) as rc:
         runs.execute(
-            rc, [Phase("message", boom(BudgetStop("cap reached")), priority=5), Phase("summary", ok(), essential=True)]
+            rc,
+            [
+                Phase("message", boom(BudgetExceeded("write_message", "cap reached")), budget="message"),
+                Phase("summary", ok(), essential=True),
+            ],
         )
     row = _row(rc.run_id)
-    assert row["status"] == "partial" and row["stats"]["phases"]["message"] == {
-        "stopped": "budget",
-        "detail": "cap reached",
-    }
+    assert row["status"] == "partial"
+    assert row["stats"]["phases"]["message"] == {"stopped": "budget", "detail": "write_message: cap reached"}
     assert row["stats"]["failed_stages"] == []
 
 
 def test_deadline_skips_optional_phases_but_not_essential_ones(clean_costs: None) -> None:
     with run_context("night", Options()) as rc:
         rc.started_at = dt.datetime.now(dt.UTC) - dt.timedelta(hours=2)
-        runs.execute(rc, [Phase("research", ok(), priority=4), Phase("prefilter", ok(), essential=True)])
+        runs.execute(rc, [Phase("research", ok(), budget="research"), Phase("prefilter", ok(), essential=True)])
     row = _row(rc.run_id)
     assert row["stats"]["phases"]["research"] == {"skipped": "deadline"}
     assert row["stats"]["phases"]["prefilter"]["done"] == 1
@@ -197,8 +194,17 @@ def test_phase_tables_follow_the_plan() -> None:
     assert essential == {"health", "verify", "score", "sheet_sync", "summary"}
     assert {p.name for p in runs.weekly_phases() if p.essential} == {"report"}
     assert [p.name for p in runs.sheet_phases(light=True)] == ["catch_up", "sheet_sync"]
-    for phases in (runs.night_phases(), runs.morning_phases()):
-        assert all(p.priority is None or 1 <= p.priority <= 5 for p in phases)
+    from nument_engine.budget import PHASE_STOP_AT
+
+    every = [
+        *runs.night_phases(),
+        *runs.morning_phases(),
+        *runs.sheet_phases(True),
+        *runs.weekly_phases(),
+        *runs.monthly_phases(),
+    ]
+    assert {p.budget for p in every if p.budget} <= set(PHASE_STOP_AT)  # every gate is one the guard knows
+    assert not [p.name for p in every if p.essential and p.budget]  # essential phases are free and never gated
 
 
 def test_phases_call_the_real_entry_points(clean_costs: None, monkeypatch: pytest.MonkeyPatch) -> None:

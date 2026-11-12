@@ -6,8 +6,9 @@ work that is still pending, and returns a small stats dict, so re-running a cras
 - Essential phases (health, prefilter, verify, score, sheet sync, summary, report) cost nothing. If one fails,
   the run is `failed` and stops; `nlead` exits 1. Health stops a run only on a FAIL (`check_all(fail_fast=True)`).
 - Other phases that fail are recorded and the run goes on; it ends `partial` and `nlead` exits 0.
-- Paid phases have a budget priority (Step 19.5): a phase starts only while today's spend is under its share
-  of the daily cap. A cap reached inside a phase (`BudgetStop`) stops it cleanly; the run is `partial`.
+- Paid phases name a budget phase (Step 19.6): one starts only while today's committed spend is under that
+  phase's share of the daily cap (`budget.Budget.allow_phase`). A cap reached inside a phase
+  (`budget.BudgetExceeded`) stops it cleanly; the run is `partial`.
 - Progress is written to `runs.stats` after every phase, so the app's Engine page shows a live run.
 - One run of each kind at a time: the GitHub concurrency group, plus the check in `_another_run` here.
 """
@@ -45,8 +46,6 @@ STALE_MIN: Final[dict[str, int]] = {
     "monthly": 65,
     "manual": 180,
 }
-# Step 19.5: a phase of priority p may start only while today's spend is under THRESHOLD[p] x the daily cap.
-THRESHOLD: Final[dict[int, float]] = {1: 0.60, 2: 0.75, 3: 0.85, 4: 0.95, 5: 1.00}
 
 
 @dataclass
@@ -145,7 +144,7 @@ class Phase:
     name: str
     fn: PhaseFn
     essential: bool = False
-    priority: int | None = None  # budget priority (Step 19.5); None = free, never gated
+    budget: str | None = None  # a budget.PHASE_STOP_AT key (Step 19.6); None = free, never gated
 
 
 class EssentialPhaseFailed(RuntimeError):
@@ -169,30 +168,17 @@ def stage(module: str, func: str = "run", **kwargs: Any) -> PhaseFn:
     return call
 
 
-def _budget_stops() -> tuple[type[BaseException], ...]:
-    """Exceptions that mean "the budget stopped this phase cleanly".
+def phase_allowed(rc: RunContext, phase: str) -> tuple[bool, str]:
+    """May a paid phase start now? Asks the budget guard (Step 19.6), which also honours --max-spend-inr."""
+    from ..budget import PHASE_STOP_AT, Budget
 
-    budget.py (Steps 4 and 19) names it BudgetStop (19.5) or BudgetExceeded (4.11); both are honoured.
-    """
-    try:
-        budget = importlib.import_module("nument_engine.budget")
-    except ImportError:
-        return ()
-    found = (getattr(budget, name, None) for name in ("BudgetStop", "BudgetExceeded"))
-    return tuple(t for t in found if isinstance(t, type) and issubclass(t, Exception))
-
-
-def phase_allowed(rc: RunContext, priority: int) -> tuple[bool, str]:
-    """May a paid phase of this priority start now? (Step 19.5 thresholds, plus --max-spend-inr.)"""
-    cap = float(db.get_setting("daily_cap_inr", 750) or 750)
-    spent = float(db.scalar("select inr from public.v_spend_today") or 0)
-    if spent >= THRESHOLD.get(priority, 1.0) * cap:
-        return False, f"today's spend ₹{spent:.0f} is at the priority {priority} limit of the ₹{cap:.0f} cap"
-    if rc.opts.max_spend_inr is not None:
-        mine = float(db.scalar("select coalesce(sum(inr), 0) from public.costs where run_id = %s", [rc.run_id]) or 0)
-        if mine >= rc.opts.max_spend_inr:
-            return False, f"this run spent ₹{mine:.0f} of its --max-spend-inr {rc.opts.max_spend_inr:g}"
-    return True, ""
+    guard = Budget(rc.run_id, max_spend_inr=rc.opts.max_spend_inr, stats=rc.stats)
+    if guard.allow_phase(phase):
+        return True, ""
+    return False, (
+        f"{phase} stops at {PHASE_STOP_AT[phase]:.0%} of the ₹{guard.cap_inr:.0f} daily cap "
+        f"(₹{guard.committed_inr():.0f} committed, ₹{guard.spent_this_run_inr():.0f} this run)"
+    )
 
 
 def save_progress(rc: RunContext) -> None:
@@ -212,7 +198,8 @@ def execute(rc: RunContext, phases: list[Phase]) -> None:
         log.warning("run.skipped_overlap", other_run=other)
         rc.stats["skipped"] = f"run {other} of this kind is still running"
         return
-    budget_stops = _budget_stops()
+    from ..budget import BudgetExceeded
+
     phase_stats: dict[str, Any] = rc.stats.setdefault("phases", {})
     for ph in phases:
         if not ph.essential and rc.time_left() <= 0:
@@ -220,8 +207,8 @@ def execute(rc: RunContext, phases: list[Phase]) -> None:
             rc.skipped_stages.append(ph.name)
             save_progress(rc)
             continue
-        if ph.priority is not None:
-            ok, why = phase_allowed(rc, ph.priority)
+        if ph.budget is not None:
+            ok, why = phase_allowed(rc, ph.budget)
             if not ok:
                 phase_stats[ph.name] = {"skipped": "budget", "detail": why}
                 rc.skipped_stages.append(ph.name)
@@ -239,20 +226,16 @@ def execute(rc: RunContext, phases: list[Phase]) -> None:
                 save_progress(rc)
                 raise
             rc.skipped_stages.append(ph.name)
+        except BudgetExceeded as exc:
+            phase_stats[ph.name] = {"stopped": "budget", "detail": str(exc)}
+            rc.skipped_stages.append(ph.name)
         except Exception as exc:
-            if budget_stops and isinstance(exc, budget_stops):
-                phase_stats[ph.name] = {"stopped": "budget", "detail": str(exc)}
-                rc.skipped_stages.append(ph.name)
-            else:
-                phase_stats[ph.name] = {
-                    "error": f"{type(exc).__name__}: {exc}",
-                    "trace": traceback.format_exc()[-2000:],
-                }
-                log.error("phase.failed", phase=ph.name, error=f"{type(exc).__name__}: {exc}")
-                if ph.essential:
-                    save_progress(rc)
-                    raise EssentialPhaseFailed(ph.name, exc) from exc
-                rc.failed_stages.append(ph.name)
+            phase_stats[ph.name] = {"error": f"{type(exc).__name__}: {exc}", "trace": traceback.format_exc()[-2000:]}
+            log.error("phase.failed", phase=ph.name, error=f"{type(exc).__name__}: {exc}")
+            if ph.essential:
+                save_progress(rc)
+                raise EssentialPhaseFailed(ph.name, exc) from exc
+            rc.failed_stages.append(ph.name)
         save_progress(rc)
 
 
@@ -315,6 +298,8 @@ def catch_up(rc: RunContext) -> dict[str, Any]:
 
     Every stage picks only pending work, so when nothing finished late this costs seconds.
     """
+    from ..budget import BudgetExceeded
+
     if datetime.now(IST).hour >= 11:
         return {"skipped": "only the first daytime sync catches up"}
     out: dict[str, Any] = {}
@@ -324,13 +309,9 @@ def catch_up(rc: RunContext) -> dict[str, Any]:
             out[name] = dict(stage(module, func)(rc) or {})
         except NotImplementedError as exc:
             out[name] = {"skipped": "not built", "detail": str(exc)}
-        except Exception as exc:
-            stops = _budget_stops()
-            if stops and isinstance(exc, stops):
-                out[name] = {"stopped": "budget", "detail": str(exc)}
-                break
-            out[name] = {"error": f"{type(exc).__name__}: {exc}"}
-            raise
+        except BudgetExceeded as exc:
+            out[name] = {"stopped": "budget", "detail": str(exc)}
+            break
     return out
 
 
@@ -340,11 +321,11 @@ def catch_up(rc: RunContext) -> dict[str, Any]:
 def night_phases() -> list[Phase]:
     return [
         Phase("health", stage("ops.health", "check_all", fail_fast=True), essential=True),  # only a FAIL stops it
-        Phase("universe", stage("pipeline.universe"), priority=2),
-        Phase("signals", stage("pipeline.signals"), priority=3),
+        Phase("universe", stage("pipeline.universe"), budget="low_priority_research"),
+        Phase("signals", stage("pipeline.signals"), budget="grounded_search"),
         Phase("prefilter", stage("pipeline.prefilter"), essential=True),
-        Phase("research", stage("pipeline.research"), priority=4),
-        Phase("extract_submit", stage("pipeline.extract", "submit"), priority=4),
+        Phase("research", stage("pipeline.research"), budget="research"),
+        Phase("extract_submit", stage("pipeline.extract", "submit"), budget="extract"),
     ]
 
 
@@ -354,8 +335,8 @@ def morning_phases() -> list[Phase]:
         Phase("extract_collect", stage("pipeline.extract", "collect")),  # already paid at submission
         Phase("verify", stage("pipeline.verify"), essential=True),
         Phase("score", stage("pipeline.score"), essential=True),
-        Phase("judge", stage("pipeline.judge"), priority=4),
-        Phase("message", stage("pipeline.message"), priority=5),
+        Phase("judge", stage("pipeline.judge"), budget="judge"),
+        Phase("message", stage("pipeline.message"), budget="message"),
         Phase("sheet_sync", sheet_sync(light=False), essential=True),
         Phase("prune", stage("ops.health", "prune_run")),  # daily, so 30-day Places content never overstays
         Phase("summary", summary, essential=True),
@@ -364,7 +345,7 @@ def morning_phases() -> list[Phase]:
 
 def sheet_phases(light: bool) -> list[Phase]:
     return [
-        Phase("catch_up", catch_up, priority=5),
+        Phase("catch_up", catch_up, budget="message"),
         Phase("sheet_sync", sheet_sync(light=light), essential=True),
     ]
 
@@ -373,14 +354,14 @@ def weekly_phases() -> list[Phase]:
     """Learning, then the audit, then the report, so the report includes this week's audit (16.6.2)."""
     return [
         Phase("learn", stage("learn.reweight")),
-        Phase("audit", stage("ops.audit", "weekly"), priority=4),
+        Phase("audit", stage("ops.audit", "weekly"), budget="judge"),
         Phase("report", stage("learn.report", "weekly"), essential=True),
     ]
 
 
 def monthly_phases() -> list[Phase]:
     return [
-        Phase("universe", stage("pipeline.universe", monthly=True), priority=2),
+        Phase("universe", stage("pipeline.universe", monthly=True), budget="low_priority_research"),
         Phase("prune", stage("ops.health", "prune_run"), essential=True),
     ]
 
