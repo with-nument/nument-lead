@@ -237,11 +237,16 @@ def verify(ctx: typer.Context) -> None:
 
 
 @app.command()
-def score(ctx: typer.Context) -> None:
-    """Compute scores and grades (Step 11)."""
+def score(
+    ctx: typer.Context,
+    all_businesses: Annotated[
+        bool, typer.Option("--all", help="Also re-score dormant businesses, for example after a SCORE_VERSION bump.")
+    ] = False,
+) -> None:
+    """Compute scores and grades, then create or update leads (Step 11)."""
     from .pipeline import score as m
 
-    _execute(ctx, "manual", m.run)
+    _execute(ctx, "manual", lambda rc: m.run(rc, all_businesses=all_businesses))
 
 
 @app.command()
