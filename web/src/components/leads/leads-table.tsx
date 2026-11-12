@@ -48,15 +48,15 @@ export type LeadRowView = {
 
 const SORTABLE: Partial<Record<string, SortKey>> = {
   name: 'company',
-  grade: 'grade',
   stage: 'stage',
   score: 'score',
   activity: 'activity',
   due: 'due',
 }
 
-const STORAGE_KEY = 'nument.leads.columns.v1'
-const DEFAULT_HIDDEN: VisibilityState = { country: false, pitch: false, phoneType: false }
+const STORAGE_KEY = 'nument.leads.columns.v3'
+// City and segment ride under the company name, so their own columns start hidden; the table fits a laptop.
+const DEFAULT_HIDDEN: VisibilityState = { segment: false, country: false, city: false, pitch: false, phoneType: false, owner: false, activity: false }
 
 export function LeadsTable({
   rows,
@@ -115,17 +115,19 @@ export function LeadsTable({
       })
     }
     cols.push(
-      { id: 'grade', header: 'Grade', enableHiding: false, cell: ({ row }) => <GradeBadge grade={row.original.grade} /> },
       {
         id: 'name',
         header: 'Company',
         enableHiding: false,
         cell: ({ row }) => (
-          <div className="max-w-[260px] min-w-[180px]">
-            <Link href={`/leads/${row.original.id}`} prefetch className="block truncate font-medium text-tx-1 hover:text-indigo-800">
-              {row.original.name}
-            </Link>
-            {row.original.host ? <div className="truncate text-xs text-tx-3">{row.original.host}</div> : null}
+          <div className="flex max-w-[280px] min-w-[200px] items-center gap-2.5">
+            <GradeBadge grade={row.original.grade} />
+            <div className="min-w-0">
+              <Link href={`/leads/${row.original.id}`} prefetch className="block truncate font-medium text-tx-1 hover:text-indigo-800">
+                {row.original.name}
+              </Link>
+              <div className="truncate text-xs text-tx-3">{[row.original.city, row.original.segment].filter(Boolean).join(' · ') || row.original.host}</div>
+            </div>
           </div>
         ),
       },
@@ -138,7 +140,7 @@ export function LeadsTable({
         header: 'Top signal',
         cell: ({ row }) =>
           row.original.signal ? (
-            <div className="max-w-[220px] min-w-[150px]">
+            <div className="max-w-[200px] min-w-[140px]">
               <div className="truncate text-tx-2">{row.original.signal}</div>
               <div className="text-xs text-tx-3">{row.original.signalAge}</div>
             </div>
@@ -233,7 +235,7 @@ export function LeadsTable({
       </div>
 
       {/* Desktop and tablet: the table. Phones: stacked cards below. */}
-      <div className="hidden max-h-[72dvh] overflow-auto border-t border-line-2 sm:block">
+      <div className="relative hidden max-h-[72dvh] overflow-auto border-t border-line-2 sm:block">
         <table className="w-full text-left text-base">
           <thead className="sticky top-0 z-10 bg-surface">
             {table.getHeaderGroups().map((hg) => (

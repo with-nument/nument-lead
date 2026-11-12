@@ -99,7 +99,7 @@ async function Leads({ searchParams }: Pick<PageProps<'/leads'>, 'searchParams'>
           </>
         }
       />
-      <div className="lg:grid lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-8">
+      <div className="lg:grid lg:grid-cols-[208px_minmax(0,1fr)] lg:gap-6">
         <aside className="hidden lg:block" aria-label="Filters">
           <div className="sticky top-20 max-h-[calc(100dvh-6rem)] overflow-y-auto pr-1 pb-6">
             <FilterPanel filters={filters} options={options} showOwner={user.role !== 'viewer'} />
@@ -140,7 +140,7 @@ function LeadsSkeleton() {
   return (
     <div aria-busy>
       <PageHeader title="Leads" />
-      <div className="lg:grid lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-8">
+      <div className="lg:grid lg:grid-cols-[208px_minmax(0,1fr)] lg:gap-6">
         <div className="hidden space-y-3 lg:block">
           {Array.from({ length: 8 }, (_, i) => (
             <Skeleton key={i} className="h-4 w-3/4" />
