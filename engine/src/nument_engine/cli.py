@@ -342,8 +342,33 @@ def eval_(
 
 
 @app.command()
-def health(ctx: typer.Context) -> None:
-    """Check every service and source (Step 22)."""
+def health(
+    ctx: typer.Context,
+    models: Annotated[
+        bool, typer.Option("--models", help="Check every AI model id in tasks.yaml against the providers (Step 4.4).")
+    ] = False,
+    llm_smoke: Annotated[
+        bool,
+        typer.Option("--llm-smoke", help="One tiny paid request per AI task on every usable model (under ₹5)."),
+    ] = False,
+    providers: Annotated[
+        str | None,
+        typer.Option("--providers", help="With --models or --llm-smoke: providers to use, e.g. gemini,openai."),
+    ] = None,
+) -> None:
+    """Check every service and source (Step 22). --models and --llm-smoke check the AI router (Step 4)."""
+    if models or llm_smoke:
+        from .llm import health as llm_health
+
+        failures: list[int] = []
+
+        def check(rc: RunContext) -> None:
+            failures.append(llm_health.run(rc, models=models, smoke=llm_smoke, providers=providers))
+
+        _execute(ctx, "manual", check)
+        if failures and failures[0]:
+            raise typer.Exit(code=1)
+        return
     from .ops import health as m
 
     _execute(ctx, "manual", m.run)
