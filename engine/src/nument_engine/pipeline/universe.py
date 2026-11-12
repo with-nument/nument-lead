@@ -108,14 +108,19 @@ def dormant_sweep(seg: Segment, previous_release: str) -> int:
     )
 
 
+# {segment_id: release} once a segment's FULL Overture pull for that release finished. A run with --limit
+# never writes it, so a small test can not make the next monthly run skip the segment.
+OVERTURE_DONE_KEY = "overture_done"
+
+
 def segment_has_release(seg: Segment, release: str) -> bool:
-    return bool(
-        db.scalar(
-            """select exists (select 1 from public.source_records s join public.businesses b on b.id = s.business_id
-                              where s.source = 'overture' and s.payload->>'release' = %s and b.segment_id = %s)""",
-            [release, seg.id],
-        )
-    )
+    done = db.get_setting(OVERTURE_DONE_KEY, {}) or {}
+    return isinstance(done, dict) and done.get(seg.id) == release
+
+
+def mark_segment_release(seg: Segment, release: str) -> None:
+    done = db.get_setting(OVERTURE_DONE_KEY, {}) or {}
+    db.set_setting(OVERTURE_DONE_KEY, {**(done if isinstance(done, dict) else {}), seg.id: release})
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -278,9 +283,14 @@ async def monthly_part(
                     seg,
                 )
                 s["new_place"] += 1
-        if previous and not ctx.dry_run:
+        full_pull = records is not None and not ctx.limit and not ctx.dry_run
+        if previous and full_pull:  # a partial pull would make every unseen business look closed
             resolver.flush()
             s["dormant"] += dormant_sweep(seg, previous)
+        if full_pull:
+            mark_segment_release(seg, release)
+        elif records is not None and ctx.limit:
+            s["overture_partial_not_marked"] += 1
 
     for entry in seg.registries:
         if entry.key != REGISTRY_KEY or entry.status != "ready":
@@ -339,7 +349,7 @@ async def build(ctx: SourceContext, segments: dict[str, Segment], monthly: bool)
             s.update({f"resolve.{k}": v for k, v in resolver.stats.items()})
             stats[seg.id] = dict(s)
         stats["signals"] = sink.flush()
-        if monthly and release and not ctx.dry_run:
+        if monthly and release and not ctx.dry_run and not ctx.limit:  # the diff baseline moves on full runs only
             db.set_setting("overture_release", release)
     finally:
         for adapter in adapters.values():

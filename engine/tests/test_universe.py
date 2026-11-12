@@ -192,3 +192,18 @@ def test_daily_part_with_a_key(clean_db: str, monkeypatch: pytest.MonkeyPatch) -
     assert contact == {"phone_e164": "+919811122233", "source": "google_listing", "verified": True}
     assert db.scalar("select extra ? 'places_lookup_at' from public.businesses where id = %s", [born])
     assert any(q.startswith("Lotus Skin & Hair Clinic Baner Pune") for q in searches)
+
+
+def test_a_limited_monthly_run_never_marks_the_release_done(clean_db: str, fake_month: dict[str, Any]) -> None:
+    """A small test run (--limit) must not make the next full monthly run skip the segment or move the baseline."""
+    db.set_setting("overture_release", "2026-09-23.1")
+    db.set_setting(universe.OVERTURE_DONE_KEY, {})
+    limited = universe.run(run_context(segments=["clinics-in"], limit=2), monthly=True)
+    assert limited["clinics-in"]["overture_partial_not_marked"] == 1
+    assert "dormant" not in limited["clinics-in"]
+    assert db.get_setting("overture_release") == "2026-09-23.1"
+    assert db.get_setting(universe.OVERTURE_DONE_KEY) == {}
+    full = universe.run(run_context(segments=["clinics-in"]), monthly=True)
+    assert "overture_already_done" not in full["clinics-in"] and fake_month["pulls"] == 2
+    assert db.get_setting(universe.OVERTURE_DONE_KEY) == {"clinics-in": "2026-10-21.0"}
+    assert db.get_setting("overture_release") == "2026-10-21.0"
