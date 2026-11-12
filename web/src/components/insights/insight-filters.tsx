@@ -95,7 +95,7 @@ export function InsightFilters({
           </Select>
         </div>
       ) : null}
-      <div className="w-44">
+      <div className="w-56">
         <label className="sr-only" htmlFor="if-group">
           Compare by
         </label>

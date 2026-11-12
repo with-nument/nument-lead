@@ -116,7 +116,7 @@ export function UsersTable({ users }: { users: UserRow[] }) {
   const td = 'h-14 px-3 align-middle first:pl-4 last:pr-4 sm:first:pl-5 sm:last:pr-5'
   return (
     <>
-      <div className="overflow-x-auto">
+      <div className="relative overflow-x-auto">
         <table className="w-full text-left text-base">
           <thead>
             <tr>
@@ -143,23 +143,25 @@ export function UsersTable({ users }: { users: UserRow[] }) {
                   <label className="sr-only" htmlFor={`role-${u.id}`}>
                     Role for {u.name}
                   </label>
-                  <select
-                    id={`role-${u.id}`}
-                    defaultValue={u.role ?? ''}
-                    disabled={pending || u.isMe}
-                    onChange={(e) => {
-                      const role = e.currentTarget.value
-                      run(() => setRole({ userId: u.id, role }))
-                    }}
-                    className="h-9 rounded-xl border border-line bg-surface px-3 text-base focus-visible:outline-none focus-visible:focus-ring disabled:bg-surface-2"
-                  >
-                    {!u.role ? <option value="">No role</option> : null}
-                    {ROLES.map((r) => (
-                      <option key={r} value={r}>
-                        {ROLE_LABEL[r]}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="w-32">
+                    <Select
+                      id={`role-${u.id}`}
+                      defaultValue={u.role ?? ''}
+                      disabled={pending || u.isMe}
+                      className="h-9"
+                      onChange={(e) => {
+                        const role = e.currentTarget.value
+                        run(() => setRole({ userId: u.id, role }))
+                      }}
+                    >
+                      {!u.role ? <option value="">No role</option> : null}
+                      {ROLES.map((r) => (
+                        <option key={r} value={r}>
+                          {ROLE_LABEL[r]}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
                 </td>
                 <td className={`${td} whitespace-nowrap text-tx-3`}>{u.lastSignIn || 'Never'}</td>
                 <td className={td}>
