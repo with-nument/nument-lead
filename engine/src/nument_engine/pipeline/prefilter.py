@@ -33,7 +33,7 @@ from .selection import active_segments, daily_quotas
 
 log = get_logger()
 
-FIT_ONLY_SHARE = 0.10
+FIT_ONLY_SHARE = 0.10  # default; settings.prefilter.fit_only_share overrides it (0 to 1)
 MIN_SEGMENT_SHARE = 0.10
 MONEY_SHARE = 0.80  # keep 20% of today's money for the morning run (Step 8.8)
 DEFAULT_COST_PER_ITEM_INR = 2.1  # Balanced tier estimate; tune after week 1 (setting research.est_cost_inr)
@@ -260,9 +260,15 @@ def apply_rules(b: dict[str, Any], seg: Segment | None, excl: Exclusions, world:
     new_signal = researched is not None and any(s["created_at"] > researched for s in sigs)
     if researched and researched > now - timedelta(days=RECENT_DAYS) and not new_signal:
         return "skip", "R8_recent"
-    # R9: big enough for the segment, or they asked for help (size is checked again in Step 11)
-    if not has_stated_need and size_verdict(b, seg, world, now) is not True:
-        return "skip", "R9_size"
+    # R9: big enough for the segment, or they asked for help (size is checked again in Step 11).
+    # A business with no review data at all (no Places key, or no listing found) but its own website may be
+    # researched with its size unknown: research reads its doctors and branches, and Step 11's fit gate drops
+    # the small ones. It competes for the fit-only slots at the lowest size priority.
+    if not has_stated_need:
+        size = size_verdict(b, seg, world, now)
+        unknown_with_site = size is None and b.get("review_count") is None and bool(b.get("web_domain"))
+        if size is not True and not unknown_with_site:
+            return "skip", "R9_size"
     # R10: some way to reach them
     if not (b.get("website") or world.phones.get(bid) or world.emails.get(bid)):
         extra = b.get("extra") or {}
@@ -337,12 +343,19 @@ def segment_slots(slots: int, quotas: dict[str, int], with_work: set[str]) -> di
     return share
 
 
-def build_queue(passed: list[Item], slots: int, quotas: dict[str, int], *, fit_only_allowed: bool = True) -> list[Item]:
+def build_queue(
+    passed: list[Item],
+    slots: int,
+    quotas: dict[str, int],
+    *,
+    fit_only_allowed: bool = True,
+    fit_only_share: float = FIT_ONLY_SHARE,
+) -> list[Item]:
     """Today's queue: segment shares first, then any slots left by global priority (fit-only capped, and none at
     all once today's spend passes the fit-only threshold of the budget ladder, Step 19.6)."""
     if slots <= 0:
         return []
-    fit_cap = math.floor(slots * FIT_ONLY_SHARE) if fit_only_allowed else 0
+    fit_cap = math.floor(slots * min(max(fit_only_share, 0.0), 1.0)) if fit_only_allowed else 0
     by_seg: dict[str, list[Item]] = defaultdict(list)
     for item in _order(passed):
         by_seg[item.segment_id].append(item)
@@ -426,7 +439,9 @@ def run(rc: RunContext) -> dict[str, Any]:
     budget = Budget(rc.run_id)
     slots, quotas, why = today_slots(list(segments), budget)
     fit_ok = budget.allow_phase("fit_only_research")
-    queue = build_queue(passed, slots, quotas, fit_only_allowed=fit_ok)
+    share = db.get_setting("prefilter.fit_only_share", FIT_ONLY_SHARE)
+    share = float(share) if isinstance(share, int | float) else FIT_ONLY_SHARE
+    queue = build_queue(passed, slots, quotas, fit_only_allowed=fit_ok, fit_only_share=share)
     if rc.opts.limit:
         queue = queue[: rc.opts.limit]
     if not rc.opts.dry_run:

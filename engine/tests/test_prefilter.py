@@ -111,6 +111,8 @@ def world(**kw: Any) -> World:
         (biz(review_count=20), world(), ("skip", "R9_size")),
         (biz(review_count=500, places_fetched_at=NOW - timedelta(days=40)), world(), ("skip", "R9_size")),  # stale
         (biz(review_count=None), world(record_sources={"b1": {"art_registry"}}), ("pass", None)),
+        (biz(review_count=None), world(), ("pass", None)),  # no review data, own website: research measures size
+        (biz(review_count=None, website=None, web_domain=None), world(emails={"b1": {"a@x.in"}}), ("skip", "R9_size")),
         (biz(review_count=None), world(facts={"b1": {"staff_or_doctors": {"count": 3}}}), ("pass", None)),
         (biz(review_count=None), world(signals={"b1": [signal("public_ask", "stated_need")]}), ("pass", None)),
         (biz(website=None, web_domain=None), world(), ("reject", "no_contact_route")),
@@ -222,3 +224,11 @@ def test_dry_run_changes_nothing(clean_db: str) -> None:
     )
     prefilter.run(run_context(segments=["clinics-in"], dry_run=True))
     assert db.scalar("select status from public.businesses where id = %s", [bid]) == "candidate"
+
+
+def test_the_fit_only_share_can_be_raised_by_setting() -> None:
+    passed = [item("clinics-in", 100 + i, 90, fit=True) for i in range(30)]
+    assert sum(i.fit_only for i in build_queue(passed, slots=20, quotas={"clinics-in": 20})) == 2  # default 10%
+    raised = build_queue(passed, slots=20, quotas={"clinics-in": 20}, fit_only_share=0.5)
+    assert sum(i.fit_only for i in raised) == 10
+    assert len(build_queue(passed, slots=20, quotas={"clinics-in": 20}, fit_only_share=7)) == 20  # clamped to 100%
