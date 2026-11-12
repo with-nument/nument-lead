@@ -18,6 +18,7 @@ from nument_engine.models import (
     PhoneFact,
     PublicAskItem,
     PublicAskResults,
+    ReviewLookup,
     SignalClassification,
     TextFact,
 )
@@ -94,6 +95,15 @@ OUTPUTS: dict[str, BaseModel] = {
         claims=[Claim(text="hiring a patient coordinator for Baner", ids=["S1"])],
     ),
     "check_message": MessageCheck(score=9, issues=[], suggested_fix=None),
+    "lookup_reviews": ReviewLookup(
+        google_rating=4.6,
+        google_review_count=874,
+        google_quote="Google: 4.6 stars from 874 reviews",
+        practo_rating=None,
+        practo_story_count=None,
+        practo_quote=None,
+        complaint=None,
+    ),
     "grounded_search": PublicAskResults(
         items=[
             PublicAskItem(

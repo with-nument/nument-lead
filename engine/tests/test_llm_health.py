@@ -51,7 +51,7 @@ def test_model_check_fails_without_a_gemini_key(llm_db: str) -> None:
 
 
 def _answer(req: LLMRequest) -> LLMResponse:
-    if req.task == "grounded_search" and req.schema is None:
+    if "web_search" in req.tools and req.schema is None:  # the search call of any web-search task
         grounding = {"queries": ["q1"], "sources": [{"uri": "https://r.example/1", "title": "x"}], "supports": []}
         return reply("1. Smile Care Clinic asks for a bot. https://forum.example.com/t/1", grounding=grounding)
     return reply(OUTPUTS[req.task], model=req.model)

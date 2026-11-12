@@ -186,7 +186,7 @@ def test_phase_tables_follow_the_plan() -> None:
     }.items()}  # fmt: skip
     assert names["night"] == ["health", "universe", "signals", "prefilter", "research", "extract_submit"]
     assert names["morning"] == [
-        "health", "extract_collect", "verify", "score", "judge", "message", "sheet_sync", "prune", "summary",
+        "health", "extract_collect", "verify", "reviews", "score", "judge", "message", "sheet_sync", "prune", "summary",
     ]  # fmt: skip
     assert names["weekly"] == ["learn", "audit", "report"]  # the report includes this week's audit (16.6.2)
     assert names["monthly"] == ["universe", "prune"]

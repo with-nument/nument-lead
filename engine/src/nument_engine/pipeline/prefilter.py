@@ -185,13 +185,22 @@ def _compare(value: Any, op: str, target: Any) -> bool | None:
     return None
 
 
+def _reviews_at(b: dict[str, Any]) -> datetime | None:
+    """When the review numbers were read through search grounding (`pipeline.reviews`), if they were."""
+    raw = (b.get("extra") or {}).get("reviews_at")
+    try:
+        return datetime.fromisoformat(raw) if isinstance(raw, str) else None
+    except ValueError:
+        return None
+
+
 def eval_size_rule(rule: Rule, b: dict[str, Any], world: World, now: datetime) -> bool | None:
     """True / False when known, None when the data is not there yet (wait, do not reject)."""
     bid = b["id"]
     if rule.source == "business":
         value = b.get(rule.key)
         if rule.key in ("review_count", "rating"):
-            fetched = b.get("places_fetched_at")
+            fetched = b.get("places_fetched_at") or _reviews_at(b)
             if fetched is None or fetched < now - timedelta(days=STALE_PLACES_DAYS):
                 value = None  # Places numbers older than 30 days count as unknown (Step 8.11)
         return _compare(value, rule.op, rule.value)

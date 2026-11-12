@@ -215,6 +215,24 @@ tiers:
       timeout_s: 180
       max_retries: 1
 
+    lookup_reviews:                           # the Places fallback: public review numbers through Google Search grounding
+      primary: g_flash
+      fallbacks: [g_pro, g_lite]
+      mode: sync
+      schema: ReviewLookup
+      prompt: lookup_reviews.md
+      structure_with: g_lite
+      structure_prompt: structure_reviews.md
+      max_output_tokens: 1200
+      temperature: 0.0
+      thinking: low
+      tools: [web_search]
+      priority: 4
+      est_input_tokens: 600
+      est_output_tokens: 800
+      cache_ttl_days: 30
+      timeout_s: 120
+      max_retries: 1
     weekly_audit:
       primary: g_pro
       fallbacks: [g_flash, o_top]

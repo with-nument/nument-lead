@@ -249,6 +249,14 @@ def verify(ctx: typer.Context) -> None:
 
 
 @app.command()
+def reviews(ctx: typer.Context) -> None:
+    """Public Google review numbers for researched businesses without Places data (the Places fallback)."""
+    from .pipeline import reviews as m
+
+    _execute(ctx, "manual", m.run)
+
+
+@app.command()
 def score(
     ctx: typer.Context,
     all_businesses: Annotated[

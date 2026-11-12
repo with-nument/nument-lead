@@ -261,6 +261,14 @@ SMOKE_INPUTS: dict[str, dict[str, Any]] = {
         "facts": [{"id": "F1", "field": "branches", "value": {"count": 2}}],
         "signals": [{"id": "S1", "type": "hiring_frontdesk", "summary": "hiring a patient coordinator in Baner"}],
     },
+    "lookup_reviews": {
+        "name": "Sunrise Dental Clinic",
+        "city": "Pune",
+        "country": "India",
+        "kind": "clinic",
+        "website": "https://sunrisedental.example",
+        "practo": True,
+    },
     "grounded_search": {
         "domain": "clinics",
         "country": "India",

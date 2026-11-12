@@ -215,6 +215,7 @@ AITask = Literal[
     "write_message",
     "check_message",
     "grounded_search",
+    "lookup_reviews",
     "weekly_audit",
 ]
 AI_TASKS: Final[tuple[str, ...]] = get_args(AITask)
@@ -285,6 +286,19 @@ class PublicAskResults(BaseModel):
     """`grounded_search` structuring output (Step 5.11)."""
 
     items: list[PublicAskItem]
+
+
+class ReviewLookup(BaseModel):
+    """`lookup_reviews` structuring output: public review numbers of one business, read through Google Search
+    grounding when there is no Places data (the Places fallback that needs no billing account)."""
+
+    google_rating: float | None = Field(description="Google star rating from 1.0 to 5.0, or null when unknown")
+    google_review_count: int | None = Field(description="number of Google reviews in digits, or null when unknown")
+    google_quote: str | None = Field(description="the Google line copied exactly from the answer, or null")
+    practo_rating: float | None = Field(description="Practo rating as written, or null")
+    practo_story_count: int | None = Field(description="number of Practo patient stories in digits, or null")
+    practo_quote: str | None = Field(description="the Practo line copied exactly from the answer, or null")
+    complaint: str | None = Field(description="the main complaint in recent reviews as written, or null")
 
 
 # ---- extract_facts (Step 9.12) ---------------------------------------------
@@ -437,5 +451,6 @@ AI_OUTPUT_MODELS: Final[dict[str, type[BaseModel]]] = {
     "write_message": MessageDraft,
     "check_message": MessageCheck,
     "grounded_search": PublicAskResults,
+    "lookup_reviews": ReviewLookup,
     "weekly_audit": AuditResult,
 }

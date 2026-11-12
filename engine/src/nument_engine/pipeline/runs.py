@@ -334,6 +334,7 @@ def morning_phases() -> list[Phase]:
         Phase("health", stage("ops.health", "check_all", fail_fast=True), essential=True),
         Phase("extract_collect", stage("pipeline.extract", "collect")),  # already paid at submission
         Phase("verify", stage("pipeline.verify"), essential=True),
+        Phase("reviews", stage("pipeline.reviews"), budget="grounded_search"),  # Places fallback before scoring
         Phase("score", stage("pipeline.score"), essential=True),
         Phase("judge", stage("pipeline.judge"), budget="judge"),
         Phase("message", stage("pipeline.message"), budget="message"),
