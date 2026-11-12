@@ -1,0 +1,91 @@
+# Weekly report: {{ c.period.label }}
+
+{{ c.headline.line }}
+
+The tables cover leads first contacted in the last 180 days; the line above is this week only. Rates count only leads whose window has closed: replies 21 days after first contact, meetings 45, proposals 60, wins 120. "Still open" leads are inside the meeting window. Ranges are 90% credible intervals. Decisions need 50 judged leads; the engine recommends and the founder decides.
+
+## 1. Funnel by segment and country
+
+{{ t.segment_id }}
+
+{{ t.country }}
+
+## 2. By signal type
+
+{{ t.signal_type }}
+
+## 3. By pitch mode, angle and writer
+
+Fit only is the control group: if it books meetings as often as the signal groups, signals are not helping.
+
+{{ t.pitch_mode }}
+
+{{ t.angle }}
+
+{{ t.writer }}
+
+## 4. Test groups to scale or cut
+
+{% for line in c.test_groups.lines %}
+- {{ line }}
+{% else %}
+- No test group has enough judged leads yet (50 or more past the meeting window).
+{% endfor %}
+
+## 5. Lead quality
+
+{% for line in c.quality.lines %}
+- {{ line }}
+{% endfor %}
+{% if c.quality.exclusion_lines %}
+
+Suggested additions to `engine/config/exclusions.yaml` (thumbed down three or more times):
+
+{% for line in c.quality.exclusion_lines %}
+- {{ line }}
+{% endfor %}
+{% endif %}
+{% if c.quality.bad_message_lines %}
+
+Messages marked "bad message" this week:
+
+{% for line in c.quality.bad_message_lines %}
+- {{ line }}
+{% endfor %}
+{% endif %}
+{% if admin %}
+
+## 6. Cost
+
+{% for line in c.cost.lines %}
+- {{ line }}
+{% endfor %}
+{% if c.cost.by_task %}
+
+{{ t.cost_by_task }}
+{% endif %}
+{% endif %}
+
+## {{ 7 if admin else 6 }}. Engine health
+
+{% for line in c.health.lines %}
+- {{ line }}
+{% endfor %}
+
+## {{ 8 if admin else 7 }}. What the engine changed
+
+{% for line in c.changes.lines %}
+- {{ line }}
+{% endfor %}
+
+## {{ 9 if admin else 8 }}. Last eval and audit
+
+{% for line in c.eval_audit.lines %}
+- {{ line }}
+{% endfor %}
+
+## {{ 10 if admin else 9 }}. Suggested actions
+
+{% for line in c.actions %}
+- {{ line }}
+{% endfor %}
