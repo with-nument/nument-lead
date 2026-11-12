@@ -129,7 +129,13 @@ def test_unreachable_database_is_reported_plainly(monkeypatch: pytest.MonkeyPatc
     assert "nlead-test-guard" not in result.output  # the connection string is never printed
 
 
-def test_unbuilt_stage_says_so_and_records_a_failed_run(engine_db: str) -> None:
+def test_unbuilt_stage_says_so_and_records_a_failed_run(engine_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    import nument_engine.pipeline.universe as stage
+
+    def unbuilt(rc: object, monthly: bool = False) -> None:
+        raise NotImplementedError("Built in Step 6")
+
+    monkeypatch.setattr(stage, "run", unbuilt)  # the real stage exists now and would go to the network
     result = runner.invoke(app, ["--segment", "clinics-in", "--limit", "5", "universe", "--monthly"])
     assert result.exit_code == 2
     assert "not built yet (Built in Step 6)" in result.output
@@ -164,10 +170,13 @@ def test_db_commands(engine_db: str) -> None:
     assert db.scalar("select count(*) from public.segments where config_version is not null") == 6
 
 
-def test_global_flags_work_after_the_command_too(engine_db: str) -> None:
+def test_global_flags_work_after_the_command_too(engine_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
     """The plan and the workflows call `nlead run monthly --env prod --segment X`; both positions must work."""
+    import nument_engine.pipeline.universe as stage
+
+    monkeypatch.setattr(stage, "run", lambda rc, monthly=False: rc.stats.update(universe={"stub": True}))
     result = runner.invoke(app, ["universe", "--segment", "clinics-ae", "--limit=7", "--dry-run", "--env", "dev"])
-    assert result.exit_code == 2 and "Built in Step 6" in result.output
+    assert result.exit_code == 0, result.output
     row = db.fetch_one("select stats from public.runs order by started_at desc limit 1")
     assert row is not None
     assert (row["stats"]["segments"], row["stats"]["limit"], row["stats"]["dry_run"]) == (["clinics-ae"], 7, True)
