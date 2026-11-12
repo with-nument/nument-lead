@@ -10,7 +10,6 @@ site that blocks us is skipped, it does not pause the GDELT source.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -30,6 +29,7 @@ MIN_CONFIDENCE = 0.6
 ARTICLE_CHARS = 3000
 RATE_LIMIT_WAIT_S = 12.0
 EVENT_TO_SIGNAL = {"new_branch": "new_branch", "news": "news", "funding": "funding"}
+QUERY_TASK = "gdelt_query"
 
 
 @dataclass
@@ -101,7 +101,7 @@ class GdeltAdapter(SourceAdapter):
         }
         for attempt in range(2):
             res = await self.http.get(API, params=params, check_robots=False, raise_on_block=False)
-            health.log_cost(self.ctx.run_id, "other", "gdelt_query")
+            self.ctx.budget.record("other", None, QUERY_TASK)  # free, counted for the daily query cap
             if res.status == 429:
                 self.http.blocked_hosts.pop("api.gdeltproject.org", None)
                 if attempt == 0:
@@ -201,7 +201,6 @@ class GdeltAdapter(SourceAdapter):
                     return out
         return out
 
-    @staticmethod
-    def queries_left(segments: Sequence[Segment]) -> int:
+    def queries_left(self) -> int:
         cap = health.setting_int("gdelt.queries_per_day", DEFAULT_QUERIES_PER_DAY)
-        return max(0, cap - health.calls_today("other", "gdelt_query"))
+        return max(0, cap - self.ctx.budget.calls_today("other", [QUERY_TASK]))

@@ -292,3 +292,34 @@ def test_queries_rotate_every_third_day() -> None:
     runs = [GroundedSearchAdapter.todays_queries(seg, day) for day in range(700_000, 700_003)]
     assert sorted(q for day in runs for q in day) == sorted(seg.public_ask_queries)
     assert Citation("u", "t").resolved is None
+
+
+async def test_the_routers_ai_result_shape_is_understood(monkeypatch: pytest.MonkeyPatch, clean_db: str) -> None:
+    """`Router.run_result` returns AIResult(output=PublicAskResults, grounding={"queries", "sources"})."""
+    from nument_engine.llm.router import AIResult
+
+    forum = "https://forum-nlead.in/t/ai-result-1"
+    page = "<html><body><p>Our dental clinic needs an online booking system with WhatsApp reminders.</p></body></html>"
+    transport, _ = mock_transport({"https://forum-nlead.in/robots.txt": (404, ""), forum: (200, page)})
+
+    class ResultRouter(FakeRouter):
+        def run_result(self, task: str, inputs: dict[str, Any], **kw: Any) -> Any:
+            out = self.run(task, inputs)
+            if task != "grounded_search":
+                return AIResult(task=task, output=out, provider="gemini", model="m", prompt_version=1)
+            return AIResult(
+                task=task,
+                output=out,
+                provider="gemini",
+                model="gemini-3-flash",
+                prompt_version=1,
+                grounding={"queries": ["q"], "sources": [{"uri": forum, "title": "forum-nlead.in"}]},
+            )
+
+    items = PublicAskResults(items=[ask(forum, "needs an online booking system with WhatsApp reminders")])
+    router = ResultRouter({"grounded_search": [items], "classify_signal": relevant})
+    monkeypatch.setattr(GroundedSearchAdapter, "todays_queries", staticmethod(lambda seg, day=None: ["q1"]))
+    async with GroundedSearchAdapter(ctx(router), transport=transport) as gs:
+        gs.pages.min_gap = 0.0
+        sigs = await gs.signals_for(segment(), budget=1)
+    assert [s.url for s in sigs] == [forum] and sigs[0].details["snippet_only"] is False

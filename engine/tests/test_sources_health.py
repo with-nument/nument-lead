@@ -76,22 +76,6 @@ def test_request_counts_add_up_within_a_day_and_reset_on_a_new_day(clean_db: str
     assert row["requests_today"] == 7 and row["last_ok_at"] is not None
 
 
-def test_costs_and_quota_counting(clean_db: str) -> None:
-    for _ in range(3):
-        health.log_cost(None, "google_places", "places_details", model="in")
-    health.log_cost(None, "google_places", "places_details", model="global")
-    health.log_cost(None, "pagespeed", "pagespeed", usd=0.0)
-    assert health.calls_today("google_places", "places_details", model="in") == 3
-    assert health.calls_this_month("google_places", "places_details") == 4
-    assert health.calls_today("pagespeed", "pagespeed") == 1
-
-
-def test_remaining_money_counts_spend_and_reservations(clean_db: str) -> None:
-    before = health.remaining_inr_today()
-    health.log_cost(None, "gemini", "test_spend", usd=1.0)  # 1 USD at 88 INR
-    assert health.remaining_inr_today() == pytest.approx(before - 88.0, abs=0.01)
-
-
 async def test_kill_switch_means_no_requests(clean_db: str) -> None:
     """Step 5.16 test 5: sources_enabled.apna = false makes the adapter do nothing at all."""
     flags = db.get_setting("sources_enabled")

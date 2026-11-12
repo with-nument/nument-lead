@@ -14,7 +14,9 @@ from typing import Any, ClassVar, Protocol, Self, TypeVar
 
 import httpx
 
+from ..budget import Budget, BudgetExceeded
 from ..http import MAX_BYTES, Policy, PoliteClient, SourceBlocked
+from ..llm.types import AllProvidersDown
 from ..logging import get_logger
 from ..models import SIGNAL_CATEGORY
 from . import health
@@ -117,24 +119,33 @@ class SourceRecord:
 
 
 # ---------------------------------------------------------------------------------------------------
-# AI router contract (Step 4.10). Builder of llm/ provides the real one; tests use a fake.
+# AI router contract (Step 4.10): `nument_engine.llm.router.Router`. Tests pass a fake with the same methods.
 # ---------------------------------------------------------------------------------------------------
 
 
 class AIRouter(Protocol):
-    """The part of `llm.router.Router` the collect and research stages use."""
+    """The part of `llm.router.Router` the collect and research stages use (`run_result` is optional)."""
 
-    def run(self, task: str, inputs: dict[str, Any], *, lead_id: str | None = None, cache_extra: str = "") -> Any: ...
+    def run(self, task: str, inputs: dict[str, Any], *, lead_id: str | None = None) -> Any: ...
 
 
-# The router raises these when the budget or every provider says no (Step 4.1.2 rules 4 and 5). They are matched
-# by name so this package does not import llm/ or budget.py.
-AI_STOP_ERRORS = frozenset({"BudgetExceeded", "BudgetStop", "AllProvidersDown"})
+@dataclass
+class AIAnswer:
+    """What a stage needs back from one AI call: the validated output and, for searches, the citations."""
+
+    output: Any
+    grounding: dict[str, Any] | None = None
+    tag: str | None = None  # provider:model#task.vN
+
+
+# The router raises these when the budget or every provider says no (Step 4.1.2 rules 4 and 5).
+AI_STOP_ERRORS: tuple[type[BaseException], ...] = (BudgetExceeded, AllProvidersDown)
+AI_STOP_NAMES = frozenset({"BudgetExceeded", "BudgetStop", "AllProvidersDown"})
 
 
 def is_ai_stop(exc: BaseException) -> bool:
     """True when the router refused the call for budget or provider reasons: stop AI work for this stage."""
-    return any(cls.__name__ in AI_STOP_ERRORS for cls in type(exc).__mro__)
+    return isinstance(exc, AI_STOP_ERRORS) or any(cls.__name__ in AI_STOP_NAMES for cls in type(exc).__mro__)
 
 
 def field_of(obj: Any, name: str, default: Any = None) -> Any:
@@ -146,6 +157,13 @@ def field_of(obj: Any, name: str, default: Any = None) -> Any:
     return getattr(obj, name, default)
 
 
+def router_for_run(rc: Any) -> Any:
+    """The run's AI router (`nument_engine.llm.router.for_run`), imported late so plain stages stay light."""
+    from ..llm.router import for_run
+
+    return for_run(rc)
+
+
 # ---------------------------------------------------------------------------------------------------
 # Run context for adapters
 # ---------------------------------------------------------------------------------------------------
@@ -153,26 +171,58 @@ def field_of(obj: Any, name: str, default: Any = None) -> Any:
 
 @dataclass
 class SourceContext:
-    """What an adapter needs from the run: ids, flags, the AI router and a place for counters and alerts."""
+    """What an adapter needs from the run: ids, flags, the AI router, the budget guard, counters and alerts.
+
+    The router is created on first use (most stages make no AI call at all); the budget is the router's own
+    when there is a router, so spend, quotas and the daily cap are read from one place.
+    """
 
     run_id: str | None = None
     dry_run: bool = False
     limit: int | None = None
-    router: AIRouter | None = None
+    router: Any = None
     stats: dict[str, Any] = field(default_factory=dict)
     alerts: list[str] = field(default_factory=list)
     ai_stopped: str | None = None  # set when the router refused (budget, providers): no more AI calls this stage
+    max_spend_inr: float | None = None
+    router_factory: Callable[[], Any] | None = field(default=None, repr=False)
+    _budget: Budget | None = field(default=None, repr=False)
 
     @classmethod
-    def from_run(cls, rc: Any, router: AIRouter | None = None) -> SourceContext:
-        """From a `pipeline.runs.RunContext`. The router comes from the argument or `rc.router` when present."""
+    def from_run(cls, rc: Any, router: Any = None) -> SourceContext:
+        """From a `pipeline.runs.RunContext`. Without a router argument the run's router is built on first use."""
         opts = getattr(rc, "opts", None)
-        return cls(
+        ctx = cls(
             run_id=getattr(rc, "run_id", None),
             dry_run=bool(getattr(opts, "dry_run", False)),
             limit=getattr(opts, "limit", None),
             router=router if router is not None else getattr(rc, "router", None),
+            max_spend_inr=getattr(opts, "max_spend_inr", None),
         )
+        if ctx.router is None:
+            ctx.router_factory = lambda: router_for_run(rc)
+        return ctx
+
+    def get_router(self) -> Any:
+        if self.router is None and self.router_factory is not None:
+            factory, self.router_factory = self.router_factory, None
+            try:
+                self.router = factory()
+            except Exception as exc:  # no tasks.yaml, no database: AI work is skipped, the stage goes on
+                log.warning("ai.router_unavailable", error=f"{type(exc).__name__}: {str(exc)[:200]}")
+        return self.router
+
+    @property
+    def budget(self) -> Budget:
+        """The budget guard: the router's when it exists, else one for this run (same tables, same rules)."""
+        if self._budget is None:
+            routed = getattr(self.router, "budget", None)
+            self._budget = (
+                routed
+                if isinstance(routed, Budget)
+                else Budget(self.run_id, max_spend_inr=self.max_spend_inr, stats=self.stats)
+            )
+        return self._budget
 
     def add(self, key: str, n: int = 1) -> None:
         self.stats[key] = self.stats.get(key, 0) + n
@@ -182,17 +232,23 @@ class SourceContext:
             self.alerts.append(message)
         log.warning("run.alert", message=message)
 
-    def ai(self, task: str, inputs: dict[str, Any]) -> Any | None:
+    def ai_result(self, task: str, inputs: dict[str, Any]) -> AIAnswer | None:
         """One AI call through the router. Returns None (and records why) when there is no router, when the
         budget or every provider refused, or when this item failed. Never raises for AI problems."""
-        if self.router is None:
+        router = self.get_router()
+        if router is None:
             self.add(f"ai_skipped.{task}.no_router")
             return None
         if self.ai_stopped:
             self.add(f"ai_skipped.{task}.stopped")
             return None
         try:
-            return self.router.run(task, inputs)
+            run_result = getattr(router, "run_result", None)
+            if callable(run_result):
+                result = run_result(task, inputs)
+                return AIAnswer(field_of(result, "output"), field_of(result, "grounding"), field_of(result, "tag"))
+            output = router.run(task, inputs)
+            return AIAnswer(output, field_of(output, "grounding"))
         except Exception as exc:  # the router's own errors are typed; anything else is one bad item
             if is_ai_stop(exc):
                 self.ai_stopped = f"{type(exc).__name__}: {exc}"
@@ -202,6 +258,11 @@ class SourceContext:
             self.add(f"ai_errors.{task}")
             log.warning("ai.error", task=task, error=f"{type(exc).__name__}: {str(exc)[:200]}")
             return None
+
+    def ai(self, task: str, inputs: dict[str, Any]) -> Any | None:
+        """The validated output of one AI call, or None (see `ai_result`)."""
+        answer = self.ai_result(task, inputs)
+        return None if answer is None else answer.output
 
 
 # ---------------------------------------------------------------------------------------------------

@@ -6,8 +6,10 @@ Terms (A.4.4, Step 5.5.5) enforced here and in `cleanup_expired()`:
 - Review text is never stored or logged: reviews are read in memory, turned into derived flags, and dropped.
 
 Without `GOOGLE_MAPS_API_KEY` the adapter does nothing and says so once in `source_health` (the key is being set
-up by the founder). Quotas: every call is logged in `costs` (provider `google_places`, the region in `model`), and
-the daily and monthly free allowances are counted from there before each Details call.
+up by the founder). Quotas belong to the budget guard (Step 19.7): `places_quota_left` before each Details call
+(daily cap per region, free monthly allowance per SKU) and `record_places` after every call, so the costs table
+counts searches, Details and reviews exactly as the rest of the engine does. Each segment's own daily cap from
+its YAML applies on top, inside the run.
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from .. import db
+from ..budget import PlacesKind
 from ..http import FetchResult
 from ..normalize import homepage, is_ignored_host
 from ..segments import Segment
@@ -36,14 +39,10 @@ DETAILS_MASK = (
 REVIEWS_MASK = "id,reviews"
 MAX_PAGES = 3  # 20 results a page, about 60 a query
 
-# Free allowances per SKU and month, and our daily caps (A.10.2, Step 19.7). India and abroad differ a lot.
-FREE_PER_MONTH = {"in": 7000, "global": 1000}
-DAILY_CAP_SETTING = {"in": "places_details_cap_in", "global": "places_details_cap_global"}
-DAILY_CAP_DEFAULT = {"in": 230, "global": 30}
-COST_PROVIDER = "google_places"
-TASK_SEARCH = "places_text_search"
-TASK_DETAILS = "places_details"
-TASK_REVIEWS = "places_details_reviews"
+# Kinds of Places calls, as the budget guard names them (budget.PLACES_TASKS).
+SEARCH: PlacesKind = "text_search"
+DETAILS: PlacesKind = "details"
+REVIEWS: PlacesKind = "details_reviews"
 
 
 class QuotaReached(Exception):
@@ -151,25 +150,20 @@ class PlacesAdapter(SourceAdapter):
         health.mark_error(self.name, str(err), requests=self.new_requests())
 
     # ---- quotas ---------------------------------------------------------------------------------------
-    def details_left(self, seg: Segment, task: str = TASK_DETAILS) -> int:
-        """Details calls still allowed now for this segment: the smallest of the segment's daily cap, the
-        region's daily cap and the region's free monthly allowance."""
-        region = region_of(seg.country)
-        seg_cap = seg.places.details_per_day if task == TASK_DETAILS else seg.places.reviews_per_day
-        seg_left = seg_cap - self._used.get((task, seg.id), 0)
-        day_cap = health.setting_int(DAILY_CAP_SETTING[region], DAILY_CAP_DEFAULT[region])
-        day_left = day_cap - health.calls_today(COST_PROVIDER, task, model=region)
-        month_left = FREE_PER_MONTH[region] - health.calls_this_month(COST_PROVIDER, task, model=region)
-        return max(0, min(seg_left, day_left, month_left))
+    def details_left(self, seg: Segment, kind: PlacesKind = DETAILS) -> int:
+        """Calls of this kind still allowed now for this segment: the segment's own daily cap (this run) and
+        the budget guard's room (daily cap of the region, free monthly allowance of the SKU)."""
+        seg_cap = seg.places.details_per_day if kind == DETAILS else seg.places.reviews_per_day
+        seg_left = seg_cap - self._used.get((kind, seg.id), 0)
+        return max(0, min(seg_left, self.ctx.budget.places_quota_left(kind, seg.country)))
 
-    def _take(self, seg: Segment, task: str) -> None:
-        left = self.details_left(seg, task)
-        if left <= 0:
-            raise QuotaReached(task, f"no {task} calls left today for {seg.id} ({region_of(seg.country)})")
-        self._used[(task, seg.id)] = self._used.get((task, seg.id), 0) + 1
+    def _take(self, seg: Segment, kind: PlacesKind) -> None:
+        if self.details_left(seg, kind) <= 0:
+            raise QuotaReached(kind, f"no {kind} calls left today for {seg.id} ({region_of(seg.country)})")
+        self._used[(kind, seg.id)] = self._used.get((kind, seg.id), 0) + 1
 
-    def _log(self, task: str, seg: Segment) -> None:
-        health.log_cost(self.ctx.run_id, COST_PROVIDER, task, model=region_of(seg.country))
+    def _log(self, kind: PlacesKind, seg: Segment) -> None:
+        self.ctx.budget.record_places(kind, seg.country)
 
     # ---- API ------------------------------------------------------------------------------------------
     async def search_ids(self, text_query: str, seg: Segment, rect: Sequence[float]) -> list[str]:
@@ -193,7 +187,7 @@ class PlacesAdapter(SourceAdapter):
             if token:
                 body["pageToken"] = token
             data = await self._call(SEARCH_URL, SEARCH_MASK, body=body)
-            self._log(TASK_SEARCH, seg)
+            self._log(SEARCH, seg)
             ids += [str(p["id"]) for p in data.get("places", []) if p.get("id")]
             token = data.get("nextPageToken")
             if not token:
@@ -202,16 +196,16 @@ class PlacesAdapter(SourceAdapter):
 
     async def details(self, place_id: str, seg: Segment) -> dict[str, Any]:
         """Place Details (Enterprise SKU) inside the caps. Raises QuotaReached when none are left."""
-        self._take(seg, TASK_DETAILS)
+        self._take(seg, DETAILS)
         data = await self._call(DETAILS_URL.format(place_id=place_id), DETAILS_MASK)
-        self._log(TASK_DETAILS, seg)
+        self._log(DETAILS, seg)
         return data
 
     async def reviews(self, place_id: str, seg: Segment) -> list[Review]:
         """Up to 5 reviews (Enterprise + Atmosphere SKU), in memory only."""
-        self._take(seg, TASK_REVIEWS)
+        self._take(seg, REVIEWS)
         data = await self._call(DETAILS_URL.format(place_id=place_id), REVIEWS_MASK)
-        self._log(TASK_REVIEWS, seg)
+        self._log(REVIEWS, seg)
         out = []
         for r in data.get("reviews", [])[:5]:
             text = (r.get("text") or {}).get("text") or (r.get("originalText") or {}).get("text") or ""

@@ -12,7 +12,6 @@ from collections.abc import Mapping
 from typing import Any
 
 from ..segments import Segment
-from . import health
 from .base import Signal, SourceAdapter
 from .jobs import JobPost, classify_job, has_domain_hint, parse_date, role_from_keywords
 
@@ -67,7 +66,7 @@ class AdzunaAdapter(SourceAdapter):
             "content-type": "application/json",
         }
         res = await self.http.get(API.format(country=seg.country, page=page), params=params, check_robots=False)
-        health.log_cost(self.ctx.run_id, "other", "adzuna_search")
+        self.ctx.budget.record("other", None, "adzuna_search")  # free, counted like every API call
         if not res.ok:
             self.ctx.add("adzuna.errors")
             return []

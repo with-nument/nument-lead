@@ -6,7 +6,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+import pytest
+
 from nument_engine import db
+from nument_engine.budget import BudgetExceeded
+from nument_engine.llm.batch import BatchItem, CollectResult, ItemResult, SubmitResult, SubmittedJob
 from nument_engine.models import FactsExtraction
 from nument_engine.pipeline import extract
 from nument_engine.pipeline.extract import PageIn, flatten, page_for, pages_block, trim_pages
@@ -145,53 +149,92 @@ def seed_business(**kw: Any) -> str:
     return bid
 
 
-def test_submit_builds_items_and_marks_them(clean_db: str) -> None:
+class FakeBatch:
+    """Stands in for `nument_engine.llm.batch`: records submissions and returns real result types."""
+
+    def __init__(self, results: list[ItemResult] | None = None, raises: BaseException | None = None) -> None:
+        self.submitted: list[tuple[str, list[BatchItem]]] = []
+        self.results = results or []
+        self.raises = raises
+        self.rebuilt: dict[str, Any] = {}
+
+    def submit(self, router: Any, task: str, items: list[BatchItem], **kw: Any) -> SubmitResult:
+        if self.raises:
+            raise self.raises
+        self.submitted.append((task, items))
+        job = SubmittedJob("llm-1", "gemini", "batches/fake-1", "gemini-3-flash", [i.key for i in items], 1.5)
+        return SubmitResult(jobs=[job])
+
+    def collect(self, router: Any, task: str | None = None, *, rebuild_inputs: Any = None, **kw: Any) -> CollectResult:
+        for r in self.results:
+            if r.output is None and rebuild_inputs is not None:
+                self.rebuilt[r.key] = rebuild_inputs(r.key)
+        return CollectResult(results=self.results)
+
+
+def batch(monkeypatch: pytest.MonkeyPatch, fake: FakeBatch) -> FakeBatch:
+    monkeypatch.setattr(extract.llm_batch, "submit", fake.submit)
+    monkeypatch.setattr(extract.llm_batch, "collect", fake.collect)
+    return fake
+
+
+def test_submit_builds_items_and_marks_them(clean_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
     bid = seed_business()
-    router = FakeRouter()
-    out = extract.submit(run_context(segments=["clinics-in"]), router=router)
-    assert out["submitted"] >= 1 and out["provider"] == "gemini" and out["batch_id"] == "batches/fake-1"
-    task, items = router.submitted[0]
-    mine = next(i for i in items if i["key"] == bid)
+    fake = batch(monkeypatch, FakeBatch())
+    out = extract.submit(run_context(segments=["clinics-in"]), router=FakeRouter())
+    assert out["submitted"] >= 1 and out["providers"] == ["gemini"] and out["batches"] == ["batches/fake-1"]
+    task, items = fake.submitted[0]
+    mine = next(i for i in items if i.key == f"extract_facts:{bid}")
     assert task == "extract_facts"
-    inputs = mine["inputs"]
+    inputs = mine.inputs
     assert inputs["business_name"] == "Extract Clinic" and inputs["segment_id"] == "clinics-in"
     assert inputs["allowed_urls"][0] == f"{SITE}/" and "### PAGE 1" in inputs["pages_block"]
     assert inputs["tech_flags"] == {"has_booking": False, "has_whatsapp": False, "has_chat": False}
-    assert (
-        db.scalar("select extra #>> '{extract,batch}' from public.businesses where id = %s", [bid]) == "batches/fake-1"
-    )
+    assert db.scalar("select extra #>> '{extract,submitted_at}' from public.businesses where id = %s", [bid])
     again = extract.submit(run_context(segments=["clinics-in"]), router=FakeRouter())
     assert again["items"] == 0  # never the same business twice in a day
 
 
-def test_submit_dry_run_and_settled_businesses(clean_db: str) -> None:
+def test_submit_dry_run_and_settled_businesses(clean_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
     seed_business()
+    fake = batch(monkeypatch, FakeBatch())
     no_pages = insert_business(
         name="No Pages Clinic", status="queued", queued_at=datetime.now(UTC), place_id="ChIJnp-1"
     )
     nothing = insert_business(name="Nothing Clinic", status="queued", queued_at=datetime.now(UTC))
     out = extract.submit(run_context(segments=["clinics-in"], dry_run=True), router=FakeRouter())
-    assert out["would_submit"] >= 1
-    assert db.scalar("select status from public.businesses where id = %s", [no_pages]) == "queued"  # dry run
+    assert out["would_submit"] >= 1 and fake.submitted == []  # a dry run never submits
+    assert db.scalar("select status from public.businesses where id = %s", [no_pages]) == "queued"
     extract.submit(run_context(segments=["clinics-in"]), router=FakeRouter())
     assert db.scalar("select status from public.businesses where id = %s", [no_pages]) == "researched"
     assert db.scalar("select reject_reason from public.businesses where id = %s", [nothing]) == "no_research_material"
 
 
-def test_collect_writes_facts_marks_researched_and_adds_no_booking(clean_db: str) -> None:
+def test_a_refused_batch_leaves_the_queue_alone(clean_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
     bid = seed_business()
-    router = FakeRouter(
-        batch_results=[
-            {
-                "key": bid,
-                "parsed": facts_json(url=f"{SITE}/"),
-                "provider": "gemini",
-                "model": "gemini-3-flash",
-                "tag": "gemini:gemini-3-flash#extract_facts.v1",
-            }
-        ]
+    batch(monkeypatch, FakeBatch(raises=BudgetExceeded("extract_facts", "would cross the daily cap")))
+    out = extract.submit(run_context(segments=["clinics-in"]), router=FakeRouter())
+    assert out["stopped"].startswith("BudgetExceeded")
+    assert db.scalar("select status from public.businesses where id = %s", [bid]) == "queued"
+
+
+def item(bid: str, output: Any = None, **kw: Any) -> ItemResult:
+    return ItemResult(
+        key=f"extract_facts:{bid}",
+        output=output,
+        provider="gemini",
+        model="gemini-3-flash",
+        tag="gemini:gemini-3-flash#extract_facts.v1",
+        **kw,
     )
-    out = extract.collect(run_context(segments=["clinics-in"]), router=router)
+
+
+def test_collect_writes_facts_marks_researched_and_adds_no_booking(
+    clean_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bid = seed_business()
+    batch(monkeypatch, FakeBatch([item(bid, FactsExtraction.model_validate(facts_json(url=f"{SITE}/")))]))
+    out = extract.collect(run_context(segments=["clinics-in"]), router=FakeRouter())
     assert out["businesses"] == 1 and out["no_booking"] == 1
     facts = db.fetch_all(
         "select field, url, page_id, model, verified from public.facts where business_id = %s and model <> 'rule'",
@@ -206,30 +249,19 @@ def test_collect_writes_facts_marks_researched_and_adds_no_booking(clean_db: str
     assert sig is not None and sig["type"] == "no_booking" and "pages checked" in sig["quote"]
 
 
-def test_an_invalid_result_is_retried_once_synchronously(clean_db: str) -> None:
+def test_collect_can_rebuild_inputs_for_a_retry(clean_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
     bid = seed_business()
-    router = FakeRouter(
-        replies={"extract_facts": [FactsExtraction.model_validate(facts_json())]},
-        batch_results=[{"key": bid, "parsed": {"phones": [{"quote": "x"}]}, "provider": "gemini", "model": "m"}],
-    )
-    out = extract.collect(run_context(segments=["clinics-in"]), router=router)
-    assert out["businesses"] == 1 and router.tasks() == ["extract_facts"]
-    assert db.scalar("select count(*) from public.facts where business_id = %s and model like '%%+retry'", [bid]) > 0
-
-
-def test_a_failed_retry_keeps_the_business_queued(clean_db: str) -> None:
-    bid = seed_business()
-    router = FakeRouter(
-        replies={"extract_facts": [RuntimeError("bad output")]},
-        batch_results=[{"key": bid, "parsed": None, "error": "boom"}],
-    )
-    out = extract.collect(run_context(segments=["clinics-in"]), router=router)
-    assert out["failed"] == 1
+    fake = batch(monkeypatch, FakeBatch([item(bid, None, error="invalid JSON")]))
+    out = extract.collect(run_context(segments=["clinics-in"]), router=FakeRouter())
+    rebuilt = fake.rebuilt[f"extract_facts:{bid}"]
+    assert rebuilt is not None and rebuilt["business_name"] == "Extract Clinic" and rebuilt["pages"]
+    assert out["failed"] == 1  # still invalid after the retry: stays queued, marked for a look
     row = db.fetch_one("select status, reject_reason from public.businesses where id = %s", [bid])
     assert row == {"status": "queued", "reject_reason": "extract_failed"}
 
 
-def test_without_a_router_nothing_is_submitted(clean_db: str) -> None:
+def test_without_a_router_nothing_is_submitted(clean_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
     seed_business()
+    monkeypatch.setattr("nument_engine.sources.base.router_for_run", lambda rc: None)
     out = extract.submit(run_context(segments=["clinics-in"]))
-    assert out["skipped"].startswith("no AI router")
+    assert out["skipped"] == "no AI router"

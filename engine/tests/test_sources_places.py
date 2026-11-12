@@ -9,8 +9,8 @@ import pytest
 from pydantic import SecretStr
 
 from nument_engine import db
+from nument_engine.budget import Budget
 from nument_engine.settings import get_settings
-from nument_engine.sources import health
 from nument_engine.sources.places import (
     PlacesAdapter,
     PlacesApiError,
@@ -65,7 +65,7 @@ async def test_search_ids_pages_through_and_sends_only_the_id_field_mask(clean_d
     assert "pageToken" not in bodies[0] and bodies[1]["pageToken"] == "TOKEN2"
     assert bodies[0]["regionCode"] == "IN"
     assert all(r.url.host == "places.googleapis.com" for r in seen)  # no robots.txt for official APIs
-    assert health.calls_today("google_places", "places_text_search", model="in") == 2
+    assert Budget().calls_today("google_places", ["places_text_search"]) == 2  # counted by the budget guard
 
 
 async def test_details_maps_to_a_listing_record(clean_db: str, with_key: None) -> None:
@@ -84,14 +84,15 @@ async def test_details_maps_to_a_listing_record(clean_db: str, with_key: None) -
     assert rec.phones_raw == ["+91 98765 43210"] and rec.phones_are_listing
     assert rec.rating == 4.6 and rec.review_count == 312 and rec.subcategory == "dermatology"
     assert rec.business_status == "OPERATIONAL"
-    assert health.calls_today("google_places", "places_details", model="in") == 1
+    assert Budget().calls_today("google_places", ["places_details"]) == 1
 
 
 async def test_the_231st_details_call_of_the_day_is_refused(clean_db: str, with_key: None) -> None:
     """Step 5.16 test 6: India cap 230 a day."""
     seg = segment(places=segment().places.model_copy(update={"details_per_day": 230}))
     db.execute(
-        "insert into public.costs (provider, model, task, calls) values ('google_places', 'in', 'places_details', 230)"
+        "insert into public.costs (provider, model, task, calls) "
+        "values ('google_places', 'place_details_enterprise', 'places_details', 230)"
     )
     transport, seen = mock_transport({"*": (200, fixture_json("places", "details.json"))})
     async with PlacesAdapter(ctx(), transport=transport) as places:

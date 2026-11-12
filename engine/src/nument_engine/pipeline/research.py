@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -60,7 +61,6 @@ JS_SHELL_MARKERS = ('id="root"', "id='root'", 'id="__next"', 'id="app"', "enable
 RECRAWL_AFTER = timedelta(hours=20)
 JOB_MAX_AGE_DAYS = 30
 PAGESPEED_PARALLEL = 4
-PAGESPEED_DEFAULT_CAP = 600
 PAGESPEED_RECHECK_DAYS = 60
 
 CODE = "code"  # published contact routes, the label verification asked for
@@ -456,7 +456,13 @@ limit %(limit)s
 """
 
 
-async def research_all(ctx: SourceContext, segments: dict[str, Segment], queue: list[dict[str, Any]]) -> Counter[str]:
+async def research_all(
+    ctx: SourceContext,
+    segments: dict[str, Segment],
+    queue: list[dict[str, Any]],
+    time_left: Callable[[], float] | None = None,
+) -> Counter[str]:
+    """Crawl the queue. Once the run's deadline passes, no new business is started (the rest wait a night)."""
     stats: Counter[str] = Counter()
     browser = Browser(health.setting_int("research.browser_pages_per_run", BROWSER_DEFAULT))
     sink = SignalSink(segments, ctx)
@@ -470,6 +476,9 @@ async def research_all(ctx: SourceContext, segments: dict[str, Segment], queue: 
             async def one(b: dict[str, Any]) -> None:
                 seg = segments[b["segment_id"]]
                 async with sem:
+                    if time_left is not None and time_left() <= 0:
+                        stats["deadline_skipped"] += 1
+                        return
                     crawl = await crawler.crawl(b)
                     if practo_on and seg.id == "clinics-in":
                         profile = await practo.safe_call(practo.profile_page, b, seg)
@@ -512,7 +521,7 @@ def run(rc: RunContext, *, router: AIRouter | None = None) -> dict[str, Any]:
             "limit": min(rc.opts.limit or research_cap, research_cap),
         },
     )
-    stats: dict[str, Any] = dict(asyncio.run(research_all(ctx, segments, queue)))
+    stats: dict[str, Any] = dict(asyncio.run(research_all(ctx, segments, queue, getattr(rc, "time_left", None))))
     stats["queued"] = len(queue)
     stats.update({k: v for k, v in ctx.stats.items() if k not in stats})
     rc.stats["research"] = stats
@@ -550,7 +559,7 @@ async def _pagespeed_all(ctx: SourceContext, rows: list[dict[str, Any]], segment
                 if stats["quota"]:
                     return
                 score, problem = await quality.mobile_score(client, row["website"], key)
-            health.log_cost(ctx.run_id, "pagespeed", "pagespeed")
+            ctx.budget.record_pagespeed()
             if score is None:
                 stats["quota" if problem == "quota" else "failed"] += 1
                 return
@@ -597,9 +606,7 @@ def pagespeed(rc: RunContext) -> dict[str, Any]:
         return stats
     ctx = SourceContext.from_run(rc)
     segments = active_segments(rc.opts.segments)
-    cap = health.setting_int("pagespeed_daily_cap", PAGESPEED_DEFAULT_CAP) - health.calls_today(
-        "pagespeed", "pagespeed"
-    )
+    cap = ctx.budget.pagespeed_quota_left()  # pagespeed_daily_cap and the API's free daily allowance
     rows = db.fetch_all(
         PAGESPEED_SQL,
         {"segments": list(segments), "days": PAGESPEED_RECHECK_DAYS, "limit": max(0, min(cap, rc.opts.limit or cap))},

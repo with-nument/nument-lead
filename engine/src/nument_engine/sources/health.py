@@ -1,4 +1,6 @@
-"""Kill switches, `source_health` bookkeeping and quota counting shared by every adapter (Steps 5.3, 18.1, 19.3).
+"""Kill switches and `source_health` bookkeeping shared by every adapter (Steps 5.3, 18.1.5, 18.1.7).
+
+Costs and quotas are not here: every paid or counted call goes through the budget guard (`budget.Budget`).
 
 A source is usable only when all three switches allow it (Step 18.1.7):
 1. `settings.sources_enabled[source]` is not false (the founder's switch on the Engine page),
@@ -160,77 +162,3 @@ def record_block(
     add_requests(source, requests, conn=conn)
     log.warning("source.blocked", source=source, reason=reason, until=pause_end.isoformat(), disabled=disable)
     return pause_end
-
-
-# ---------------------------------------------------------------------------------------------------
-# Costs and quotas (A.13.5 rule 4, Step 19.3)
-# ---------------------------------------------------------------------------------------------------
-
-
-def fx_inr_per_usd(conn: Connection[Any] | None = None) -> float:
-    try:
-        return float(db.get_setting("fx_inr_per_usd", 88, conn=conn))
-    except (TypeError, ValueError):
-        return 88.0
-
-
-def log_cost(
-    run_id: str | None,
-    provider: str,
-    task: str,
-    *,
-    calls: int = 1,
-    usd: float = 0.0,
-    model: str | None = None,
-    conn: Connection[Any] | None = None,
-) -> None:
-    """One `costs` row for a paid or quota-limited call. Free calls are logged too so quotas can be counted."""
-    db.execute(
-        "insert into public.costs (run_id, provider, model, task, calls, usd, inr) values (%s, %s, %s, %s, %s, %s, %s)",
-        [run_id, provider, model, task, calls, round(usd, 6), round(usd * fx_inr_per_usd(conn), 2)],
-        conn=conn,
-    )
-
-
-def calls_since(
-    provider: str, task: str, since: datetime, *, model: str | None = None, conn: Connection[Any] | None = None
-) -> int:
-    """Calls logged in `costs` for (provider, task[, model]) since a moment (IST day or month start)."""
-    query = "select coalesce(sum(calls), 0) as n from public.costs where provider = %s and task = %s and at >= %s"
-    params: list[Any] = [provider, task, since]
-    if model is not None:
-        query += " and model = %s"
-        params.append(model)
-    return int(db.scalar(query, params, conn=conn) or 0)
-
-
-def calls_today(provider: str, task: str, *, model: str | None = None, conn: Connection[Any] | None = None) -> int:
-    return calls_since(provider, task, ist_day_start(), model=model, conn=conn)
-
-
-def calls_this_month(provider: str, task: str, *, model: str | None = None, conn: Connection[Any] | None = None) -> int:
-    return calls_since(provider, task, ist_month_start(), model=model, conn=conn)
-
-
-def spent_inr_today(conn: Connection[Any] | None = None) -> float:
-    """Today's spend plus money held for submitted batches (Step 4.11.1)."""
-    spent = float(db.scalar("select inr from public.v_spend_today", conn=conn) or 0)
-    held = float(
-        db.scalar(
-            "select coalesce(sum(reserved_inr), 0) from public.llm_batch_reservations "
-            "where released = false and created_at >= %s",
-            [ist_day_start()],
-            conn=conn,
-        )
-        or 0
-    )
-    return spent + held
-
-
-def remaining_inr_today(conn: Connection[Any] | None = None) -> float:
-    """Money left under `settings.daily_cap_inr` today (never negative)."""
-    try:
-        cap = float(db.get_setting("daily_cap_inr", 750, conn=conn))
-    except (TypeError, ValueError):
-        cap = 750.0
-    return max(0.0, cap - spent_inr_today(conn))

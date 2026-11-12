@@ -29,12 +29,9 @@ from ..http import NeverFetch, PoliteClient, SourceBlocked, host_blocked, host_o
 from ..normalize import canonical_url, city_for_text
 from ..research.text import page_text
 from ..segments import Segment
-from . import health
 from .base import QUOTE_MAX, SNIPPET_ONLY_POINTS, Signal, SourceAdapter, field_of
 from .jobs import DOMAIN_MAP, MIN_CONFIDENCE, quote_in
 
-DEFAULT_PER_DAY = 160  # shared with decision-maker lookups (Step 5.11.3)
-FREE_PER_MONTH = 5000
 MAX_AGE_DAYS = 14
 REDIRECT_HOSTS = ("vertexaisearch.cloud.google.com",)
 QUOTE_MATCH_MIN = 92  # same threshold as Step 10.2
@@ -54,25 +51,26 @@ class GroundedAnswer:
 
 
 def grounding_of(result: Any) -> dict[str, Any] | None:
-    """Grounding metadata from a router result, whatever its shape (attribute, dict key or private attr)."""
+    """Grounding metadata from a router result, whatever its shape (attribute or dict key)."""
     for name in ("grounding", "_grounding", "grounding_metadata"):
         value = field_of(result, name)
         if isinstance(value, dict):
             return value
-    extra = getattr(result, "__pydantic_extra__", None)
-    if isinstance(extra, dict) and isinstance(extra.get("grounding"), dict):
-        return extra["grounding"]
     return None
 
 
 def answer_from(result: Any) -> GroundedAnswer:
-    """Normalise what the router returned: a parsed `PublicAskResults` (with grounding attached), a
-    `(parsed, grounding)` pair, or an `LLMResponse` whose text is the JSON."""
+    """Normalise what the router returned: an `AIAnswer` / `AIResult` (output plus grounding), a
+    `(parsed, grounding)` pair, a parsed `PublicAskResults`, or a text answer holding the JSON.
+
+    The router's grounding lists the cited pages under `sources` (`chunks` in the raw Gemini shape)."""
     grounding: dict[str, Any] | None = None
     parsed = result
     if isinstance(result, tuple) and len(result) == 2:
         parsed, grounding = result
-    grounding = grounding or grounding_of(result)
+    elif field_of(result, "output") is not None:
+        parsed, grounding = field_of(result, "output"), grounding_of(result)
+    grounding = grounding or grounding_of(parsed)
     items = field_of(parsed, "items")
     if items is None and isinstance(field_of(parsed, "text"), str):
         try:
@@ -80,8 +78,8 @@ def answer_from(result: Any) -> GroundedAnswer:
             items = data.get("items") or data.get("results") or []
         except ValueError:
             items = []
-    chunks = (grounding or {}).get("chunks") or []
-    citations = [Citation(uri=str(c.get("uri") or ""), title=str(c.get("title") or "")) for c in chunks if c]
+    cited = (grounding or {}).get("sources") or (grounding or {}).get("chunks") or []
+    citations = [Citation(uri=str(c.get("uri") or ""), title=str(c.get("title") or "")) for c in cited if c]
     return GroundedAnswer(items=list(items or []), citations=[c for c in citations if c.uri])
 
 
@@ -113,14 +111,9 @@ class GroundedSearchAdapter(SourceAdapter):
         await super().aclose()
 
     # ---- quota --------------------------------------------------------------------------------------
-    @staticmethod
-    def calls_left() -> int:
-        per_day = health.setting_int("grounded_search.per_day", DEFAULT_PER_DAY)
-        today = sum(health.calls_today(p, "grounded_search") for p in ("gemini", "openai", "google_search"))
-        month = sum(
-            health.calls_this_month(p, "grounded_search_queries") for p in ("gemini", "openai", "google_search")
-        )
-        return max(0, min(per_day - today, FREE_PER_MONTH - month))
+    def calls_left(self) -> int:
+        """Search queries still allowed today (the budget guard's daily cap and free monthly allowance)."""
+        return self.ctx.budget.grounding_quota_left()
 
     @staticmethod
     def todays_queries(seg: Segment, day: int | None = None) -> list[str]:
@@ -182,6 +175,7 @@ class GroundedSearchAdapter(SourceAdapter):
                 "posted_date": field_of(item, "posted_date"),
                 "title": field_of(item, "poster_business"),
                 "employer_name": field_of(item, "poster_business"),
+                "employer": field_of(item, "poster_business"),
                 "address": field_of(item, "poster_city"),
                 "mode": "public_ask",
                 "text": f"{field_of(item, 'need') or ''}\n{field_of(item, 'quote') or ''}",
@@ -239,7 +233,7 @@ class GroundedSearchAdapter(SourceAdapter):
         for query in self.todays_queries(seg)[:budget]:
             if self.ctx.ai_stopped:
                 break
-            result = self.ctx.ai(
+            result = self.ctx.ai_result(  # output and citations together
                 "grounded_search",
                 {
                     "segment_id": seg.id,

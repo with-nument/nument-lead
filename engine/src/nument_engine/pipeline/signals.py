@@ -364,7 +364,7 @@ async def adzuna_watch(ctx: SourceContext, segments: dict[str, Segment], sink: S
 
 async def gdelt_watch(ctx: SourceContext, segments: dict[str, Segment], sink: SignalSink) -> None:
     async with GdeltAdapter(ctx) as adapter:
-        left = adapter.queries_left(list(segments.values()))
+        left = adapter.queries_left()
         for seg in segments.values():
             if left <= 0 or adapter.rate_limited:
                 break

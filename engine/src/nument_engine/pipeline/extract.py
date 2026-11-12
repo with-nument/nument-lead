@@ -8,10 +8,10 @@ Morning (`collect`): read finished results from the router, validate each agains
 into `facts` rows (one row per fact, each with its quote, URL and page), replace that business's earlier AI facts,
 mark the business `researched`, and add the `no_booking` signal when nothing on the site lets a customer book.
 
-Router contract used here (Step 4.10.2), duck-typed so tests use a fake:
-    router.submit_batch(task, items)  items = [{"key": business_id, "inputs": {...}}]
-        -> {"provider", "batch_id", "submitted", "results": [...]}   ("results": items answered synchronously)
-    router.collect_batches(task) -> [{"key", "parsed" | "result", "error", "provider", "model", "tag"}]
+Batches go through `nument_engine.llm.batch` (Step 4.10.2): `submit(router, task, [BatchItem(key, inputs)])`
+reserves the money, picks a batch-capable model and falls back to up to 40 sync calls; `collect(router, task=...)`
+validates each finished item, logs batch-price costs and retries an invalid item once as a sync call through
+`rebuild_inputs`. Item keys are `extract_facts:<business_id>`.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ValidationError
 
 from .. import db
+from ..llm import batch as llm_batch
 from ..logging import get_logger
 from ..models import FactsExtraction
 from ..normalize import canonical_url
@@ -253,8 +254,29 @@ def build_items(
                         [b["id"]],
                     )
             continue
-        items.append({"key": b["id"], "inputs": build_inputs(b, segments[b["segment_id"]], pages)})
+        items.append({"key": item_key(b["id"]), "inputs": build_inputs(b, segments[b["segment_id"]], pages)})
     return items, stats
+
+
+def item_key(business_id: str) -> str:
+    return f"{TASK}:{business_id}"
+
+
+def business_of(key: str) -> str:
+    return key.split(":", 1)[1] if key.startswith(f"{TASK}:") else key
+
+
+def rebuild_inputs(key: str, segments: dict[str, Segment]) -> dict[str, Any] | None:
+    """Inputs for one item again, for the sync retry of an invalid or failed batch answer (Step 9.14.3)."""
+    b = db.fetch_one(
+        "select id::text as id, segment_id, name, website, place_id, branches_count, extra "
+        "from public.businesses where id = %s",
+        [business_of(key)],
+    )
+    if b is None or b["segment_id"] not in segments:
+        return None
+    pages = load_pages(b)
+    return build_inputs(b, segments[b["segment_id"]], pages) if pages else None
 
 
 def mark_researched(business_id: str) -> None:
@@ -320,9 +342,9 @@ def page_for(url: str, quote: str, pages: dict[str, tuple[str, str]]) -> tuple[s
 
 
 def parsed_of(result: Any) -> FactsExtraction | None:
-    raw = field_of(result, "parsed")
+    raw = field_of(result, "output")
     if raw is None:
-        raw = field_of(result, "result")
+        raw = field_of(result, "parsed")
     if isinstance(raw, FactsExtraction):
         return raw
     try:
@@ -404,11 +426,11 @@ def no_booking_signal(business_id: str, facts: FactsExtraction) -> Signal | None
 
 
 def ingest(results: Iterable[Any], ctx: SourceContext, segments: dict[str, Segment]) -> Counter[str]:
-    """Write facts for each finished result; retry an invalid one once synchronously (Step 9.14.3)."""
+    """Write facts for each finished item (`llm.batch.ItemResult`); a failed one stays queued for tomorrow."""
     stats: Counter[str] = Counter()
     sink = SignalSink(segments, ctx)
     for result in results:
-        bid = str(field_of(result, "key") or "")
+        bid = business_of(str(field_of(result, "key") or ""))
         if not bid:
             continue
         facts = parsed_of(result)
@@ -416,8 +438,6 @@ def ingest(results: Iterable[Any], ctx: SourceContext, segments: dict[str, Segme
             field_of(result, "tag")
             or f"{field_of(result, 'provider') or 'unknown'}:{field_of(result, 'model') or 'unknown'}#{TASK}"
         )
-        if facts is None:
-            facts, tag = retry_sync(bid, segments, ctx, tag)
         if facts is None:
             stats["failed"] += 1
             if not ctx.dry_run:
@@ -428,6 +448,7 @@ def ingest(results: Iterable[Any], ctx: SourceContext, segments: dict[str, Segme
             continue
         stats["facts"] += write_facts(bid, facts, tag)
         stats["businesses"] += 1
+        stats["sync_answers"] += bool(field_of(result, "sync"))
         seg_id = db.scalar("select segment_id from public.businesses where id = %s", [bid])
         sig = no_booking_signal(bid, facts)
         if sig is not None and seg_id in segments:
@@ -437,33 +458,13 @@ def ingest(results: Iterable[Any], ctx: SourceContext, segments: dict[str, Segme
     return stats
 
 
-def retry_sync(
-    business_id: str, segments: dict[str, Segment], ctx: SourceContext, tag: str
-) -> tuple[FactsExtraction | None, str]:
-    b = db.fetch_one(
-        "select id::text as id, segment_id, name, website, place_id, branches_count, extra "
-        "from public.businesses where id = %s",
-        [business_id],
-    )
-    if b is None or b["segment_id"] not in segments:
-        return None, tag
-    pages = load_pages(b)
-    if not pages:
-        return None, tag
-    ctx.add("extract.sync_retries")
-    result = ctx.ai(TASK, build_inputs(b, segments[b["segment_id"]], pages))
-    if isinstance(result, FactsExtraction):
-        return result, f"{tag}+retry"
-    return parsed_of({"parsed": result}), f"{tag}+retry"
-
-
 # ---------------------------------------------------------------------------------------------------
 # The stage
 # ---------------------------------------------------------------------------------------------------
 
 
 def submit(rc: RunContext, *, router: AIRouter | None = None) -> dict[str, Any]:
-    """Night: build today's items and submit one extraction batch."""
+    """Night: build today's items and submit the extraction batch (dry runs build the items only)."""
     ctx = SourceContext.from_run(rc, router)
     segments = active_segments(rc.opts.segments)
     limit = rc.opts.limit or int(db.get_setting("research_per_day", 300) or 300)
@@ -471,49 +472,66 @@ def submit(rc: RunContext, *, router: AIRouter | None = None) -> dict[str, Any]:
     out: dict[str, Any] = {**stats, "items": len(items)}
     if rc.opts.dry_run:
         out["would_submit"] = len(items)
-    elif not items:
-        pass
-    elif ctx.router is None or not hasattr(ctx.router, "submit_batch"):
-        out["skipped"] = "no AI router with batch support"
-    else:
-        try:
-            batch = ctx.router.submit_batch(TASK, items)
-        except Exception as exc:  # the router's batch errors are typed; record and leave items queued
-            out["error" if not is_ai_stop(exc) else "stopped"] = f"{type(exc).__name__}: {str(exc)[:200]}"
-            batch = None
-        if batch is not None:
-            out.update(
-                provider=field_of(batch, "provider"),
-                batch_id=field_of(batch, "batch_id") or field_of(batch, "id"),
-                submitted=field_of(batch, "submitted", len(items)),
-            )
-            submitted_at = datetime.now(UTC).isoformat()
-            db.execute(
-                "update public.businesses set extra = jsonb_set(extra, '{extract}', %s) where id = any(%s)",
-                [Jsonb({"submitted_at": submitted_at, "batch": out.get("batch_id")}), [i["key"] for i in items]],
-            )
-            sync_results = field_of(batch, "results") or []
-            if sync_results:
-                out["sync"] = dict(ingest(sync_results, ctx, segments))
+    elif items:
+        out.update(_submit(ctx, items, segments))
     rc.stats["extract_submit"] = out
     log.info("extract.submitted", **{k: v for k, v in out.items() if isinstance(v, int | str)})
     return out
 
 
-def collect(rc: RunContext, *, router: AIRouter | None = None) -> dict[str, Any]:
-    """Morning: collect finished batch results and store the facts."""
+def _submit(ctx: SourceContext, items: list[dict[str, Any]], segments: dict[str, Segment]) -> dict[str, Any]:
+    router = ctx.get_router()
+    if router is None:
+        return {"skipped": "no AI router"}
+    try:
+        result = llm_batch.submit(router, TASK, [llm_batch.BatchItem(i["key"], i["inputs"]) for i in items])
+    except Exception as exc:  # BudgetExceeded and provider errors: items stay queued for the next night
+        return {"stopped" if is_ai_stop(exc) else "error": f"{type(exc).__name__}: {str(exc)[:200]}"}
+    jobs = list(field_of(result, "jobs") or [])
+    submitted = [k for job in jobs for k in field_of(job, "keys", [])]
+    out: dict[str, Any] = {
+        "submitted": len(submitted),
+        "batches": [field_of(job, "provider_batch_id") for job in jobs],
+        "providers": sorted({str(field_of(job, "provider")) for job in jobs}),
+        "deferred": len(field_of(result, "deferred") or []),
+        "in_flight": len(field_of(result, "in_flight") or []),
+        "reasons": list(field_of(result, "reasons") or [])[:5],
+    }
+    if submitted:
+        db.execute(
+            "update public.businesses set extra = jsonb_set(extra, '{extract}', %s) where id = any(%s)",
+            [Jsonb({"submitted_at": datetime.now(UTC).isoformat()}), [business_of(k) for k in submitted]],
+        )
+    sync_results = list(field_of(result, "sync_results") or [])
+    if sync_results:
+        out["sync"] = dict(ingest(sync_results, ctx, segments))
+    return out
+
+
+def collect(rc: RunContext, *, router: AIRouter | None = None, max_wait_s: float = 0.0) -> dict[str, Any]:
+    """Morning: collect finished batch results and store the facts. Unfinished batches wait for the next run."""
     ctx = SourceContext.from_run(rc, router)
     segments = active_segments(rc.opts.segments)
-    if ctx.router is None or not hasattr(ctx.router, "collect_batches"):
-        out: dict[str, Any] = {"skipped": "no AI router with batch support"}
+    out: dict[str, Any] = {}
+    active = ctx.get_router()
+    if active is None:
+        out["skipped"] = "no AI router"
     else:
         try:
-            results = list(ctx.router.collect_batches(TASK) or [])
-        except Exception as exc:  # recorded; the batch stays pending for the next run
-            results = []
+            result = llm_batch.collect(
+                active, task=TASK, max_wait_s=max_wait_s, rebuild_inputs=lambda key: rebuild_inputs(key, segments)
+            )
+        except Exception as exc:  # recorded; the batches stay open for the next run
+            result = None
             ctx.add("extract.collect_errors")
             log.error("extract.collect_failed", error=f"{type(exc).__name__}: {str(exc)[:200]}")
-        out = {"results": len(results), **ingest(results, ctx, segments)}
+        results = list(field_of(result, "results") or [])
+        out = {
+            "results": len(results),
+            "failed_batches_items": len(field_of(result, "failed_keys") or []),
+            "pending_batches": len(field_of(result, "pending") or []),
+            **ingest(results, ctx, segments),
+        }
     out.update({k: v for k, v in ctx.stats.items() if k not in out})
     rc.stats["extract_collect"] = out
     log.info("extract.collected", **{k: v for k, v in out.items() if isinstance(v, int | str)})

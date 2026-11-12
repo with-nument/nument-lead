@@ -22,6 +22,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .. import db
+from ..budget import Budget
 from ..logging import get_logger
 from ..models import CLOSED_STAGES
 from ..normalize import plain_text
@@ -336,11 +337,12 @@ def segment_slots(slots: int, quotas: dict[str, int], with_work: set[str]) -> di
     return share
 
 
-def build_queue(passed: list[Item], slots: int, quotas: dict[str, int]) -> list[Item]:
-    """Today's queue: segment shares first, then any slots left by global priority (fit-only capped)."""
+def build_queue(passed: list[Item], slots: int, quotas: dict[str, int], *, fit_only_allowed: bool = True) -> list[Item]:
+    """Today's queue: segment shares first, then any slots left by global priority (fit-only capped, and none at
+    all once today's spend passes the fit-only threshold of the budget ladder, Step 19.6)."""
     if slots <= 0:
         return []
-    fit_cap = math.floor(slots * FIT_ONLY_SHARE)
+    fit_cap = math.floor(slots * FIT_ONLY_SHARE) if fit_only_allowed else 0
     by_seg: dict[str, list[Item]] = defaultdict(list)
     for item in _order(passed):
         by_seg[item.segment_id].append(item)
@@ -369,8 +371,9 @@ def build_queue(passed: list[Item], slots: int, quotas: dict[str, int]) -> list[
     return _order(chosen)[:slots]
 
 
-def today_slots(segment_ids: list[str]) -> tuple[int, dict[str, int], dict[str, Any]]:
+def today_slots(segment_ids: list[str], budget: Budget | None = None) -> tuple[int, dict[str, int], dict[str, Any]]:
     """(slots, per-segment quotas left, explanation) after today's earlier queueing and the money check."""
+    budget = budget or Budget()
     today = health.ist_day_start()
     research_per_day = health.setting_int("research_per_day", 300)
     used = {
@@ -385,7 +388,7 @@ def today_slots(segment_ids: list[str]) -> tuple[int, dict[str, int], dict[str, 
         est = float(db.get_setting("research.est_cost_inr", DEFAULT_COST_PER_ITEM_INR) or DEFAULT_COST_PER_ITEM_INR)
     except (TypeError, ValueError):
         est = DEFAULT_COST_PER_ITEM_INR
-    remaining = health.remaining_inr_today()
+    remaining = max(0.0, budget.cap_inr - budget.committed_inr())  # spend today plus batch reservations
     money_slots = math.floor(remaining * MONEY_SHARE / est) if est > 0 else slots
     quotas = {k: max(0, v - used.get(k, 0)) for k, v in daily_quotas(segment_ids).items()}
     why = {"research_per_day": research_per_day, "queued_today": sum(used.values()), "money_slots": money_slots}
@@ -420,8 +423,10 @@ def run(rc: RunContext) -> dict[str, Any]:
             rejects.append((code, b["id"]))
         elif outcome == "suppress":
             suppressed.append(b["id"])
-    slots, quotas, why = today_slots(list(segments))
-    queue = build_queue(passed, slots, quotas)
+    budget = Budget(rc.run_id)
+    slots, quotas, why = today_slots(list(segments), budget)
+    fit_ok = budget.allow_phase("fit_only_research")
+    queue = build_queue(passed, slots, quotas, fit_only_allowed=fit_ok)
     if rc.opts.limit:
         queue = queue[: rc.opts.limit]
     if not rc.opts.dry_run:
@@ -450,6 +455,7 @@ def run(rc: RunContext) -> dict[str, Any]:
         "by_segment": dict(Counter(i.segment_id for i in queue)),
         "by_signal_category": dict(Counter(i.category or "fit_only" for i in queue)),
         "fit_only_share": round(sum(i.fit_only for i in queue) / len(queue), 3) if queue else 0.0,
+        "fit_only_allowed": fit_ok,
         "rules": dict(verdicts),
         "dry_run": rc.opts.dry_run,
     }

@@ -264,6 +264,7 @@ def classify_job(
         "posted_date": post.posted_at.date().isoformat() if post.posted_at else None,
         "title": post.title,
         "employer_name": post.employer,
+        "employer": post.employer,
         "address": post.location_text,
         "mode": "job_post",
         "text": post.text(),
