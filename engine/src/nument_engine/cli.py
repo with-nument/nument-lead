@@ -13,6 +13,7 @@ import importlib
 import re
 import sys
 from collections.abc import Callable
+from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 from types import ModuleType
@@ -244,11 +245,16 @@ def verify(ctx: typer.Context) -> None:
 
 
 @app.command()
-def score(ctx: typer.Context) -> None:
-    """Compute scores and grades (Step 11)."""
+def score(
+    ctx: typer.Context,
+    all_businesses: Annotated[
+        bool, typer.Option("--all", help="Also re-score dormant businesses, for example after a SCORE_VERSION bump.")
+    ] = False,
+) -> None:
+    """Compute scores and grades, then create or update leads (Step 11)."""
     from .pipeline import score as m
 
-    _execute(ctx, "manual", m.run)
+    _execute(ctx, "manual", lambda rc: m.run(rc, all_businesses=all_businesses))
 
 
 @app.command()
@@ -373,27 +379,61 @@ def _echo_files(result: dict[str, list[str]]) -> None:
 
 
 @app.command()
-def learn(ctx: typer.Context) -> None:
-    """Weekly re-weighting from outcomes (Step 16)."""
+def learn(
+    ctx: typer.Context,
+    rollback: Annotated[
+        int | None, typer.Option("--rollback", min=1, metavar="VERSION", help="Restore an older weights version.")
+    ] = None,
+) -> None:
+    """Weekly re-weighting from outcomes; --dry-run only proposes (Step 16.4)."""
     from .learn import reweight as m
 
-    _execute(ctx, "weekly", m.run)
+    if rollback is not None:
+        version = rollback
+
+        def restore(rc: RunContext) -> None:
+            try:
+                new = m.rollback(version)
+            except ValueError as exc:
+                raise _fail(str(exc)) from None
+            rc.stats["rollback"] = {"to": version, "new_version": new}
+            typer.echo(f"Weights restored from version {version} as version {new}.")
+
+        _execute(ctx, "manual", restore)
+        return
+
+    def propose(rc: RunContext) -> None:
+        result = m.run(rc)
+        typer.echo(f"Re-weighting: {result['status']}, {len(result['changes'])} change(s).")
+        for c in result["changes"]:
+            typer.echo(f"  {c['segment_id']} {c['key']}: {c['old']} to {c['new']} ({c['note']}, {c['trials']} leads)")
+
+    _execute(ctx, "weekly", propose)
 
 
 @report_app.command("weekly")
-def report_weekly(ctx: typer.Context) -> None:
-    """Build and store the weekly report (Step 16)."""
+def report_weekly(
+    ctx: typer.Context,
+    week_start: Annotated[
+        datetime | None,
+        typer.Option("--week-start", formats=["%Y-%m-%d"], help="Monday of the week (default: last full week, IST)."),
+    ] = None,
+) -> None:
+    """Build, store and deliver the weekly report; --dry-run prints it only (Step 16.6)."""
     from .learn import report as m
 
-    _execute(ctx, "weekly", m.weekly)
+    start = week_start.date() if week_start else None
+    if start is not None and start.weekday() != 0:
+        raise typer.BadParameter(f"{start} is not a Monday", param_hint="--week-start")
+    _execute(ctx, "weekly", lambda rc: m.weekly(rc, week_start=start))
 
 
 @app.command()
 def audit(ctx: typer.Context) -> None:
-    """Weekly audit of 20 recent leads (Step 17)."""
-    from .learn import metrics as m
+    """Weekly audit of 20 recent leads; --dry-run skips AI calls and stores nothing (Step 17.6)."""
+    from .ops import audit as m
 
-    _execute(ctx, "weekly", m.audit)
+    _execute(ctx, "weekly", m.weekly)
 
 
 def _load_evals() -> ModuleType:
@@ -408,18 +448,70 @@ def _load_evals() -> ModuleType:
 @app.command(name="eval")
 def eval_(
     ctx: typer.Context,
-    subset: Annotated[int | None, typer.Option("--subset", min=1, help="Only the first N golden labels.")] = None,
+    subset: Annotated[
+        int | None, typer.Option("--subset", min=1, help="Evaluate N businesses; 20 uses the fixed CI subset.")
+    ] = None,
+    export_golden: Annotated[
+        bool, typer.Option("--export-golden", help="Write labels, frozen pages and the subset from the database.")
+    ] = False,
+    replay: Annotated[
+        Path | None, typer.Option("--replay", exists=True, dir_okay=False, help="Re-check saved outcomes, no AI.")
+    ] = None,
+    save_outcomes: Annotated[
+        Path | None, typer.Option("--save-outcomes", dir_okay=False, help="Write each business's outcome (JSONL).")
+    ] = None,
 ) -> None:
-    """Run the golden-set evaluation (Step 17)."""
-    _execute(ctx, "manual", lambda rc: _load_evals().run(rc, subset=subset))
+    """Golden-set evaluation. Exit 1: a threshold failed; 2: cannot run yet; 3: skipped for budget (Step 17.4)."""
+    outcome: dict[str, Any] = {}
+
+    def work(rc: RunContext) -> None:
+        outcome.update(
+            _load_evals().run(rc, subset=subset, export=export_golden, replay=replay, save_outcomes=save_outcomes)
+        )
+
+    _execute(ctx, "manual", work)
+    if outcome.get("status") == "skipped_budget":
+        raise _fail(f"eval skipped: budget ({outcome.get('detail')})", code=3)
+    if outcome.get("status") == "failed":
+        raise _fail("eval failed: at least one threshold was missed")
 
 
 @app.command()
-def health(ctx: typer.Context) -> None:
-    """Check every service and source (Step 22)."""
+def health(
+    ctx: typer.Context,
+    prune: Annotated[bool, typer.Option("--prune", help="Apply the retention rules (Step 18.2.2).")] = False,
+    summary: Annotated[bool, typer.Option("--summary", help="Markdown for the GitHub job summary.")] = False,
+    notify: Annotated[bool, typer.Option("--notify", help="Email new alerts (when email is configured).")] = False,
+) -> None:
+    """Check the database, AI providers, quotas, sources and runs. Exit 1 when a check fails (Step 22)."""
+    import psycopg
+    import psycopg_pool
+
+    from . import db
     from .ops import health as m
 
-    _execute(ctx, "manual", m.run)
+    if prune:
+        _execute(ctx, "manual", m.prune_run)
+        return
+    _bootstrap(ctx)
+    try:
+        if summary:
+            typer.echo(m.daily_summary())
+            return
+        checks = m.collect()
+        typer.echo(m.render_text(checks))
+        if notify:
+            sent = m.notify_alerts()
+            typer.echo(f"alerts: {len(sent['alerts'])}, new today: {len(sent['new'])}, emailed: {sent['emailed']}")
+        if m.worst(checks) == "fail":
+            raise typer.Exit(code=1)
+    except (psycopg.OperationalError, psycopg_pool.PoolTimeout) as exc:
+        raise _fail(
+            f"{ctx.command_path}: cannot reach the database ({type(exc).__name__}). "
+            "Check DATABASE_URL (session pooler, port 5432) and that the Supabase project is not paused."
+        ) from None
+    finally:
+        db.close_pool()
 
 
 @app.command()

@@ -13,6 +13,7 @@ from nument_engine import settings as settings_module
 from nument_engine.cli import app
 from nument_engine.sheet import client
 
+from .cli_text import plain
 from .sheets_fake import FakeSheets
 
 runner = CliRunner()
@@ -34,8 +35,9 @@ runner = CliRunner()
 def test_new_options_have_help(command: list[str], options: list[str]) -> None:
     result = runner.invoke(app, [*command, "--help"])
     assert result.exit_code == 0, result.output
+    text = plain(result.output)
     for option in options:
-        assert option in result.output
+        assert option in text
 
 
 @pytest.fixture
@@ -72,4 +74,4 @@ def test_unadopted_live_sheet_fails_with_a_clear_message(staging: FakeSheets, mo
         "update public.settings set value = value - 'staging_master' - 'staging_caller' where key = 'sheet_state'"
     )
     result = runner.invoke(app, ["sheet", "sync"])
-    assert result.exit_code == 1 and "seed-snapshots" in result.output
+    assert result.exit_code == 1 and "seed-snapshots" in plain(result.output)

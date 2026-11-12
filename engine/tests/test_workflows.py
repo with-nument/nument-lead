@@ -73,13 +73,12 @@ def test_no_expression_is_pasted_into_a_script(path: Path) -> None:
 
 @pytest.mark.parametrize(
     "path",
-    [*sorted(WORKFLOWS.glob("*.yml")), *sorted(ACTIONS.glob("*/action.yml"))],
+    [*(WORKFLOWS / name for name in SCHEDULED), *sorted(ACTIONS.glob("*/action.yml"))],
     ids=lambda p: p.name if p.name != "action.yml" else p.parent.name,
 )
 def test_third_party_actions_are_pinned_to_a_commit(path: Path) -> None:
+    """The scheduled runs hold every production secret: their actions are pinned to a commit (dependabot bumps them)."""
     data = load(path)
-    if path.name == "ci.yml":
-        pytest.skip("ci.yml belongs to Step 17")
     all_steps = steps(data) if "jobs" in data else data["runs"]["steps"]
     for step in all_steps:
         uses = step.get("uses", "")
