@@ -5,10 +5,10 @@ import { Board, type CardView } from '@/components/pipeline/board'
 import { AutoRefresh } from '@/components/shell/auto-refresh'
 import { PageHeader } from '@/components/ui/page-header'
 import { Skeleton } from '@/components/ui/skeleton'
-import { requireUser } from '@/lib/auth'
+import { claimedUserId, early, requireUser } from '@/lib/auth'
 import { dueState, formatDate, istDate } from '@/lib/dates'
 import { canEdit, canSeeMoney } from '@/lib/roles'
-import { getBoard } from '@/lib/queries/pipeline'
+import { getBoard, withBoardDealValues } from '@/lib/queries/pipeline'
 import { getSegments, getTeam } from '@/lib/queries/shared'
 
 export const metadata: Metadata = { title: 'Pipeline' }
@@ -27,7 +27,7 @@ export default function PipelinePage({ searchParams }: PageProps<'/pipeline'>) {
 }
 
 async function Pipeline({ searchParams }: Pick<PageProps<'/pipeline'>, 'searchParams'>) {
-  const [user, sp] = await Promise.all([requireUser(), searchParams])
+  const [sp, userId] = await Promise.all([searchParams, claimedUserId()])
   const one = (k: string) => (typeof sp[k] === 'string' ? (sp[k] as string) : '')
   const owner = one('owner')
   const filters = {
@@ -38,8 +38,11 @@ async function Pipeline({ searchParams }: Pick<PageProps<'/pipeline'>, 'searchPa
   }
   const now = new Date()
   const today = istDate(now)
+  // The board runs as the user (RLS) and starts while the session is checked.
+  const board = early(getBoard(filters, { userId: userId ?? '', today }))
+  const user = await requireUser()
   const isAdmin = canSeeMoney(user.role)
-  const [cards, segments, team] = await Promise.all([getBoard(filters, { userId: user.id, today, withMoney: isAdmin }), getSegments(), getTeam()])
+  const [cards, segments, team] = await Promise.all([isAdmin ? board.then(withBoardDealValues) : board, getSegments(), getTeam()])
   const names = new Map(team.map((m) => [m.id, m.name]))
   const views: CardView[] = cards.map((c) => {
     const state = dueState(c.dueAt, today)

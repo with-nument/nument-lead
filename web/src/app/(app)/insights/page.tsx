@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { KpiTile } from '@/components/ui/kpi-tile'
 import { PageHeader } from '@/components/ui/page-header'
 import { Skeleton } from '@/components/ui/skeleton'
-import { requireUser } from '@/lib/auth'
+import { early, requireUser } from '@/lib/auth'
 import { addDays, daysBetween, formatDate, istDate } from '@/lib/dates'
 import { formatInr, formatNumber, formatPercent } from '@/lib/format'
 import { canSeeMoney } from '@/lib/roles'
@@ -33,7 +33,7 @@ export default function InsightsPage({ searchParams }: PageProps<'/insights'>) {
 }
 
 async function Insights({ searchParams }: Pick<PageProps<'/insights'>, 'searchParams'>) {
-  const [user, sp] = await Promise.all([requireUser(), searchParams])
+  const sp = await searchParams
   const one = (k: string) => (typeof sp[k] === 'string' ? (sp[k] as string) : '')
   const now = new Date()
   const today = istDate(now)
@@ -50,8 +50,11 @@ async function Insights({ searchParams }: Pick<PageProps<'/insights'>, 'searchPa
     country: /^[a-z]{2}$/.test(one('country')) ? one('country') : '',
     group,
   }
+  // The funnel and quality numbers run as the user (RLS) and start while the session is checked.
+  const insights = early(getInsights(filters))
+  const user = await requireUser()
   const isAdmin = canSeeMoney(user.role)
-  const [data, segments, costs] = await Promise.all([getInsights(filters), getSegments(), isAdmin ? getCosts(filters) : Promise.resolve(null)])
+  const [data, segments, costs] = await Promise.all([insights, getSegments(), isAdmin ? getCosts(filters) : Promise.resolve(null)])
   const segmentOf = segmentLabeler(segments)
   const groupLabel = (id: string) =>
     id === 'unknown'

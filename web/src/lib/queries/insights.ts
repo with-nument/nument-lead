@@ -1,6 +1,7 @@
 import 'server-only'
 import { createClient } from '@/lib/supabase/server'
 import { addDays, daysBetween, istDate, istMidnightUtc } from '@/lib/dates'
+import { getBudget } from './engine'
 
 // Funnel numbers come from v_funnel (furthest stage each lead ever reached, from the stage history),
 // the same view the weekly report uses, so the two never disagree.
@@ -46,9 +47,25 @@ export async function getInsights(f: InsightFilters) {
   if (f.seg) leadsQuery = leadsQuery.eq('segment_id', f.seg)
   if (f.country) leadsQuery = leadsQuery.eq('country', f.country)
 
-  const [funnel, leads] = await Promise.all([funnelQuery.limit(10_000), leadsQuery.limit(10_000)])
+  // Thumbs up and down on the leads added in the range, counted in the database. Feedback joins its lead
+  // and the lead its business, which is the same set of leads as the v_leads_caller query above.
+  const votesQuery = (onlyUp: boolean) => {
+    let q = sb
+      .from('feedback')
+      .select('id, lead:leads!inner(id, business:businesses!inner(id))', { count: 'exact', head: true })
+      .gte('lead.created_at', istMidnightUtc(f.from))
+      .lt('lead.created_at', istMidnightUtc(addDays(f.to, 1)))
+    if (f.seg) q = q.eq('lead.segment_id', f.seg)
+    if (f.country) q = q.eq('lead.business.country', f.country)
+    if (onlyUp) q = q.gt('rating', 0)
+    return q
+  }
+
+  const [funnel, leads, allVotes, upVotes] = await Promise.all([funnelQuery.limit(10_000), leadsQuery.limit(10_000), votesQuery(false), votesQuery(true)])
   if (funnel.error) throw funnel.error
   if (leads.error) throw leads.error
+  if (allVotes.error) throw allVotes.error
+  if (upVotes.error) throw upVotes.error
 
   const total = emptyCounts()
   const bySegment = new Map<string, Counts>()
@@ -104,16 +121,8 @@ export async function getInsights(f: InsightFilters) {
       : (ages[ages.length / 2 - 1]! + ages[ages.length / 2]!) / 2
     : null
 
-  let up = 0
-  let votes = 0
-  const ids = rows.map((l) => l.id!).filter(Boolean)
-  for (let i = 0; i < ids.length; i += 150) {
-    const { data: fb } = await sb.from('feedback').select('rating').in('lead_id', ids.slice(i, i + 150))
-    for (const r of fb ?? []) {
-      votes++
-      if (r.rating > 0) up++
-    }
-  }
+  const votes = allVotes.count ?? 0
+  const up = upVotes.count ?? 0
 
   return {
     total,
@@ -133,19 +142,23 @@ export async function getInsights(f: InsightFilters) {
 
 export type CostDay = { day: string; inr: number }
 
-/** Spend per day against the cap, and unit costs. Admin only (costs are admin-only under RLS). */
+/**
+ * Spend per day against the cap, and unit costs. Admin only (costs are admin-only under RLS, and the
+ * cap comes from the cached budget, so call this after the role check).
+ */
 export async function getCosts(f: InsightFilters) {
   const sb = await createClient()
-  const [costs, cap, researched, goodLeads, won] = await Promise.all([
+  const [costs, budget, researched, goodLeads, won] = await Promise.all([
     sb.from('v_costs_daily').select('day, inr').gte('day', f.from).lte('day', f.to).limit(5000),
-    sb.from('settings').select('value').eq('key', 'daily_cap_inr').maybeSingle(),
+    getBudget(),
     sb
       .from('businesses')
       .select('id', { count: 'exact', head: true })
       .gte('researched_at', istMidnightUtc(f.from))
       .lt('researched_at', istMidnightUtc(addDays(f.to, 1))),
+    // Straight from leads: one row per lead, the same count as v_leads_caller without its joins.
     sb
-      .from('v_leads_caller')
+      .from('leads')
       .select('id', { count: 'exact', head: true })
       .in('grade', ['A', 'B'])
       .gte('created_at', istMidnightUtc(f.from))
@@ -163,7 +176,7 @@ export async function getCosts(f: InsightFilters) {
   const days: CostDay[] = []
   for (let d = f.from; d <= f.to; d = addDays(d, 1)) days.push({ day: d, inr: Math.round((perDay.get(d) ?? 0) * 100) / 100 })
   const spend = days.reduce((s, d) => s + d.inr, 0)
-  const capValue = Number(cap.data?.value ?? 750)
+  const capValue = budget.daily_cap_inr
   const per = (n: number | null) => (n && n > 0 ? spend / n : null)
   return {
     days,

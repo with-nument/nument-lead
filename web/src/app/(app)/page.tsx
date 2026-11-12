@@ -7,14 +7,14 @@ import { Skeleton, SkeletonRows } from '@/components/ui/skeleton'
 import { FollowupList, type FollowupItem } from '@/components/today/followup-list'
 import { SendList, type SendItem } from '@/components/today/send-list'
 import { TodayKpiTiles } from '@/components/today/today-kpis'
-import { requireUser } from '@/lib/auth'
+import { early, requireUser } from '@/lib/auth'
 import { dueState, formatDate, formatWeekday, istDate, relativeAge } from '@/lib/dates'
 import { formatNumber } from '@/lib/format'
 import { formatPhone } from '@/lib/phone'
 import { canEdit, canSeeMoney } from '@/lib/roles'
 import { CONTACT_SOURCE_LABEL, PHONE_TYPE_LABEL, signalLabel } from '@/lib/signals'
 import { getSegments, segmentLabeler } from '@/lib/queries/shared'
-import { getFollowupsDue, getSendList, getTodayKpis, TODAY_LIMIT } from '@/lib/queries/today'
+import { getFollowupsDue, getSendList, getTodayCounts, getWonThisMonthIds, getWonThisMonthInr, TODAY_LIMIT, type TodayKpis } from '@/lib/queries/today'
 
 export const metadata: Metadata = { title: 'Today' }
 
@@ -27,13 +27,21 @@ export default function TodayPage() {
 }
 
 async function Today() {
+  // Everything here runs as the user under RLS, so it starts together with the session check.
+  const counts = early(getTodayCounts())
+  const send = early(getSendList())
+  const due = early(getFollowupsDue())
+  const wonIds = early(getWonThisMonthIds())
   const user = await requireUser()
-  const [kpis, sendRows, followups, segments] = await Promise.all([
-    getTodayKpis(canSeeMoney(user.role)),
-    getSendList(),
-    getFollowupsDue(),
+  const withMoney = canSeeMoney(user.role)
+  const [counted, sendRows, followups, segments, wonThisMonthInr] = await Promise.all([
+    counts,
+    send,
+    due,
     getSegments(),
+    withMoney ? wonIds.then((ids) => (ids.length ? getWonThisMonthInr(ids) : 0)) : Promise.resolve(null),
   ])
+  const kpis: TodayKpis = { ...counted, wonThisMonthInr }
   const now = new Date()
   const today = istDate(now)
   const segmentOf = segmentLabeler(segments)

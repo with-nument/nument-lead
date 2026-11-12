@@ -7,7 +7,7 @@ import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/ui/page-header'
 import { SkeletonRows } from '@/components/ui/skeleton'
-import { requireRole } from '@/lib/auth'
+import { early, requireRole } from '@/lib/auth'
 import { relativeAge } from '@/lib/dates'
 import { hostOf, safeUrl } from '@/lib/format'
 import { getInboxPosts } from '@/lib/queries/inbox'
@@ -36,8 +36,10 @@ export default function InboxPage() {
 }
 
 async function Inbox() {
+  // Posts run as the user (RLS: admin only) and start while the role is checked.
+  const postsP = early(getInboxPosts())
   await requireRole(['admin'])
-  const [posts, segments] = await Promise.all([getInboxPosts(), getSegments()])
+  const [posts, segments] = await Promise.all([postsP, getSegments()])
   const segmentOf = segmentLabeler(segments)
   const now = new Date()
   return (

@@ -3,7 +3,7 @@ import { Suspense } from 'react'
 import { AddRecipientForm, RecipientsList } from '@/components/settings/email-admin'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { SkeletonRows } from '@/components/ui/skeleton'
-import { requireRole } from '@/lib/auth'
+import { early, requireRole } from '@/lib/auth'
 import { getRecipients } from '@/lib/queries/settings'
 import { emailConfigured } from '@/lib/resend'
 
@@ -24,8 +24,10 @@ export default function EmailRecipientsPage() {
 }
 
 async function EmailRecipients() {
+  // Runs as the user (RLS: admin only) and starts while the role is checked.
+  const rowsP = early(getRecipients())
   await requireRole(['admin'])
-  const rows = await getRecipients()
+  const rows = await rowsP
   const canSend = emailConfigured()
   return (
     <div className="flex flex-col gap-6">

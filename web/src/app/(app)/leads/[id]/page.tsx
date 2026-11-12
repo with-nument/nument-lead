@@ -11,13 +11,13 @@ import { DealCard, FeedbackCard, NotesCard } from '@/components/lead/side-cards'
 import { GradeBadge, StageBadge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Skeleton, SkeletonRows } from '@/components/ui/skeleton'
-import { requireUser } from '@/lib/auth'
+import { early, requireUser } from '@/lib/auth'
 import { formatDate } from '@/lib/dates'
 import { hostOf, safeUrl } from '@/lib/format'
 import { formatPhone } from '@/lib/phone'
 import { canEdit, canSeeMoney } from '@/lib/roles'
 import { countryLabel } from '@/lib/signals'
-import { getLeadDetail, getProposals } from '@/lib/queries/lead'
+import { getLeadDealValue, getLeadDetail, getProposals } from '@/lib/queries/lead'
 import { getSegments, getTeam, segmentLabeler } from '@/lib/queries/shared'
 
 export const metadata: Metadata = { title: 'Lead' }
@@ -33,19 +33,27 @@ export default function LeadPage({ params, searchParams }: PageProps<'/leads/[id
 }
 
 async function Lead({ params, searchParams }: Pick<PageProps<'/leads/[id]'>, 'params' | 'searchParams'>) {
-  const [user, { id }, sp] = await Promise.all([requireUser(), params, searchParams])
+  const [{ id }, sp] = await Promise.all([params, searchParams])
   if (!UUID.test(id)) notFound()
+  // Unverified facts are an admin view: ask for them only when the link asks, and drop the request
+  // below for anyone who is not an admin. Everything here runs as the user (RLS), so it starts now.
+  const wantsUnverified = sp.unverified === '1'
+  const detailP = early(getLeadDetail(id, { includeUnverified: wantsUnverified }))
+  const verifiedOnlyP = wantsUnverified ? early(getLeadDetail(id, { includeUnverified: false })) : detailP
+  const user = await requireUser()
   const isAdmin = canSeeMoney(user.role)
   const editable = canEdit(user.role)
-  const includeUnverified = isAdmin && sp.unverified === '1'
-  const [detail, team, segments, proposals] = await Promise.all([
-    getLeadDetail(id, { withMoney: isAdmin, includeUnverified }),
+  const includeUnverified = isAdmin && wantsUnverified
+  const [detail, team, segments, proposals, dealValue] = await Promise.all([
+    includeUnverified ? detailP : verifiedOnlyP,
     getTeam(),
     getSegments(),
     isAdmin ? getProposals(id) : Promise.resolve([]),
+    isAdmin ? getLeadDealValue(id) : Promise.resolve(undefined),
   ])
   if (!detail) notFound()
-  const { lead, business, contacts, signals, facts, score, activities, feedback, pages } = detail
+  const { business, contacts, signals, facts, score, activities, feedback, pages } = detail
+  const lead = { ...detail.lead, deal_value_inr: dealValue }
   const now = new Date()
   const names = new Map(team.map((m) => [m.id, m.name]))
   const segmentOf = segmentLabeler(segments)

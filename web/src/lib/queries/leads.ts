@@ -5,8 +5,11 @@ import { applyLeadFilters, PAGE_SIZE, SORTS, type FilterContext, type LeadFilter
 const LIST_COLUMNS =
   'id, business_id, name, segment_id, country, city, website, web_domain, grade, total, stage, pitch_mode, angle, test_group, top_signal_type, top_signal_quote, top_signal_url, top_signal_at, phone_e164, phone_type, contact_name, owner_id, next_step, due_at, wa_at, last_activity_at, created_at' as const
 
-/** One page of leads. Money never comes from this query: admins get deal values from the admin view. */
-export async function getLeadsPage(f: LeadFilters, ctx: FilterContext & { withMoney: boolean }) {
+/**
+ * One page of leads. Money never comes from this query: admins get deal values from the admin view
+ * with `withDealValues`. Runs as the user, so the page can start it before the role is known.
+ */
+export async function getLeadsPage(f: LeadFilters, ctx: FilterContext) {
   const sb = await createClient()
   const sort = SORTS[f.sort]
   const from = (f.page - 1) * PAGE_SIZE
@@ -16,13 +19,18 @@ export async function getLeadsPage(f: LeadFilters, ctx: FilterContext & { withMo
     .range(from, from + PAGE_SIZE - 1)
   if (error) throw error
   const rows = (data ?? []).flatMap((r) => (r.id ? [{ ...r, id: r.id, name: r.name ?? 'Unnamed business', stage: r.stage ?? 'new' }] : []))
-  const money = ctx.withMoney ? await getDealValues(sb, rows.map((r) => r.id)) : null
   return {
-    rows: rows.map((r) => ({ ...r, deal_value_inr: money ? (money.get(r.id) ?? null) : undefined })),
+    rows: rows.map((r) => ({ ...r, deal_value_inr: undefined as number | null | undefined })),
     total: count ?? rows.length,
     page: f.page,
     pageSize: PAGE_SIZE,
   }
+}
+
+/** Adds deal values to a page of leads. Admins only: call it after the role check. */
+export async function withDealValues(page: Awaited<ReturnType<typeof getLeadsPage>>) {
+  const money = await getDealValues(await createClient(), page.rows.map((r) => r.id))
+  return { ...page, rows: page.rows.map((r) => ({ ...r, deal_value_inr: money.get(r.id) ?? null })) }
 }
 
 export type LeadListRow = Awaited<ReturnType<typeof getLeadsPage>>['rows'][number]
@@ -31,8 +39,11 @@ export type LeadListRow = Awaited<ReturnType<typeof getLeadsPage>>['rows'][numbe
 export async function getDealValues(sb: ServerClient, leadIds: string[]) {
   const out = new Map<string, number | null>()
   const ids = [...new Set(leadIds)]
-  for (let i = 0; i < ids.length; i += 150) {
-    const { data, error } = await sb.from('v_leads_admin').select('id, deal_value_inr').in('id', ids.slice(i, i + 150))
+  const chunks: string[][] = []
+  for (let i = 0; i < ids.length; i += 150) chunks.push(ids.slice(i, i + 150))
+  // Chunks keep the URL short; they run side by side, not one after another.
+  const parts = await Promise.all(chunks.map((chunk) => sb.from('v_leads_admin').select('id, deal_value_inr').in('id', chunk)))
+  for (const { data, error } of parts) {
     if (error) throw error
     for (const r of data ?? []) if (r.id) out.set(r.id, r.deal_value_inr === null ? null : Number(r.deal_value_inr))
   }
@@ -58,14 +69,17 @@ export async function getLeadsForExport(f: LeadFilters, ctx: FilterContext & { w
   return rows.map((r) => ({ ...r, deal_value_inr: money.get(r.id!) ?? null }))
 }
 
-/** Distinct cities for the filter, limited to the chosen countries. */
+/**
+ * Distinct cities for the filter, limited to the chosen countries. The city of a lead is its business's
+ * city (as in v_leads_caller), so this reads leads with their business only, not the whole view.
+ */
 export async function getCities(countries: string[]) {
   const sb = await createClient()
-  let q = sb.from('v_leads_caller').select('city').not('city', 'is', null).limit(5000)
-  if (countries.length) q = q.in('country', countries)
+  let q = sb.from('leads').select('businesses!inner(city)').not('businesses.city', 'is', null).limit(5000)
+  if (countries.length) q = q.in('businesses.country', countries)
   const { data, error } = await q
   if (error) throw error
-  return [...new Set((data ?? []).map((b) => b.city?.trim()).filter((c): c is string => Boolean(c)))].sort((a, b) => a.localeCompare(b))
+  return [...new Set((data ?? []).map((r) => r.businesses?.city?.trim()).filter((c): c is string => Boolean(c)))].sort((a, b) => a.localeCompare(b))
 }
 
 /** Saved views: mine first, then the ones teammates shared. */
