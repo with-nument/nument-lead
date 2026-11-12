@@ -24,6 +24,7 @@ def test_ok_run(engine_db: str) -> None:
     assert row["stats"] == {
         "businesses": 3,
         "failed_stages": [],
+        "skipped_stages": [],
         "dry_run": True,
         "limit": 5,
         "segments": ["clinics-in"],

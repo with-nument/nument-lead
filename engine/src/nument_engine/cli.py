@@ -13,7 +13,9 @@ import importlib
 import re
 import sys
 from collections.abc import Callable
+from datetime import datetime
 from enum import StrEnum
+from pathlib import Path
 from types import ModuleType
 from typing import Annotated, Any
 
@@ -105,7 +107,11 @@ def main(
     ] = None,
     limit: Annotated[int | None, typer.Option("--limit", min=1, help="Max items per stage.")] = None,
     dry_run: Annotated[
-        bool, typer.Option("--dry-run", help="No sheet writes, no batch submission, no paid calls.")
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="No sheet or database writes for leads, no batch submission; sync AI calls still run within --max-spend-inr.",
+        ),
     ] = False,
     max_spend_inr: Annotated[
         float | None,
@@ -154,7 +160,9 @@ def _execute(ctx: typer.Context, kind: str, work: Callable[[RunContext], object]
     import psycopg_pool
 
     from . import db
-    from .pipeline.runs import run_context
+    from .pipeline.runs import EssentialPhaseFailed, run_context
+    from .sheet.client import SheetsApiError
+    from .sheet.push import SheetNotAdopted
 
     opts = _bootstrap(ctx)
     try:
@@ -163,6 +171,10 @@ def _execute(ctx: typer.Context, kind: str, work: Callable[[RunContext], object]
     except NotImplementedError as exc:
         typer.secho(f"{ctx.command_path}: not built yet ({exc}).", err=True, fg=typer.colors.YELLOW)
         raise typer.Exit(code=2) from None
+    except EssentialPhaseFailed as exc:
+        raise _fail(f"{ctx.command_path}: {exc}. The run is marked failed; see runs.error for the traceback.") from None
+    except (SheetNotAdopted, SheetsApiError) as exc:
+        raise _fail(f"{ctx.command_path}: {exc}") from None
     except (psycopg.OperationalError, psycopg_pool.PoolTimeout) as exc:
         raise _fail(
             f"{ctx.command_path}: cannot reach the database ({type(exc).__name__}). "
@@ -237,11 +249,16 @@ def verify(ctx: typer.Context) -> None:
 
 
 @app.command()
-def score(ctx: typer.Context) -> None:
-    """Compute scores and grades (Step 11)."""
+def score(
+    ctx: typer.Context,
+    all_businesses: Annotated[
+        bool, typer.Option("--all", help="Also re-score dormant businesses, for example after a SCORE_VERSION bump.")
+    ] = False,
+) -> None:
+    """Compute scores and grades, then create or update leads (Step 11)."""
     from .pipeline import score as m
 
-    _execute(ctx, "manual", m.run)
+    _execute(ctx, "manual", lambda rc: m.run(rc, all_businesses=all_businesses))
 
 
 @app.command()
@@ -265,33 +282,99 @@ def message(ctx: typer.Context) -> None:
 # ---------------------------------------------------------------------------
 
 
+LIGHT_HELP = "Rebuild Lead details only when leads were added or removed (the daytime schedule)."
+
+
 @sheet_app.command("push")
-def sheet_push(ctx: typer.Context) -> None:
-    """Database to sheet (Step 13)."""
+def sheet_push(
+    ctx: typer.Context,
+    light: Annotated[bool, typer.Option("--light", help=LIGHT_HELP)] = False,
+    resort: Annotated[bool, typer.Option("--resort", help="Re-rank every row, best first. Only on request.")] = False,
+) -> None:
+    """Database to sheet (Step 13). Honours --dry-run (build and validate, write nothing)."""
     from .sheet import push as m
 
-    _execute(ctx, "sheet_sync", m.run)
+    _execute(ctx, "sheet_sync", lambda rc: _record(rc, "push", m.run(rc, light=light, resort=resort)))
 
 
 @sheet_app.command("pull")
-def sheet_pull(ctx: typer.Context) -> None:
-    """Sheet to database (Step 13)."""
+def sheet_pull(
+    ctx: typer.Context,
+    seed_snapshots: Annotated[
+        bool,
+        typer.Option(
+            "--seed-snapshots",
+            help="Adopt sheets the old engine wrote: record a baseline, then pull (Step 20.6). Writes no lead data.",
+        ),
+    ] = False,
+    legacy_root: Annotated[
+        Path | None, typer.Option("--legacy-root", help="Old lead-engine folder (default ~/Desktop/lead-engine).")
+    ] = None,
+) -> None:
+    """Sheet to database (Step 13). Honours --dry-run (report the edits, write nothing)."""
     from .sheet import pull as m
 
-    _execute(ctx, "sheet_sync", m.run)
-
-
-def _sheet_sync(rc: RunContext) -> None:
-    from .sheet import pull, push
-
-    pull.run(rc)  # always pull people's edits first
-    push.run(rc)
+    _execute(
+        ctx,
+        "sheet_sync",
+        lambda rc: _record(rc, "pull", m.run(rc, seed_snapshots=seed_snapshots, legacy_root=legacy_root)),
+    )
 
 
 @sheet_app.command("sync")
-def sheet_sync(ctx: typer.Context) -> None:
+def sheet_sync(ctx: typer.Context, light: Annotated[bool, typer.Option("--light", help=LIGHT_HELP)] = False) -> None:
     """Pull people's edits, then push (Step 13)."""
-    _execute(ctx, "sheet_sync", _sheet_sync)
+    from .sheet import sync as m
+
+    _execute(ctx, "sheet_sync", lambda rc: _record(rc, "sheet", m.run(rc, light=light)))
+
+
+@sheet_app.command("render")
+def sheet_render(
+    ctx: typer.Context,
+    out: Annotated[Path, typer.Option("--out", help="Folder for the PDFs.", file_okay=False)],
+) -> None:
+    """Export every tab of every view to PDF for a visual check (Step 13)."""
+    from .sheet import render as m
+
+    _execute(ctx, "manual", lambda rc: _echo_files(m.run(rc, out=out)))
+
+
+@sheet_app.command("check")
+def sheet_check(ctx: typer.Context) -> None:
+    """Can the service account open each sheet this environment writes, and is it set up yet? (Step 13.4)"""
+    import json
+
+    from .sheet import client
+    from .sheet import state as st
+
+    _bootstrap(ctx)
+    try:
+        api = client.GoogleSheetsApi()
+        rows = client.check_targets(api, st.states())
+    except client.SheetsApiError as exc:
+        raise _fail(f"sheet check: {exc}") from None
+    finally:
+        from . import db
+
+        db.close_pool()
+    for row in rows:
+        typer.echo(json.dumps(row, ensure_ascii=False))
+    if not all(r["ok"] for r in rows):
+        raise typer.Exit(code=1)
+
+
+def _record(rc: RunContext, key: str, stats: object) -> None:
+    """Keep a command's stats in the run row and print them (one JSON line) for the person running it."""
+    import json
+
+    rc.stats[key] = stats
+    typer.echo(json.dumps(stats, default=str, ensure_ascii=False))
+
+
+def _echo_files(result: dict[str, list[str]]) -> None:
+    for name in result.get("files", []):
+        typer.echo(name)
 
 
 # ---------------------------------------------------------------------------
@@ -300,27 +383,61 @@ def sheet_sync(ctx: typer.Context) -> None:
 
 
 @app.command()
-def learn(ctx: typer.Context) -> None:
-    """Weekly re-weighting from outcomes (Step 16)."""
+def learn(
+    ctx: typer.Context,
+    rollback: Annotated[
+        int | None, typer.Option("--rollback", min=1, metavar="VERSION", help="Restore an older weights version.")
+    ] = None,
+) -> None:
+    """Weekly re-weighting from outcomes; --dry-run only proposes (Step 16.4)."""
     from .learn import reweight as m
 
-    _execute(ctx, "weekly", m.run)
+    if rollback is not None:
+        version = rollback
+
+        def restore(rc: RunContext) -> None:
+            try:
+                new = m.rollback(version)
+            except ValueError as exc:
+                raise _fail(str(exc)) from None
+            rc.stats["rollback"] = {"to": version, "new_version": new}
+            typer.echo(f"Weights restored from version {version} as version {new}.")
+
+        _execute(ctx, "manual", restore)
+        return
+
+    def propose(rc: RunContext) -> None:
+        result = m.run(rc)
+        typer.echo(f"Re-weighting: {result['status']}, {len(result['changes'])} change(s).")
+        for c in result["changes"]:
+            typer.echo(f"  {c['segment_id']} {c['key']}: {c['old']} to {c['new']} ({c['note']}, {c['trials']} leads)")
+
+    _execute(ctx, "weekly", propose)
 
 
 @report_app.command("weekly")
-def report_weekly(ctx: typer.Context) -> None:
-    """Build and store the weekly report (Step 16)."""
+def report_weekly(
+    ctx: typer.Context,
+    week_start: Annotated[
+        datetime | None,
+        typer.Option("--week-start", formats=["%Y-%m-%d"], help="Monday of the week (default: last full week, IST)."),
+    ] = None,
+) -> None:
+    """Build, store and deliver the weekly report; --dry-run prints it only (Step 16.6)."""
     from .learn import report as m
 
-    _execute(ctx, "weekly", m.weekly)
+    start = week_start.date() if week_start else None
+    if start is not None and start.weekday() != 0:
+        raise typer.BadParameter(f"{start} is not a Monday", param_hint="--week-start")
+    _execute(ctx, "weekly", lambda rc: m.weekly(rc, week_start=start))
 
 
 @app.command()
 def audit(ctx: typer.Context) -> None:
-    """Weekly audit of 20 recent leads (Step 17)."""
-    from .learn import metrics as m
+    """Weekly audit of 20 recent leads; --dry-run skips AI calls and stores nothing (Step 17.6)."""
+    from .ops import audit as m
 
-    _execute(ctx, "weekly", m.audit)
+    _execute(ctx, "weekly", m.weekly)
 
 
 def _load_evals() -> ModuleType:
@@ -335,34 +452,122 @@ def _load_evals() -> ModuleType:
 @app.command(name="eval")
 def eval_(
     ctx: typer.Context,
-    subset: Annotated[int | None, typer.Option("--subset", min=1, help="Only the first N golden labels.")] = None,
+    subset: Annotated[
+        int | None, typer.Option("--subset", min=1, help="Evaluate N businesses; 20 uses the fixed CI subset.")
+    ] = None,
+    export_golden: Annotated[
+        bool, typer.Option("--export-golden", help="Write labels, frozen pages and the subset from the database.")
+    ] = False,
+    replay: Annotated[
+        Path | None, typer.Option("--replay", exists=True, dir_okay=False, help="Re-check saved outcomes, no AI.")
+    ] = None,
+    save_outcomes: Annotated[
+        Path | None, typer.Option("--save-outcomes", dir_okay=False, help="Write each business's outcome (JSONL).")
+    ] = None,
 ) -> None:
-    """Run the golden-set evaluation (Step 17)."""
-    _execute(ctx, "manual", lambda rc: _load_evals().run(rc, subset=subset))
+    """Golden-set evaluation. Exit 1: a threshold failed; 2: cannot run yet; 3: skipped for budget (Step 17.4)."""
+    outcome: dict[str, Any] = {}
+
+    def work(rc: RunContext) -> None:
+        outcome.update(
+            _load_evals().run(rc, subset=subset, export=export_golden, replay=replay, save_outcomes=save_outcomes)
+        )
+
+    _execute(ctx, "manual", work)
+    if outcome.get("status") == "skipped_budget":
+        raise _fail(f"eval skipped: budget ({outcome.get('detail')})", code=3)
+    if outcome.get("status") == "failed":
+        raise _fail("eval failed: at least one threshold was missed")
 
 
 @app.command()
-def health(ctx: typer.Context) -> None:
-    """Check every service and source (Step 22)."""
+def health(
+    ctx: typer.Context,
+    prune: Annotated[bool, typer.Option("--prune", help="Apply the retention rules (Step 18.2.2).")] = False,
+    summary: Annotated[bool, typer.Option("--summary", help="Markdown for the GitHub job summary.")] = False,
+    notify: Annotated[bool, typer.Option("--notify", help="Email new alerts (when email is configured).")] = False,
+    models: Annotated[
+        bool, typer.Option("--models", help="Check every AI model id in tasks.yaml against the providers (Step 4.4).")
+    ] = False,
+    llm_smoke: Annotated[
+        bool,
+        typer.Option("--llm-smoke", help="One tiny paid request per AI task on every usable model (under ₹5)."),
+    ] = False,
+    providers: Annotated[
+        str | None,
+        typer.Option("--providers", help="With --models or --llm-smoke: providers to use, e.g. gemini,openai."),
+    ] = None,
+) -> None:
+    """Check the database, AI providers, quotas, sources and runs. Exit 1 when a check fails (Step 22).
+
+    --models and --llm-smoke check the AI router instead (Step 4.4 and 4.12).
+    """
+    if models or llm_smoke:
+        from .llm import health as llm_health
+
+        failures: list[int] = []
+
+        def check(rc: RunContext) -> None:
+            failures.append(llm_health.run(rc, models=models, smoke=llm_smoke, providers=providers))
+
+        _execute(ctx, "manual", check)
+        if failures and failures[0]:
+            raise typer.Exit(code=1)
+        return
+    import psycopg
+    import psycopg_pool
+
+    from . import db
     from .ops import health as m
 
-    _execute(ctx, "manual", m.run)
+    if prune:
+        _execute(ctx, "manual", m.prune_run)
+        return
+    _bootstrap(ctx)
+    try:
+        if summary:
+            typer.echo(m.daily_summary())
+            return
+        checks = m.collect()
+        typer.echo(m.render_text(checks))
+        if notify:
+            sent = m.notify_alerts()
+            typer.echo(f"alerts: {len(sent['alerts'])}, new today: {len(sent['new'])}, emailed: {sent['emailed']}")
+        if m.worst(checks) == "fail":
+            raise typer.Exit(code=1)
+    except (psycopg.OperationalError, psycopg_pool.PoolTimeout) as exc:
+        raise _fail(
+            f"{ctx.command_path}: cannot reach the database ({type(exc).__name__}). "
+            "Check DATABASE_URL (session pooler, port 5432) and that the Supabase project is not paused."
+        ) from None
+    finally:
+        db.close_pool()
 
 
 @app.command()
-def backup(ctx: typer.Context) -> None:
+def backup(
+    ctx: typer.Context,
+    out: Annotated[
+        Path | None, typer.Option("--out", help="Where to write the encrypted dump (default: the engine cache folder).")
+    ] = None,
+) -> None:
     """Encrypted dump of the public schema to the private backups bucket (Step 14.5.6)."""
     from .ops import backup as m
 
-    _execute(ctx, "manual", m.run)
+    _execute(ctx, "manual", lambda rc: _record(rc, "backup", m.run(rc, out=out)))
 
 
 @app.command(name="migrate-legacy")
-def migrate_legacy(ctx: typer.Context) -> None:
-    """One-time import from the old lead-engine folder (Step 20)."""
+def migrate_legacy(
+    ctx: typer.Context,
+    root: Annotated[
+        Path | None, typer.Option("--root", help="Old lead-engine folder (default ~/Desktop/lead-engine). Read only.")
+    ] = None,
+) -> None:
+    """One-time import from the old lead-engine folder (Step 20). Safe to re-run; --dry-run rolls back."""
     from .ops import migrate_legacy as m
 
-    _execute(ctx, "manual", m.run)
+    _execute(ctx, "manual", lambda rc: _record(rc, "migrate_legacy", m.run(rc, root=root)))
 
 
 # ---------------------------------------------------------------------------
@@ -387,31 +592,27 @@ def run_morning(ctx: typer.Context) -> None:
 
 
 @run_app.command("sheet")
-def run_sheet(ctx: typer.Context) -> None:
-    """Daytime two-way sheet sync (Step 14)."""
-    _execute(ctx, "sheet_sync", _sheet_sync)
+def run_sheet(ctx: typer.Context, light: Annotated[bool, typer.Option("--light", help=LIGHT_HELP)] = False) -> None:
+    """Daytime: late batch items at 09:00, then the two-way sheet sync (Step 14)."""
+    from .pipeline import runs
 
-
-def _weekly(rc: RunContext) -> None:
-    from .learn import metrics, report, reweight
-
-    reweight.run(rc)
-    report.weekly(rc)
-    metrics.audit(rc)
+    _execute(ctx, "sheet_sync", lambda rc: runs.sheet(rc, light=light))
 
 
 @run_app.command("weekly")
 def run_weekly(ctx: typer.Context) -> None:
-    """Monday: learning, report and audit (Step 14)."""
-    _execute(ctx, "weekly", _weekly)
+    """Monday: learning, report, audit and page-text retention (Step 14)."""
+    from .pipeline import runs
+
+    _execute(ctx, "weekly", runs.weekly)
 
 
 @run_app.command("monthly")
 def run_monthly(ctx: typer.Context) -> None:
-    """Monthly universe refresh (Step 14)."""
-    from .pipeline import universe as m
+    """Monthly universe refresh and page-text retention (Step 14)."""
+    from .pipeline import runs
 
-    _execute(ctx, "monthly", lambda rc: m.run(rc, monthly=True))
+    _execute(ctx, "monthly", runs.monthly)
 
 
 # ---------------------------------------------------------------------------

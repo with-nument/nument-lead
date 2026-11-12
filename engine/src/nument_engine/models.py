@@ -180,7 +180,9 @@ LlmProvider = Literal["gemini", "openai"]
 LLM_PROVIDERS: Final[tuple[str, ...]] = get_args(LlmProvider)
 BatchStatus = Literal["submitted", "running", "completed", "failed", "expired", "cancelled"]
 BATCH_STATUSES: Final[tuple[str, ...]] = get_args(BatchStatus)
-SheetName = Literal["master", "caller"]
+# sheet_snapshots.sheet and sheet_state keys: live sheets in prod, the two views of the staging sheet in dev.
+SheetName = Literal["master", "caller", "staging_master", "staging_caller"]
+SHEET_NAMES: Final[tuple[str, ...]] = get_args(SheetName)
 # source_records.source: a new registry adapter adds its key here and in a new migration (Step 2.6.1).
 SourceName = Literal[
     "overture",

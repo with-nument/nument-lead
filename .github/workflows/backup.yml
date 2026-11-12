@@ -1,0 +1,67 @@
+# Weekly encrypted backup of the data (Step 2.14, 14.5.6): pg_dump of the public schema, gzip, gpg
+# (BACKUP_PASSPHRASE), uploaded to the private Supabase bucket `backups` (8 weeks kept) and kept 30 days
+# as a workflow artifact. Restore steps are in engine/src/nument_engine/ops/backup.py.
+# Schedules are off until go-live: set the repository variable SCHEDULES_ENABLED to "true" (Step 21).
+name: Weekly database backup
+
+on:
+  schedule:
+    - cron: "30 17 * * 0" # Sunday 23:00 IST
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nument-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    if: github.event_name == 'workflow_dispatch' || vars.SCHEDULES_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: prod
+    permissions:
+      contents: read
+      issues: write
+    env:
+      APP_ENV: prod
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+      SHEET_MASTER_ID: ${{ vars.SHEET_MASTER_ID }}
+      SHEET_CALLER_ID: ${{ vars.SHEET_CALLER_ID }}
+      NLEAD_PG_DUMP: /usr/lib/postgresql/17/bin/pg_dump # must match the server's major version (Supabase: 17)
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Install pg_dump 17 from the PostgreSQL apt repository
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+
+      - uses: ./.github/actions/setup-engine
+
+      - name: Dump, encrypt and upload
+        working-directory: engine
+        run: uv run nlead backup --env prod --out "$RUNNER_TEMP/nument-db.sql.gz.gpg"
+
+      - name: Keep a copy as a workflow artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nument-db-${{ github.run_id }}
+          path: ${{ runner.temp }}/nument-db.sql.gz.gpg
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Report the failure
+        if: failure() && github.event_name == 'schedule'
+        uses: ./.github/actions/notify-failure
+        with:
+          workflow: Weekly database backup

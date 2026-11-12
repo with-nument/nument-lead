@@ -97,13 +97,15 @@ uv run nlead universe --segment clinics-in --limit 20 --dry-run --env dev     # 
 | `nlead verify` | Re-check quotes, phones and websites | Step 10 |
 | `nlead score` / `nlead judge` | Scores, grades and the top model's second opinion | Step 11 |
 | `nlead message` | Write, lint and check messages | Step 12 |
-| `nlead sheet push` / `pull` / `sync` | Google Sheet sync (sync = pull, then push) | Step 13 |
+| `nlead sheet sync [--light]` | Pull people's edits, then push both views (`--light` skips Lead details when no lead came or went) | Step 13 |
+| `nlead sheet push [--light] [--resort]` / `nlead sheet pull [--seed-snapshots]` | One direction only; `--seed-snapshots` adopts sheets the old engine wrote | Steps 13, 20 |
+| `nlead sheet check` / `nlead sheet render --out DIR` | Can the service account open each sheet; export every tab to PDF for a visual check | Step 13 |
 | `nlead learn`, `nlead report weekly`, `nlead audit` | Learning loop, weekly report, weekly audit | Steps 16, 17 |
 | `nlead eval [--subset N]` | Golden-set evaluation | Step 17 |
 | `nlead health` | Check every service, source and quota | Step 22 |
-| `nlead backup` | Encrypted dump to the private `backups` bucket | Step 14 |
-| `nlead migrate-legacy` | One-time import from the old `lead-engine` folder | Step 20 |
-| `nlead run night` / `morning` / `sheet` / `weekly` / `monthly` | Orchestrated runs for GitHub Actions | Step 14 |
+| `nlead backup [--out PATH]` | Encrypted data dump to the private `backups` bucket (restore steps in `ops/backup.py`) | Step 14 |
+| `nlead migrate-legacy [--root PATH]` | One-time import from the old `lead-engine` folder; safe to re-run | Step 20 |
+| `nlead run night` / `morning` / `sheet [--light]` / `weekly` / `monthly` | Orchestrated runs for GitHub Actions | Step 14 |
 | `nlead db migrate` / `status` / `sync-segments` | Apply migrations, list them, copy segment files into the database | ready |
 
 Every pipeline command writes one row in `public.runs` (status `ok`, `partial` or `failed`) and puts the run id
@@ -127,6 +129,7 @@ The schema lives in `../supabase/migrations/` (Step 2 owns 0001 to 0004; A.13.3 
 | `0006_cost_views.sql` | `v_spend_today`, `v_quota_today`, `v_quota_month` (engine only) |
 | `0007_learning.sql` | `v_lead_funnel`, `weight_versions`, `reports` |
 | `0008_llm.sql` | AI router storage; already created by 0001, kept for numbering |
+| `0009_sheet_targets.sql` | Separate snapshot keys for the staging sheet (`staging_master`, `staging_caller`) and the Step 13 settings |
 
 Apply pending migrations with either tool; both record history in `supabase_migrations.schema_migrations`:
 
@@ -149,6 +152,24 @@ How the data is protected (Step 2.8):
 
 Rules: never edit a migration that has been applied; add the next number. Push to dev first, run the tests,
 then prod (Step 21).
+
+## Sheet sync and schedules
+
+- **Which sheets:** prod writes `SHEET_MASTER_ID` (founder, with money) and `SHEET_CALLER_ID` (associate, never
+  any money). Dev writes both views into `SHEET_STAGING_ID`, the caller tabs ending in ` (caller)`. Staging keeps
+  its own snapshots, so a staging run can never disturb the live sheets even on the shared database.
+- **Ownership:** every spreadsheet belongs to a person and is shared with the service account as Editor. The
+  service account cannot own files (Google gives it no Drive storage), so it cannot create a sheet itself.
+  `nlead sheet check` shows whether each sheet is reachable and set up.
+- **Safety:** push builds every request first and writes each view in one atomic batch; the snapshot and the
+  `sheet_state` marker are saved only after a full write. Pull skips a sheet whose last push did not finish, and
+  compares each sheet with its own snapshot (D-045). A live sheet the engine has never written is refused until
+  it is adopted with `nlead sheet pull --seed-snapshots` (Step 20.6). Kill switch: `settings.sheet_sync_enabled`.
+- **Schedules:** `.github/workflows/` runs night (02:00 IST), morning (06:00), sheet sync (every 2 hours, 09:00
+  to 21:00), weekly (Monday 07:00), monthly (the 1st, 22:30) and backup (Sunday 23:00). Scheduled runs stay off
+  until the repository variable `SCHEDULES_ENABLED` is `true` (go-live, Step 21); manual runs always work.
+  Put the sheet ids in the `prod` and `dev` environments, never at repository level (dev refuses live ids).
+  A failed scheduled run opens or updates one GitHub issue per workflow.
 
 ## Tests
 

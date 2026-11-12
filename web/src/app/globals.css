@@ -1,0 +1,216 @@
+@import "tailwindcss";
+@import "../styles/tokens.css";
+
+/*
+  Tailwind theme mapped onto the Nument kit tokens.
+  Colours: only kit colours exist, so a stray default (blue-500 and friends) fails the build
+  instead of slipping into the UI. Names differ from the kit variable names on purpose, so no
+  token ever refers to itself.
+*/
+@theme inline {
+  --color-*: initial;
+  --color-white: #ffffff;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+
+  --color-tx-1: var(--color-tx);
+  --color-tx-2: var(--color-tx-secondary);
+  --color-tx-3: var(--color-tx-tertiary);
+  --color-tx-4: var(--color-tx-muted);
+  --color-canvas: var(--color-bg);
+  --color-surface: var(--color-sf-white);
+  --color-surface-2: var(--color-sf-secondary);
+  --color-surface-3: var(--color-sf-tertiary);
+  --color-line: var(--color-st);
+  --color-line-2: var(--color-st-secondary);
+  --color-slate: var(--color-ink);
+
+  --color-ok: var(--green-700);
+  --color-ok-bg: var(--green-50);
+  --color-warn: var(--yellow-700);
+  --color-warn-bg: var(--yellow-50);
+  /* Readable amber text on yellow (the 'Proposal sent' stage colour, plan A.12.2). */
+  --color-warn-ink: #8a5a00;
+  --color-bad: var(--red-600);
+  --color-bad-bg: var(--red-50);
+
+  --color-indigo-50: var(--indigo-50);
+  --color-indigo-100: var(--indigo-100);
+  --color-indigo-200: var(--indigo-200);
+  --color-indigo-300: var(--indigo-300);
+  --color-indigo-400: var(--indigo-400);
+  --color-indigo-600: var(--indigo-600);
+  --color-indigo-700: var(--indigo-700);
+  --color-indigo-800: var(--indigo-800);
+  --color-indigo-900: var(--indigo-900);
+  --color-grey-50: var(--grey-50);
+  --color-grey-100: var(--grey-100);
+  --color-grey-200: var(--grey-200);
+  --color-grey-300: var(--grey-300);
+  --color-grey-400: var(--grey-400);
+  --color-grey-600: var(--grey-600);
+  --color-grey-700: var(--grey-700);
+  --color-grey-800: var(--grey-800);
+  --color-green-50: var(--green-50);
+  --color-green-100: var(--green-100);
+  --color-green-700: var(--green-700);
+  --color-green-800: var(--green-800);
+  --color-red-50: var(--red-50);
+  --color-red-100: var(--red-100);
+  --color-red-300: var(--red-300);
+  --color-red-600: var(--red-600);
+  --color-yellow-50: var(--yellow-50);
+  --color-yellow-100: var(--yellow-100);
+  --color-yellow-700: var(--yellow-700);
+
+  --font-*: initial;
+  --font-display: var(--nf-display), Georgia, serif;
+  --font-sans: var(--nf-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--nf-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-weight-normal: 425;
+  --font-weight-medium: 525;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --text-*: initial;
+  --text-micro: 11px;
+  --text-micro--line-height: 16px;
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 13px;
+  --text-sm--line-height: 18px;
+  --text-base: 14px;
+  --text-base--line-height: 20px;
+  --text-md: 15px;
+  --text-md--line-height: 22px;
+  --text-lg: 16px;
+  --text-lg--line-height: 24px;
+  --text-xl: 20px;
+  --text-xl--line-height: 28px;
+  --text-title: 28px;
+  --text-title--line-height: 34px;
+  --text-title--letter-spacing: -0.01em;
+  --text-kpi: 32px;
+  --text-kpi--line-height: 36px;
+
+  --ease-ui: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+  body {
+    font-size: 14px;
+    line-height: 20px;
+    min-height: 100dvh;
+  }
+  ::placeholder {
+    color: var(--color-tx-muted);
+  }
+  table {
+    border-collapse: collapse;
+  }
+  input,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+}
+
+/* Small uppercase mono label used for section titles, table heads and meta. */
+@utility label-mono {
+  font-family: var(--nf-mono), ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-tx-tertiary);
+}
+
+/* The Nument wordmark: lowercase, Figtree 700, tight tracking (kit section 2). */
+@utility wordmark {
+  font-family: var(--nf-sans), system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  color: #000;
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Soft menus and dialogs: the only places a shadow is allowed. */
+@utility shadow-menu {
+  box-shadow: var(--shadow-md);
+}
+@utility shadow-dialog {
+  box-shadow: var(--shadow-lg);
+}
+
+/* Primary pill: the kit ink gradient with its bevel. */
+@utility btn-ink {
+  background: var(--gradient-btn-primary);
+  color: #fff;
+  box-shadow: var(--shadow-btn-ink);
+}
+
+@utility focus-ring {
+  outline: none;
+  border-color: var(--indigo-300);
+  box-shadow: var(--shadow-focus), 0 0 0 1px var(--indigo-300);
+}
+
+/* Toasts (sonner) in kit style. */
+[data-sonner-toaster] [data-sonner-toast] {
+  font-family: var(--nf-sans), system-ui, sans-serif;
+  border-radius: 12px;
+  border: 1px solid var(--color-st);
+  box-shadow: var(--shadow-md);
+  color: var(--color-tx);
+}
+[data-sonner-toaster] [data-sonner-toast] [data-button] {
+  border-radius: 9999px;
+  background: var(--color-ink);
+  font-weight: 525;
+}
+
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+@utility skeleton {
+  background: var(--color-sf-tertiary);
+  border-radius: 8px;
+  animation: skeleton-pulse 1.6s var(--ease-in-out) infinite;
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(16px);
+    opacity: 0;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}
+@utility animate-drawer-in {
+  animation: drawer-in 200ms var(--ease-standard);
+}
+@utility animate-fade-in {
+  animation: fade-in 150ms var(--ease-standard);
+}
+@utility animate-pop-in {
+  animation: pop-in 150ms var(--ease-standard);
+}
