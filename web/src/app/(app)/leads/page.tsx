@@ -101,7 +101,7 @@ async function Leads({ searchParams }: Pick<PageProps<'/leads'>, 'searchParams'>
       />
       <div className="lg:grid lg:grid-cols-[208px_minmax(0,1fr)] lg:gap-6">
         <aside className="hidden lg:block" aria-label="Filters">
-          <div className="sticky top-20 max-h-[calc(100dvh-6rem)] overflow-y-auto pr-1 pb-6">
+          <div data-tour="lead-filters" className="sticky top-20 max-h-[calc(100dvh-6rem)] overflow-y-auto pr-1 pb-6">
             <FilterPanel filters={filters} options={options} showOwner={user.role !== 'viewer'} />
             <SavedViews mine={views.mine} shared={views.shared} currentQs={qs} />
           </div>

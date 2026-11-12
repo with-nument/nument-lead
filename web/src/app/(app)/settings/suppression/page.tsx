@@ -42,7 +42,7 @@ async function Suppression() {
           <AddSuppressionForm />
         </CardBody>
       </Card>
-      <Card aria-labelledby="list-title">
+      <Card aria-labelledby="list-title" data-tour="settings-dnc">
         <CardHeader id="list-title" title={`Do not contact · ${rows.length}`} />
         <div className="relative mt-3 overflow-x-auto border-t border-line-2">
           {rows.length ? (

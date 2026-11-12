@@ -3,6 +3,7 @@ import { env } from '@/lib/env'
 import { formatTime, formatDate, istDate } from '@/lib/dates'
 import { getLastSheetSync } from '@/lib/queries/shell'
 import { Tag } from '@/components/ui/badge'
+import { ProductTour } from '@/components/tour/product-tour'
 import { NavLinks } from './nav'
 import { MobileNav } from './mobile-nav'
 import { UserMenu } from './user-menu'
@@ -40,6 +41,12 @@ export async function TopbarStatus() {
       </span>
     </div>
   )
+}
+
+/** The first-visit product tour. Opens by itself once, after any forced password change. */
+export async function TourHost() {
+  const user = await requireUser()
+  return <ProductTour userId={user.id} role={user.role} completedAt={user.tourCompletedAt} mustChangePassword={user.mustChangePassword} />
 }
 
 export async function AccountMenu() {

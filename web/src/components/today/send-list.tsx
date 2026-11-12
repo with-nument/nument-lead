@@ -108,7 +108,7 @@ function SendRow({ item, canEdit, actions }: { item: SendItem; canEdit: boolean;
       </div>
 
       {canEdit ? (
-        <div className="flex flex-wrap items-start gap-2 sm:ml-9 lg:ml-0 lg:max-w-[340px] lg:justify-end">
+        <div data-tour="send-actions" className="flex flex-wrap items-start gap-2 sm:ml-9 lg:ml-0 lg:max-w-[340px] lg:justify-end lg:self-start">
           <ContactButtons
             target={{ phone: item.phone, phoneType: item.phoneType, message: item.message, email: item.email, emailSubject: item.emailSubject, emailBody: item.emailBody }}
             onOpen={(channel) => actions.markSent(item.id, channel)}

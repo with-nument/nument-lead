@@ -71,7 +71,7 @@ export function SaveViewButton({ currentQs }: { currentQs: string }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="secondary" size="md">
+        <Button variant="secondary" size="md" data-tour="save-view">
           <BookmarkPlus aria-hidden />
           Save view
         </Button>

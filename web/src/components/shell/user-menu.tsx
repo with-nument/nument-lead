@@ -1,11 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import { LogOut, Settings } from 'lucide-react'
+import { CircleHelp, LogOut, Settings } from 'lucide-react'
 import { logout } from '@/app/(auth)/actions'
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '@/components/ui/dropdown-menu'
 import { initials } from '@/lib/format'
 import { ROLE_LABEL, type Role } from '@/lib/roles'
+import { requestTour } from '@/components/tour/tour-store'
 
 export function UserMenu({ name, email, role }: { name: string; email: string; role: Role }) {
   return (
@@ -29,6 +30,15 @@ export function UserMenu({ name, email, role }: { name: string; email: string; r
             <Settings aria-hidden />
             Profile and password
           </Link>
+        </MenuItem>
+        <MenuItem
+          onSelect={() => {
+            // Let the menu close and hand focus back first, then the tour takes it.
+            window.setTimeout(requestTour, 0)
+          }}
+        >
+          <CircleHelp aria-hidden />
+          Take the tour
         </MenuItem>
         <MenuItem
           onSelect={() => {

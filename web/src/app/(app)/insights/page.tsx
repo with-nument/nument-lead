@@ -79,12 +79,12 @@ async function Insights({ searchParams }: Pick<PageProps<'/insights'>, 'searchPa
       />
 
       {t.leads === 0 ? (
-        <Card>
+        <Card data-tour="insights">
           <EmptyState text={`No leads were added between ${formatDate(filters.from, now)} and ${formatDate(filters.to, now)}.`} />
         </Card>
       ) : (
         <div className="flex flex-col gap-6">
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-6 lg:grid-cols-2" data-tour="insights">
             <Card aria-labelledby="funnel-title">
               <CardHeader id="funnel-title" title="Funnel" description={`${formatNumber(t.leads)} leads added. Percentages are of contacted leads.`} />
               <CardBody>

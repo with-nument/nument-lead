@@ -42,7 +42,7 @@ async function Inbox() {
   const now = new Date()
   return (
     <div className="flex flex-col gap-6">
-      <Card aria-labelledby="paste-title">
+      <Card aria-labelledby="paste-title" data-tour="inbox-paste">
         <CardHeader id="paste-title" title="Add a post" />
         <CardBody>
           <InboxForm segments={segments.map((s) => ({ id: s.id, label: s.label }))} />

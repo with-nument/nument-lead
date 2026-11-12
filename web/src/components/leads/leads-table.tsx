@@ -275,7 +275,7 @@ export function LeadsTable({
 
       <ul className="divide-y divide-line-2 border-t border-line-2 sm:hidden">
         {rows.map((r) => (
-          <li key={r.id} className="px-4 py-3">
+          <li key={r.id} className="px-4 py-3" data-tour="lead-row">
             <div className="flex items-start gap-3">
               <GradeBadge grade={r.grade} className="mt-0.5" />
               <div className="min-w-0 flex-1">

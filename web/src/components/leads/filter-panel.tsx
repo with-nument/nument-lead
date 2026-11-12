@@ -90,7 +90,7 @@ export function FilterPanel({ filters, options, showOwner }: { filters: LeadFilt
         <CheckList name="stage" options={STAGES.map((s) => ({ value: s.value, label: s.label }))} selected={filters.stage} onToggle={toggle('stage')} max={12} />
       </Group>
       <Group title="Grade">
-        <div className="flex gap-1.5" role="group" aria-label="Grade">
+        <div className="flex w-fit gap-1.5" role="group" aria-label="Grade" data-tour="grade-filter">
           {GRADES.map((g) => {
             const on = filters.grade.includes(g)
             return (

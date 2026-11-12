@@ -65,7 +65,7 @@ async function Engine() {
   return (
     <div className="flex flex-col gap-6">
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <Card aria-labelledby="budget-title">
+        <Card aria-labelledby="budget-title" data-tour="engine-budget">
           <CardHeader id="budget-title" title="Budget" />
           <CardBody className="flex flex-col gap-5">
             <SpendMeter spend={data.spendToday} cap={data.budget.daily_cap_inr} alertPct={data.budget.alert_pct} />
@@ -117,7 +117,7 @@ async function Engine() {
         </div>
       </Card>
 
-      <Card aria-labelledby="sources-title">
+      <Card aria-labelledby="sources-title" data-tour="engine-sources">
         <CardHeader id="sources-title" title="Sources" description="Turn a source off to stop the engine using it at once (kill switch)." />
         <div className="relative mt-3 overflow-x-auto border-t border-line-2">
           {data.sources.length ? (

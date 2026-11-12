@@ -90,7 +90,7 @@ async function Today() {
       <PageHeader title="Today" actions={<span className="text-md text-tx-3">{formatWeekday(now)}</span>} />
       <TodayKpiTiles kpis={kpis} />
 
-      <Card className="mt-6" aria-labelledby="send-list-title">
+      <Card className="mt-6" aria-labelledby="send-list-title" data-tour="send-list">
         <CardHeader
           id="send-list-title"
           title={`Send list · ${formatNumber(items.length)}${items.length >= TODAY_LIMIT ? '+' : ''}`}
@@ -101,7 +101,7 @@ async function Today() {
         </div>
       </Card>
 
-      <Card className="mt-6" aria-labelledby="followups-title">
+      <Card className="mt-6" aria-labelledby="followups-title" data-tour="followups">
         <CardHeader id="followups-title" title={`Follow-ups due · ${formatNumber(followupItems.length)}`} description="Day 3 and day 7 messages for leads that have not replied yet." />
         <div className="mt-2 border-t border-line-2">
           <FollowupList items={followupItems} canEdit={editable} />

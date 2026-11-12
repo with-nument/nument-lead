@@ -38,7 +38,7 @@ async function Users() {
     isMe: u.id === me.id,
   }))
   return (
-    <Card aria-labelledby="users-title">
+    <Card aria-labelledby="users-title" data-tour="settings-users">
       <CardHeader
         id="users-title"
         title={`Users · ${rows.length}`}
