@@ -25,7 +25,12 @@ const entries = (): Entry[] =>
     : []
 
 async function contentReady(page: Page) {
-  await page.waitForFunction(() => !document.querySelector('[aria-busy]') && document.querySelector('main h1, main h2, main [data-tour]'), null, { timeout: 30_000 })
+  // Ready when no skeleton is left in the page area and a heading is there.
+  await page.waitForFunction(
+    () => !document.querySelector('main [aria-busy], main .skeleton, main [aria-label="Loading"]') && document.querySelector('main h1'),
+    null,
+    { timeout: 30_000 },
+  )
 }
 
 /** Calls the server made in [from, to], split by where they came from. */
@@ -119,7 +124,9 @@ test('page timings', async ({ page }) => {
     if (r.resourceType() === 'document') documents++
   })
   const navs: Record<string, unknown>[] = []
-  for (const [label, url] of pages.filter(([, u]) => ['/leads', '/pipeline', '/insights', '/engine', '/inbox', '/settings', '/'].includes(u))) {
+  const order = ['/leads', '/pipeline', '/insights', '/engine', '/inbox', '/settings', '/']
+  for (const url of order) {
+    const label = pages.find(([, u]) => u === url)![0]
     await page.waitForTimeout(1500) // let prefetches land, as a person would take a moment
     const before = documents
     const from = Date.now()
