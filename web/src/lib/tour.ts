@@ -226,6 +226,14 @@ export const TOUR_STEPS: readonly TourStep[] = [
     body: "Numbers on this list never get a message. The engine skips them and the app won't offer them again. Marking a lead as Wrong contact adds the number here too.",
   },
   {
+    id: 'email-recipients',
+    route: '/settings/email',
+    roles: ADMIN,
+    target: ['settings-email'],
+    title: 'Email recipients',
+    body: 'Who gets the morning list, alerts and the weekly report by email. Add teammates, switch each email on or off per person, and send a test. Only admins see spend in them.',
+  },
+  {
     id: 'done',
     route: '/',
     target: ['tour-button'],

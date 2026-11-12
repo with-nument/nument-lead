@@ -39,6 +39,7 @@ for (const role of ['admin', 'caller'] as const) {
       ['08-settings', '/settings'],
       ['09-users', '/settings/users'],
       ['10-do-not-contact', '/settings/suppression'],
+      ['11-email-recipients', '/settings/email'],
     ]
     for (const [name, url] of pages) await capture(page, role, device, name, url)
   })

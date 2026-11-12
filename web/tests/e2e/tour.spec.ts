@@ -121,6 +121,7 @@ test('Admin: gets every page, the deal card and the admin pages, and the card pa
   expect(where['inbox']).toBe('/inbox')
   expect(where['users']).toBe('/settings/users')
   expect(where['do-not-contact']).toBe('/settings/suppression')
+  expect(where['email-recipients']).toBe('/settings/email')
   expect(where['lead-deal']).toMatch(/^\/leads\/[0-9a-f-]{36}$/)
   expect(where['done']).toBe('/')
   await expect.poll(() => tourDoneOnServer(run.tourAdmin.id)).not.toBeNull()

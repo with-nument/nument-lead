@@ -20,12 +20,12 @@ const ids = (role: 'admin' | 'caller' | 'viewer') => tourStepsFor(role).map((s) 
 describe('tourStepsFor', () => {
   it('gives admins every page, including Engine, Inbox, users, Do not contact and the deal card', () => {
     expect(ids('admin')).toEqual(TOUR_STEPS.map((s) => s.id))
-    for (const id of ['engine-budget', 'engine-sources', 'inbox', 'users', 'do-not-contact', 'lead-deal']) expect(ids('admin')).toContain(id)
+    for (const id of ['engine-budget', 'engine-sources', 'inbox', 'users', 'do-not-contact', 'email-recipients', 'lead-deal']) expect(ids('admin')).toContain(id)
   })
 
   it('leaves out pages a caller cannot open, and never shows a caller the money card', () => {
     const caller = ids('caller')
-    for (const id of ['engine-budget', 'engine-sources', 'inbox', 'users', 'do-not-contact', 'lead-deal']) expect(caller).not.toContain(id)
+    for (const id of ['engine-budget', 'engine-sources', 'inbox', 'users', 'do-not-contact', 'email-recipients', 'lead-deal']) expect(caller).not.toContain(id)
     for (const id of ['welcome', 'today-send-list', 'today-whatsapp', 'leads-filters', 'lead-why', 'pipeline', 'insights', 'settings', 'done']) expect(caller).toContain(id)
   })
 
