@@ -28,12 +28,13 @@ cities:
      localities: [Gachibowli, Kondapur, Kokapet, Madhapur, Kukatpally, Miyapur, Banjara Hills, Kompally]}
 
 overture:
-  categories:                   # none confirmed yet (Appendix F item 1)
-    - real_estate               # verify at build
-    - real_estate_agent         # verify at build
-    - real_estate_service       # verify at build
-    - real_estate_developer     # verify at build
-    - property_management       # verify at build
+  categories:                   # checked against the Overture taxonomy of release 2026-10-21.0
+    - real_estate_service       # includes real_estate_agent, builder and property_management
+    - real_estate_agent
+    - builder                   # includes home_developer
+    - home_developer
+    - commercial_real_estate
+    - property_management
 
 places:
   queries:
@@ -81,7 +82,7 @@ size_rules:
 signal_points: {hiring_frontdesk: 9, ads_running: 6}
 
 fit:
-  categories: [real_estate, real_estate_agent, real_estate_service, real_estate_developer,
+  categories: [real_estate_service, real_estate_agent, builder, home_developer, commercial_real_estate,
                property_management, real_estate_agency]          # last one: Places type, verify at build
   service_keywords: [residential projects, commercial projects, plots, villas, apartments, resale,
                      rentals, property management, channel partner]
@@ -89,7 +90,7 @@ fit:
   min_staff: 2
 
 ticket_class:
-  developer:         {match: [real_estate_developer, developers, builders, constructions, infra, buildcon], points: 6}
+  developer:         {match: [builder, home_developer, developers, builders, constructions, infra, buildcon], points: 6}
   broker:            {match: [real_estate_agent, real_estate_agency, realty, realtors, broker, brokerage,
                               property consultant, property consultants, channel partner], points: 2}
   property_services: {match: [property_management, real_estate_service, property management], points: 2}

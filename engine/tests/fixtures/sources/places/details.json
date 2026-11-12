@@ -1,0 +1,47 @@
+{
+ "id": "ChIJlotus",
+ "displayName": {
+  "text": "Lotus Skin & Hair Clinic",
+  "languageCode": "en"
+ },
+ "formattedAddress": "Office 2, Baner Road, Baner, Pune, Maharashtra 411045, India",
+ "addressComponents": [
+  {
+   "longText": "Baner",
+   "shortText": "Baner",
+   "types": [
+    "sublocality_level_1",
+    "sublocality",
+    "political"
+   ],
+   "languageCode": "en"
+  },
+  {
+   "longText": "Pune",
+   "shortText": "Pune",
+   "types": [
+    "locality",
+    "political"
+   ],
+   "languageCode": "en"
+  }
+ ],
+ "location": {
+  "latitude": 18.559,
+  "longitude": 73.7868
+ },
+ "rating": 4.6,
+ "userRatingCount": 312,
+ "websiteUri": "https://www.lotusskin-nlead.in/?utm_source=gmb",
+ "nationalPhoneNumber": "098765 43210",
+ "internationalPhoneNumber": "+91 98765 43210",
+ "businessStatus": "OPERATIONAL",
+ "primaryType": "skin_care_clinic",
+ "types": [
+  "skin_care_clinic",
+  "doctor",
+  "health",
+  "point_of_interest",
+  "establishment"
+ ]
+}

@@ -1,0 +1,32 @@
+{
+ "id": "ChIJlotus",
+ "reviews": [
+  {
+   "name": "places/ChIJlotus/reviews/1",
+   "rating": 2,
+   "text": {
+    "text": "Good doctor but nobody picks up the phone, I called 6 times.",
+    "languageCode": "en"
+   },
+   "publishTime": "2026-11-01T10:00:00Z"
+  },
+  {
+   "name": "places/ChIJlotus/reviews/2",
+   "rating": 5,
+   "text": {
+    "text": "Excellent treatment for acne.",
+    "languageCode": "en"
+   },
+   "publishTime": "2026-10-20T10:00:00Z"
+  },
+  {
+   "name": "places/ChIJlotus/reviews/3",
+   "rating": 3,
+   "text": {
+    "text": "Waited for 2 hours even with an appointment.",
+    "languageCode": "en"
+   },
+   "publishTime": "2026-10-28T10:00:00Z"
+  }
+ ]
+}

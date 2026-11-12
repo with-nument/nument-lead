@@ -25,13 +25,15 @@ cities:
      localities: [Ameerpet, Dilsukhnagar, Kukatpally, Madhapur, Himayatnagar, Ashok Nagar]}
 
 overture:
-  categories:                   # none confirmed yet (Appendix F item 1)
-    - educational_services      # verify at build
-    - tutoring_center           # verify at build
-    - test_preparation          # verify at build
-    - language_school           # verify at build
-    - vocational_and_technical_school   # verify at build
-    - educational_consultant    # verify at build
+  categories:                   # checked against the Overture taxonomy of release 2026-10-21.0
+    - educational_service       # includes test_preparation, tutoring_service and college_counseling
+    - tutoring_service
+    - test_preparation
+    - college_counseling        # study-abroad and admissions consultants
+    - language_school
+    - vocational_and_technical_school
+    - computer_coaching
+    - academy                   # includes civil_examinations_academy (UPSC and state exam coaching)
 
 places:
   queries:
@@ -74,21 +76,21 @@ size_rules:
 signal_points: {hiring_frontdesk: 9, ads_running: 5}
 
 fit:
-  categories: [educational_services, tutoring_center, test_preparation, language_school,
-               vocational_and_technical_school, educational_consultant]
+  categories: [educational_service, tutoring_service, test_preparation, college_counseling, language_school,
+               vocational_and_technical_school, computer_coaching, academy, civil_examinations_academy]
   service_keywords: [jee, neet, upsc, cat, clat, gate, ielts, pte, toefl, gre, gmat, sat, study abroad,
                      admissions counselling, coaching, test preparation]
   min_reviews: 50
   min_staff: 2
 
 ticket_class:
-  study_abroad:       {match: [educational_consultant, study abroad, overseas education, ielts, toefl,
+  study_abroad:       {match: [college_counseling, study abroad, overseas education, ielts, toefl,
                                gre, gmat, pte, visa], points: 5}
-  coaching_institute: {match: [test_preparation, coaching, classes, jee, neet, upsc, ias, iit, cat, clat,
-                               gate], points: 4}
+  coaching_institute: {match: [test_preparation, civil_examinations_academy, computer_coaching, coaching,
+                               classes, jee, neet, upsc, ias, iit, cat, clat, gate], points: 4}
   academy:            {match: [vocational_and_technical_school, academy, training institute, institute,
                                skill], points: 3}
-  tutoring:           {match: [tutoring_center, language_school, tuition, tutorial, tutorials], points: 2}
+  tutoring:           {match: [tutoring_service, language_school, tuition, tutorial, tutorials], points: 2}
 
 can_pay:
   premium_price: {other: 50000}        # INR, any course or programme fee
