@@ -75,7 +75,7 @@ jobs:
     needs: engine
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    environment: dev # dev secrets only; never prod
+    # Repository secrets: one Supabase project serves dev and prod for now (A.13.4).
     permissions:
       contents: read
       pull-requests: read
