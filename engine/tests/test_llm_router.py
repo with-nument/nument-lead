@@ -331,3 +331,41 @@ def test_request_building_maps_thinking_sampling_and_headroom() -> None:
 def test_unknown_task_is_a_key_error(llm_db: str) -> None:
     with pytest.raises(KeyError, match="unknown AI task"):
         make_router({"gemini": FakeProvider("gemini")}).run("summarise_universe", {})
+
+
+GROUNDED = {"queries": ["clinic bot pune"], "sources": [{"uri": "https://r.example/1", "title": "forum.example.com"}]}
+
+
+def test_a_search_answer_without_searching_gets_one_nudge(llm_db: str) -> None:
+    """Live finding 2026-11-12: the model sometimes answers "nothing found" without running a search."""
+    gemini = FakeProvider(
+        "gemini",
+        [
+            reply("I could not find any public posts.", grounding=None),
+            reply("1. Smile Care Clinic asks for a bot. https://forum.example.com/t/123", grounding=GROUNDED),
+            reply(OUTPUTS["grounded_search"]),
+        ],
+    )
+    router = make_router({"gemini": gemini})
+    res = router.run_result("grounded_search", _inputs("grounded_search"))
+    first, nudged, structure = gemini.calls
+    assert "You have not run a Google Search yet" in nudged.user and "Google Search" not in first.user[-80:]
+    assert structure.schema is PublicAskResults and res.grounding == GROUNDED
+
+
+def test_a_model_that_never_searches_hands_the_task_to_the_next_model(llm_db: str) -> None:
+    gemini = FakeProvider(
+        "gemini",
+        [
+            reply("Nothing found.", grounding=None),
+            reply("Still nothing.", grounding=None),
+            reply("1. A clinic asks for a WhatsApp bot. https://forum.example.com/t/9", grounding=GROUNDED),
+            reply(OUTPUTS["grounded_search"]),
+        ],
+    )
+    stats: dict[str, object] = {}
+    router = make_router({"gemini": gemini}, stats=stats)
+    res = router.run_result("grounded_search", _inputs("grounded_search"))
+    assert [c.model for c in gemini.calls[:3]] == ["gemini-3.8-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite"]
+    assert res.model == "gemini-3.5-flash-lite" and res.fallback_from == "gemini:gemini-3.8-flash"
+    assert stats["ai_errors"] == {"grounded_search:invalid_output": 1}

@@ -58,6 +58,10 @@ TRUNCATED_NOTE = (
     "\n\nYour previous answer was cut off before it finished. Keep every text field short and reply again "
     "with complete JSON that matches the required schema."
 )
+SEARCH_NUDGE = (
+    "\n\nYou have not run a Google Search yet. Use the Google Search tool now for the ideas above, then "
+    "answer only from what it finds."
+)
 
 
 class TextOutput(BaseModel):
@@ -502,14 +506,11 @@ class Router:
 
         req = self.request(cfg, spec, system, user, schema)
         if schema is None:
-            resp = self._call(req, cfg)
-            cost.append(self._log(cfg, ref, resp.usage, fallback_from))
             if cfg.uses_search:
-                cost.append(
-                    self.budget.record_search(
-                        ref.provider, ref.model, resp.usage.search_queries, fallback_from=fallback_from
-                    )
-                )
+                resp = self._searched(cfg, spec, req, fallback_from, cost, usage)
+            else:
+                resp = self._call(req, cfg)
+                cost.append(self._log(cfg, ref, resp.usage, fallback_from))
             return AIResult(
                 task=cfg.name,
                 output=TextOutput(text=resp.text),
@@ -536,6 +537,41 @@ class Router:
             inr=sum(cost),
         )
 
+    def _searched(
+        self,
+        cfg: TaskConfig,
+        spec: ModelSpec,
+        req: LLMRequest,
+        fallback_from: str | None,
+        cost: list[float],
+        usage: list[Usage],
+    ) -> LLMResponse:
+        """A web-search call whose answer is only used if the model really searched (it has citations).
+
+        Verified 2026-11-12: Gemini sometimes skips the search tool and still answers "I found nothing" or
+        describes "search results" it never fetched. Such an answer gets one nudge; if the model still does
+        not search, the answer is refused and the next model in the chain gets the task.
+        """
+        ref = spec.ref
+        resp: LLMResponse | None = None
+        for attempt in range(2):
+            if attempt:
+                req = replace(req, user=req.user + SEARCH_NUDGE)
+                self.budget.check(cfg.name, cfg.priority, self._estimate(cfg, ref, req.system, req.user))
+                log.info("llm.search_nudge", task=cfg.name, model=ref.model)
+            resp = self._call(req, cfg)
+            cost.append(self._log(cfg, ref, resp.usage, fallback_from))
+            cost.append(
+                self.budget.record_search(
+                    ref.provider, ref.model, resp.usage.search_queries, fallback_from=fallback_from
+                )
+            )
+            usage.append(resp.usage)
+            grounding = resp.grounding or {}
+            if grounding.get("queries") or grounding.get("sources"):
+                return resp
+        raise OutputInvalid("the model answered without using web search, so its answer has no citations")
+
     def _search_then_structure(
         self,
         cfg: TaskConfig,
@@ -550,12 +586,7 @@ class Router:
         ref = spec.ref
         cost: list[float] = []
         usage: list[Usage] = []
-        resp = self._call(self.request(cfg, spec, system, user, None), cfg)
-        cost.append(self._log(cfg, ref, resp.usage, fallback_from))
-        cost.append(
-            self.budget.record_search(ref.provider, ref.model, resp.usage.search_queries, fallback_from=fallback_from)
-        )
-        usage.append(resp.usage)
+        resp = self._searched(cfg, spec, self.request(cfg, spec, system, user, None), fallback_from, cost, usage)
         if not resp.text.strip():
             raise ProviderError("blocked", "empty answer from the search call", provider=ref.provider, model=ref.model)
 
