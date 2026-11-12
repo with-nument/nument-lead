@@ -42,10 +42,90 @@ jobs:
       - run: uv sync --frozen
       - run: uv run ruff check .
       - run: uv run ruff format --check .
-      - run: uv run mypy src
+      - run: uv run mypy src evals
       - run: uv run pytest -m "not live" -q
         env:
           APP_ENV: dev
           DATABASE_URL: postgresql://ci:ci@localhost:5432/ci   # unit tests never use it
           # The test harness creates a fresh database on this server for the run and drops it after.
           NLEAD_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+
+  # Secret scan of the whole history on every push and pull request (Step 18.7.1).
+  # The binary is pinned by version and checksum; .gitleaks.toml lists the known non-secrets.
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks 8.30.1
+        run: |
+          curl -sSfL -o gitleaks.tgz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tgz" | sha256sum -c -
+          tar -xzf gitleaks.tgz gitleaks
+      - run: ./gitleaks git --config .gitleaks.toml --redact --no-banner --verbose .
+
+  # Golden-set eval on pull requests that change what decides lead quality (Step 17.5). It blocks the
+  # merge when a threshold fails (exit 1) or when today's budget cannot cover it (exit 3). Until the
+  # golden set exists (Step 17.3) the job says so and passes.
+  eval-gate:
+    if: github.event_name == 'pull_request'
+    needs: engine
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: dev # dev secrets only; never prod
+    permissions:
+      contents: read
+      pull-requests: read
+    defaults:
+      run:
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3.0.4
+        id: changed
+        with:
+          filters: |
+            quality:
+              - 'engine/prompts/**'
+              - 'engine/config/tasks.yaml'
+              - 'engine/config/prices.yaml'
+              - 'engine/config/exclusions.yaml'
+              - 'engine/config/scoring.yaml'
+              - 'engine/segments/**'
+              - 'engine/evals/**'
+              - 'engine/src/nument_engine/learn/weights.py'
+              - 'engine/src/nument_engine/pipeline/extract.py'
+              - 'engine/src/nument_engine/pipeline/verify.py'
+              - 'engine/src/nument_engine/pipeline/score.py'
+              - 'engine/src/nument_engine/pipeline/judge.py'
+              - 'engine/src/nument_engine/pipeline/message.py'
+      - name: Check the golden set
+        id: golden
+        if: steps.changed.outputs.quality == 'true'
+        run: |
+          if [ -s evals/golden/labels.jsonl ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=eval gate::skipped, the golden set is not built yet (Step 17.3)"
+            echo "Eval gate skipped: the golden set is not built yet (Step 17.3)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - if: steps.golden.outputs.ready == 'true'
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: engine/uv.lock
+      - if: steps.golden.outputs.ready == 'true'
+        run: uv python install 3.12 && uv sync --frozen
+      - name: Evaluate the CI subset (20 businesses, about INR 60)
+        if: steps.golden.outputs.ready == 'true'
+        env:
+          APP_ENV: dev
+          DATABASE_URL: ${{ secrets.DEV_DATABASE_URL || secrets.DATABASE_URL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY_BACKUP: ${{ secrets.GEMINI_API_KEY_BACKUP }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: uv run nlead eval --subset 20 --env dev --pretty-logs
