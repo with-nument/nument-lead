@@ -393,6 +393,22 @@ class Resolver:
             src[group] = source
             self.dirty.add(row["id"])
 
+    def _note_city(self, bid: str, city: str, action: str) -> None:
+        """Count the business's places per city (`extra.city_counts`). A chain merged by its website spans
+        cities: its `city` follows the city with the most places, so a Mumbai chain first seen through one
+        Delhi branch is not filed as a Delhi clinic. Messages name a city only when there is one (Step 12)."""
+        row = self.rows[bid]
+        extra = row.setdefault("extra", {})
+        counts: dict[str, int] = dict(extra.get("city_counts") or {})
+        if action in ("created", "branch") or city not in counts:
+            counts[city] = counts.get(city, 0) + 1
+        if counts != extra.get("city_counts"):
+            extra["city_counts"] = counts
+            top = max(counts.items(), key=lambda kv: (kv[1], kv[0] == row.get("city")))[0]
+            if top != row.get("city"):
+                self._set(row, "city", top)
+            self.dirty.add(bid)
+
     def _add_point(self, row: dict[str, Any], lat: float, lng: float) -> bool:
         """Add a branch point when it is more than 300 m from every known one; True if it was added."""
         pts = self._points(row)
@@ -605,6 +621,8 @@ class Resolver:
                 bid, action = self._create(c), "created"
         if action != "created":
             self._merge(bid, c)
+        if c.city:
+            self._note_city(bid, c.city, action)
         self._record(bid, c)
         self._contacts(bid, c)
         self.stats[action] += 1

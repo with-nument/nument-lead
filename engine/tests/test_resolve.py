@@ -294,3 +294,26 @@ def test_merge_businesses_keeps_one_row_and_one_open_lead(clean_db: str) -> None
         [keep],
     )
     assert merges == 2
+
+
+def test_a_chain_across_cities_takes_the_city_of_most_branches(clean_db: str) -> None:
+    """Live finding 12 Nov: a Bengaluru aligner chain was filed under Delhi, the city of its first branch."""
+    from nument_engine.pipeline.message import single_city
+
+    site = "https://whistle-r3x.in/"
+    with Resolver(SEG) as r:
+        bid, _ = r.resolve(
+            cand("overture", "ov-cx1", "Whistle Aligners", website=site, city="Delhi", lat=28.6, lng=77.2)
+        ) or (
+            "",
+            "",
+        )
+        for i, (lat, lng) in enumerate([(12.90, 77.58), (12.95, 77.60), (13.05, 77.55)]):
+            r.resolve(
+                cand("overture", f"ov-cx{i + 2}", "Whistle Aligners", website=site, city="Bengaluru", lat=lat, lng=lng)
+            )
+    row = business(bid)
+    assert row["city"] == "Bengaluru"
+    assert row["extra"]["city_counts"] == {"Delhi": 1, "Bengaluru": 3}
+    assert single_city(row) == ""  # the message names no city for a chain spread over cities
+    assert single_city({"city": "Pune", "extra": {"city_counts": {"Pune": 4}}}) == "Pune"

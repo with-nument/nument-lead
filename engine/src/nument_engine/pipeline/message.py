@@ -101,6 +101,15 @@ COUNTRY_NAMES: Final[dict[str, str]] = {"in": "India", "ae": "UAE"}
 # ---------------------------------------------------------------------------
 
 
+def single_city(b: Mapping[str, Any]) -> str:
+    """The business's city, or "" when its places span several cities (a chain): naming one city would be
+    wrong for most of its branches."""
+    counts = (b.get("extra") or {}).get("city_counts") or {}
+    if len(counts) > 1:
+        return ""
+    return str(b.get("city") or "")
+
+
 def short_name(name: str) -> str:
     """'Calmveda Wellness Pvt Ltd' -> 'Calmveda Wellness'."""
     out = (name or "").strip()
@@ -220,7 +229,7 @@ def build_input(
         "domain": seg.domain,
         "country": seg.country,
         "country_name": COUNTRY_NAMES.get(seg.country, seg.country.upper()),
-        "city": b.get("city") or "",
+        "city": single_city(b),
         "pitch_mode": mode,
         "angle": angle_key,
         "angle_label": angle.label if angle else angle_key,
