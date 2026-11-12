@@ -36,9 +36,19 @@ export async function getFollowupsDue(limit = TODAY_LIMIT) {
   const ids = [...new Set(rows.map((r) => r.lead_id!))]
   const extra = new Map<string, { city: string | null; phone_type: string | null }>()
   if (ids.length) {
-    const { data: more, error: moreError } = await sb.from('v_leads_caller').select('id, city, phone_type').in('id', ids)
+    // City and phone type as v_leads_caller has them (the business's city, the type of the contact that
+    // owns the shown phone; a phone is unique per business), read from the tables instead of the view.
+    const { data: more, error: moreError } = await sb
+      .from('leads')
+      .select('id, business:businesses!leads_business_id_fkey!inner(city, contacts:contacts!contacts_business_id_fkey(phone_e164, phone_type))')
+      .in('id', ids)
     if (moreError) throw moreError
-    for (const m of more ?? []) if (m.id) extra.set(m.id, { city: m.city, phone_type: m.phone_type })
+    const phoneOf = new Map(rows.map((r) => [r.lead_id!, r.phone_e164]))
+    for (const m of more ?? []) {
+      const phone = phoneOf.get(m.id)
+      const contact = phone ? m.business.contacts.find((c) => c.phone_e164 === phone) : undefined
+      extra.set(m.id, { city: m.business.city, phone_type: contact?.phone_type ?? null })
+    }
   }
   return rows.map((r) => ({
     lead_id: r.lead_id!,
