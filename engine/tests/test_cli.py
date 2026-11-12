@@ -147,9 +147,12 @@ def test_eval_finds_the_evals_package(engine_db: str) -> None:
 
 
 def test_orchestrated_runs_record_their_kind(engine_db: str) -> None:
+    """The night run starts with the essential health phase; until Step 22 builds it, the run stops there."""
     result = runner.invoke(app, ["run", "night"])
-    assert result.exit_code == 2 and "Built in Step 14" in result.output
-    assert db.scalar("select kind from public.runs order by started_at desc limit 1") == "night"
+    assert result.exit_code == 2 and "not built yet (Built in Step 22)" in result.output
+    row = db.fetch_one("select kind, status, stats from public.runs order by started_at desc limit 1")
+    assert row is not None and (row["kind"], row["status"]) == ("night", "failed")
+    assert row["stats"]["phases"]["health"]["skipped"] == "not built"
 
 
 def test_db_commands(engine_db: str) -> None:
