@@ -1,2 +1,108 @@
-# engine/config/prices.yaml : model and API prices, FX rate.
-# Written in Step 4 from Appendix B of IMPLEMENTATION_PLAN.md. Verify every price on the build day.
+# engine/config/prices.yaml : model and API prices, FX rate (Step 4.3, Step 19.2, Appendix B).
+#
+# Every number below was read from the official pricing pages on `verified_on`. Prices change often:
+# re-check monthly (Step 22.3) and whenever tasks.yaml points at a new model. USD per 1M tokens unless stated.
+#
+# `changes` lists price changes the provider has already announced. Each entry applies from its `from` date
+# (IST) onwards, so the budget guard switches to the new price on that day without a code change.
+# `cached_input` is the price of input tokens served from the provider's implicit cache.
+
+verified_on: "2026-11-12"
+sources:
+  gemini: https://ai.google.dev/gemini-api/docs/pricing
+  openai: https://platform.openai.com/docs/pricing
+  google_places_india: https://developers.google.com/maps/billing-and-pricing/pricing-india
+  google_places_global: https://developers.google.com/maps/billing-and-pricing/pricing
+
+fx_inr_per_usd: 88      # default only: settings.fx_inr_per_usd wins at runtime
+batch_discount: 0.5     # Gemini Batch API and OpenAI Batch API bill half the standard price
+flex_discount: 0.5      # Gemini Flex tier (preview, best effort) also bills half the standard price
+
+models:
+  # ---- Gemini 4 (released Oct and Nov 2026). Introductory price until 30 Nov 2026. ----
+  gemini-4-carbon:
+    provider: gemini
+    input: 2.00
+    output: 10.00           # thinking tokens are billed as output
+    cached_input: 0.10
+    changes:
+      - {from: "2026-12-01", input: 4.00, output: 20.00, cached_input: 0.20}
+  gemini-4-argon:
+    provider: gemini
+    input: 2.00
+    output: 10.00
+    cached_input: 0.10
+    changes:
+      - {from: "2026-12-01", input: 4.00, output: 20.00, cached_input: 0.20}
+
+  # ---- Gemini 3.x Flash. Introductory price until 31 Dec 2026. ----
+  gemini-3.8-flash:
+    provider: gemini
+    input: 0.75
+    output: 3.75
+    cached_input: 0.075
+    changes:
+      - {from: "2027-01-01", input: 1.50, output: 7.50, cached_input: 0.15}
+  gemini-3.6-flash:
+    provider: gemini
+    input: 0.75
+    output: 3.75
+    cached_input: 0.075
+    changes:
+      - {from: "2027-01-01", input: 1.50, output: 7.50, cached_input: 0.15}
+
+  # ---- Gemini Flash-Lite ----
+  gemini-3.5-flash-lite:
+    provider: gemini
+    input: 0.30
+    output: 2.50
+    cached_input: 0.03
+  gemini-3.1-flash-lite:    # earliest shutdown 7 May 2027 (replacement: gemini-3.5-flash-lite)
+    provider: gemini
+    input: 0.25
+    output: 1.50
+    cached_input: 0.025
+
+  # ---- OpenAI (disabled while the key is unavailable; prices read from the pricing page) ----
+  gpt-5.4:
+    provider: openai
+    input: 2.50
+    output: 15.00           # reasoning tokens are billed as output
+    cached_input: 0.25
+  gpt-5-mini:
+    provider: openai
+    input: 0.25
+    output: 2.00
+    cached_input: 0.025
+  gpt-5-nano:
+    provider: openai
+    input: 0.05
+    output: 0.40
+    cached_input: 0.005
+
+search:
+  # Gemini 3 and newer: billed per search query the model runs. 5,000 free a month, shared by all models,
+  # and a default limit of 1,500 grounded requests a day per project.
+  gemini_grounding: {free_per_month: 5000, usd_per_1000: 14.00, daily_limit: 1500}
+  openai_web_search: {usd_per_1000: 10.00}     # plus search content tokens at the model's input price
+
+# Google Places API (New). Monthly free calls are per SKU and per billing account. `null` means unlimited.
+# The billing account decides which table applies (settings.places_billing_region, default india).
+google_places:
+  india:
+    text_search_ids_only: {usd_per_1000: 0.00, free_per_month: null}
+    place_details_ids_only: {usd_per_1000: 0.00, free_per_month: null}
+    place_details_essentials: {usd_per_1000: 1.50, free_per_month: 70000}
+    place_details_pro: {usd_per_1000: 5.10, free_per_month: 35000}
+    place_details_enterprise: {usd_per_1000: 6.00, free_per_month: 7000}
+    place_details_enterprise_atmosphere: {usd_per_1000: 7.50, free_per_month: 7000}
+  global:
+    text_search_ids_only: {usd_per_1000: 0.00, free_per_month: null}
+    place_details_ids_only: {usd_per_1000: 0.00, free_per_month: null}
+    place_details_essentials: {usd_per_1000: 5.00, free_per_month: 10000}
+    place_details_pro: {usd_per_1000: 17.00, free_per_month: 5000}
+    place_details_enterprise: {usd_per_1000: 20.00, free_per_month: 1000}
+    place_details_enterprise_atmosphere: {usd_per_1000: 25.00, free_per_month: 1000}
+
+# PageSpeed Insights API: free with a key. Verify the daily quota in the Cloud console when the key exists.
+pagespeed: {usd_per_1000: 0.00, daily_free: 25000}
