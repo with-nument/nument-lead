@@ -210,3 +210,18 @@ async def test_pull_maps_every_city(parquet: str, monkeypatch: pytest.MonkeyPatc
     assert len(records) == 15 and all(r.city == "Pune" for r in records)
     assert len(limited) == 5
     assert ids is not None and "08f0000000000001" in ids
+
+
+def test_a_place_where_city_boxes_overlap_goes_to_the_smallest_box() -> None:
+    """Live finding 12 Nov: Delhi's box covers parts of Gurugram, so Gurugram clinics were filed under Delhi."""
+    from nument_engine.segments import load_segments
+    from nument_engine.sources.overture import smallest_city
+
+    seg = load_segments()["clinics-in"]
+    boxes = {c.name: c.bbox for c in seg.cities}
+    gx0, gy0, gx1, gy1 = boxes["Gurugram"]
+    lat, lng = (gy0 + gy1) / 2, (gx0 + gx1) / 2
+    containing = [n for n, (x0, y0, x1, y1) in boxes.items() if x0 <= lng <= x1 and y0 <= lat <= y1]
+    assert "Gurugram" in containing
+    assert smallest_city(seg, lat, lng) == "Gurugram"
+    assert smallest_city(seg, 0.0, 0.0) is None

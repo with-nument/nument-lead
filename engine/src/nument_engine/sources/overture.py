@@ -48,6 +48,18 @@ COLUMNS = (
 )
 
 
+def smallest_city(seg: Segment, lat: float, lng: float) -> str | None:
+    """The segment city whose box contains the point; the smallest box wins where boxes overlap."""
+    best: tuple[float, str] | None = None
+    for c in seg.cities:
+        min_lng, min_lat, max_lng, max_lat = c.bbox
+        if min_lng <= lng <= max_lng and min_lat <= lat <= max_lat:
+            area = (max_lng - min_lng) * (max_lat - min_lat)
+            if best is None or area < best[0]:
+                best = (area, c.name)
+    return best[1] if best else None
+
+
 @dataclass(frozen=True)
 class ReleaseFile:
     href: str  # s3:// URL of one GeoParquet file
@@ -239,8 +251,13 @@ class OvertureAdapter(SourceAdapter):
     async def pull(
         self, seg: Segment, release: str, *, limit: int | None = None, cities: Sequence[str] | None = None
     ) -> list[SourceRecord]:
-        """Places of the segment's categories in each segment city, mapped to records."""
+        """Places of the segment's categories in each segment city, mapped to records.
+
+        City boxes overlap (Delhi's box covers parts of Gurugram and Noida), so a place can come back from two
+        city queries: it is kept once, filed under the smallest box that contains it.
+        """
         out: list[SourceRecord] = []
+        seen: set[str] = set()
         for city in seg.cities:
             if cities and city.name not in cities:
                 continue
@@ -251,8 +268,13 @@ class OvertureAdapter(SourceAdapter):
             rows = await asyncio.to_thread(self.query, files, city.bbox, seg.overture.categories, limit=remaining)
             for row in rows:
                 rec = self.to_record(row, seg, city.name, release)
-                if rec is not None:
-                    out.append(rec)
+                if rec is None or (rec.overture_id and rec.overture_id in seen):
+                    continue
+                if rec.overture_id:
+                    seen.add(rec.overture_id)
+                if rec.lat is not None and rec.lng is not None:
+                    rec.city = smallest_city(seg, rec.lat, rec.lng) or rec.city
+                out.append(rec)
         return out
 
     async def ids(self, seg: Segment, release: str, *, min_confidence: float = 0.0) -> set[str] | None:
