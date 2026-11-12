@@ -12,7 +12,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import SecretStr, model_validator
+from pydantic import SecretStr, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ENGINE_DIR = Path(__file__).resolve().parents[2]  # .../nument-leads/engine
@@ -50,9 +50,11 @@ class Settings(BaseSettings):
     # Behaviour
     associate_name: str = "Aditya"
     user_agent: str = "NumentLeadBot/1.0 (+https://nument.in)"
-    alert_email: str | None = None
-    alert_email_from: str = "Nument Leads <onboarding@resend.dev>"  # a sender Resend accepts for this account
-    resend_api_key: SecretStr | None = None  # optional: weekly report and alerts by email (Step 16.6.3)
+    alert_email: str | None = None  # fallback recipient while the notify_recipients table is empty
+    alert_email_from: str = "Nument Leads <leads@nument.in>"  # nument.in is verified in Resend
+    alert_reply_to: str = "heyy.abhigyan@gmail.com"  # replies to any engine email reach the founder
+    app_url: str = "https://nument-leads-web.onrender.com"  # links in emails (Open lead, Email settings)
+    resend_api_key: SecretStr | None = None  # optional: morning list, alerts and weekly report by email
     backup_passphrase: SecretStr | None = None
 
     # Paths (not from env)
@@ -60,6 +62,14 @@ class Settings(BaseSettings):
     config_dir: Path = ENGINE_DIR / "config"
     prompts_dir: Path = ENGINE_DIR / "prompts"
     cache_dir: Path = ENGINE_DIR / ".cache"
+
+    @field_validator("alert_email_from", "alert_reply_to", "app_url", mode="before")
+    @classmethod
+    def _empty_means_default(cls, value: Any, info: ValidationInfo) -> Any:
+        """GitHub passes an unset repository variable as an empty string: use the default then."""
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return cls.model_fields[info.field_name or ""].default
+        return value
 
     @model_validator(mode="after")
     def _safety(self) -> Settings:
