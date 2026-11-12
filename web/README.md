@@ -48,6 +48,14 @@ Pages a role cannot open are not in its menu, the page itself checks the role, e
 - Public sign-up is off in Supabase. Admins create users in **Settings, Users and roles** with a 16 character temporary password shown once; the user must choose their own password at first sign in. Admins can reset a password the same way, change roles and disable accounts. The temporary-password flag lives in `app_metadata`, which only the service role can change (a user can edit their own `user_metadata`, so a flag there could be skipped). It is cleared on the server only after the user's own password change succeeds.
 - Security headers on every response (no framing, no sniffing, strict referrer, HSTS, `noindex`).
 
+### Speed
+
+- **One session check per request.** `getClaims()` (verified locally) and `getSessionUser()` (one `getUser` and one profile read) are cached per request with React `cache()`, however many components ask.
+- **No waterfalls.** Queries that run as the user start together with the session check (`early()` in `src/lib/auth.ts`); money and admin-only reads follow the role check. The lead page reads the business, contacts, signals, facts, score and pages in one request through PostgREST embedding.
+- **Cached for everyone, updated on change.** Segments, team names, the budget settings and the last sheet sync are read with the service role after the session check and cached with `use cache` (`src/lib/cache-tags.ts`). The Server Actions that change them call `updateTag`. Nothing per user and nothing money-related is cached.
+- **Instant navigation.** Links prefetch each page's prerendered shell; every route has a `loading.tsx` with the page's own skeleton, so the sidebar never repaints and the new page frame shows at once. Recharts loads after the page is interactive.
+- **Measuring.** `next dev`, or any build with `PERF_LOG=1`, prints one `[perf]` line per Supabase call with its time. `pnpm build`, then `PERF_OUT=/abs/path/result.json pnpm exec playwright test -c playwright.perf.config.ts` signs in as a temporary e2e admin and records TTFB, content ready, load, JS size and Supabase calls for every page, plus sidebar navigation. `tests/e2e/navigation.spec.ts` fails if moving between pages loads a new document.
+
 ### Data rules worth knowing
 
 - Database triggers write the `lead_created`, `stage_change`, `grade_change` and `message_edited` activities. The app never inserts those four, so nothing is logged twice. It logs its own kinds (`sent`, `followup_sent`, `skip`, `wrong_contact`, `note`, `edit`, `feedback`, `regen_request`, `proposal_upload`, `undo`) with `source = 'app'` (`src/lib/activity.ts`).
@@ -151,5 +159,5 @@ web/
 ## Notes for later
 
 - A Content Security Policy needs per-request nonces, which would turn the prerendered page frames dynamic. Worth adding if the app ever loads third-party scripts.
-- Supabase Realtime is not needed for two or three users; pages refresh every 60 seconds while visible and on focus.
+- Supabase Realtime is not needed for two or three users; pages refresh quietly at most every 5 minutes while visible, and when someone comes back after 5 minutes away, never while they type or have a dialog open.
 - Two-factor sign-in (TOTP) can be added when the team grows (plan 15.3.9).

@@ -1,14 +1,15 @@
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
+import { connection } from 'next/server'
 import { BarList, rate } from '@/components/insights/bars'
-import { CostChart } from '@/components/insights/cost-chart'
+import { CostChart } from '@/components/insights/cost-chart-lazy'
 import { InsightFilters } from '@/components/insights/insight-filters'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { KpiTile } from '@/components/ui/kpi-tile'
 import { PageHeader } from '@/components/ui/page-header'
-import { Skeleton } from '@/components/ui/skeleton'
-import { requireUser } from '@/lib/auth'
+import { INSIGHTS_DESCRIPTION, INSIGHTS_TITLE, InsightsBody } from '@/components/skeletons'
+import { early, requireUser } from '@/lib/auth'
 import { addDays, daysBetween, formatDate, istDate } from '@/lib/dates'
 import { formatInr, formatNumber, formatPercent } from '@/lib/format'
 import { canSeeMoney } from '@/lib/roles'
@@ -24,8 +25,8 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/
 export default function InsightsPage({ searchParams }: PageProps<'/insights'>) {
   return (
     <>
-      <PageHeader title="Insights" description="What converts, how good the leads are, and what they cost." />
-      <Suspense fallback={<InsightsSkeleton />}>
+      <PageHeader title={INSIGHTS_TITLE} description={INSIGHTS_DESCRIPTION} />
+      <Suspense fallback={<InsightsBody />}>
         <Insights searchParams={searchParams} />
       </Suspense>
     </>
@@ -33,7 +34,8 @@ export default function InsightsPage({ searchParams }: PageProps<'/insights'>) {
 }
 
 async function Insights({ searchParams }: Pick<PageProps<'/insights'>, 'searchParams'>) {
-  const [user, sp] = await Promise.all([requireUser(), searchParams])
+  // Request time only (the date range reads the clock), then the queries can start.
+  const [sp] = await Promise.all([searchParams, connection()])
   const one = (k: string) => (typeof sp[k] === 'string' ? (sp[k] as string) : '')
   const now = new Date()
   const today = istDate(now)
@@ -50,8 +52,11 @@ async function Insights({ searchParams }: Pick<PageProps<'/insights'>, 'searchPa
     country: /^[a-z]{2}$/.test(one('country')) ? one('country') : '',
     group,
   }
+  // The funnel and quality numbers run as the user (RLS) and start while the session is checked.
+  const insights = early(getInsights(filters))
+  const user = await requireUser()
   const isAdmin = canSeeMoney(user.role)
-  const [data, segments, costs] = await Promise.all([getInsights(filters), getSegments(), isAdmin ? getCosts(filters) : Promise.resolve(null)])
+  const [data, segments, costs] = await Promise.all([insights, getSegments(), isAdmin ? getCosts(filters) : Promise.resolve(null)])
   const segmentOf = segmentLabeler(segments)
   const groupLabel = (id: string) =>
     id === 'unknown'
@@ -183,18 +188,5 @@ async function Insights({ searchParams }: Pick<PageProps<'/insights'>, 'searchPa
         </Card>
       ) : null}
     </>
-  )
-}
-
-function InsightsSkeleton() {
-  return (
-    <div aria-busy className="flex flex-col gap-6">
-      <Skeleton className="h-10 w-full max-w-2xl rounded-full" />
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Skeleton className="h-64 rounded-2xl" />
-        <Skeleton className="h-64 rounded-2xl" />
-      </div>
-      <Skeleton className="h-48 rounded-2xl" />
-    </div>
   )
 }

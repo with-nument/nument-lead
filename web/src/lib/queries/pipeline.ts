@@ -17,8 +17,11 @@ export type BoardCard = {
   dealValue?: number | null
 }
 
-/** Cards for the board: every lead past New (new leads live on Today). */
-export async function getBoard(f: BoardFilters, ctx: { userId: string; today: string; withMoney: boolean }): Promise<BoardCard[]> {
+/**
+ * Cards for the board: every lead past New (new leads live on Today). Runs as the user and without money,
+ * so the page can start it before the role is known; admins add deal values with `withBoardDealValues`.
+ */
+export async function getBoard(f: BoardFilters, ctx: { userId: string; today: string }): Promise<BoardCard[]> {
   const sb = await createClient()
   let q = sb
     .from('v_leads_caller')
@@ -33,7 +36,6 @@ export async function getBoard(f: BoardFilters, ctx: { userId: string; today: st
   const { data, error } = await q.order('last_activity_at', { ascending: false }).limit(1000)
   if (error) throw error
   const rows = (data ?? []).filter((r) => r.id)
-  const money = ctx.withMoney ? await getDealValues(sb, rows.map((r) => r.id!)) : null
   return rows.map((r) => ({
     id: r.id!,
     name: r.name ?? 'Unnamed business',
@@ -43,6 +45,11 @@ export async function getBoard(f: BoardFilters, ctx: { userId: string; today: st
     nextStep: r.next_step,
     dueAt: r.due_at,
     ownerId: r.owner_id,
-    ...(money ? { dealValue: money.get(r.id!) ?? null } : {}),
   }))
+}
+
+/** Deal values on the cards. Admins only: call it after the role check. */
+export async function withBoardDealValues(cards: BoardCard[]): Promise<BoardCard[]> {
+  const money = await getDealValues(await createClient(), cards.map((c) => c.id))
+  return cards.map((c) => ({ ...c, dealValue: money.get(c.id) ?? null }))
 }

@@ -7,7 +7,8 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Everything except static files, images and app icons.
-    '/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|webp|ico)$).*)',
+    // Everything except static files, images, fonts, app icons and the health check (Render calls it
+    // every few seconds and it never needs a session).
+    '/((?!_next/static|_next/image|api/health|favicon.ico|icon.svg|apple-icon.png|manifest.webmanifest|robots.txt|.*\\.(?:svg|png|jpg|jpeg|webp|ico|woff2?|map)$).*)',
   ],
 }

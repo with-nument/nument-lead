@@ -12,14 +12,14 @@ import { buttonClasses } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/ui/page-header'
-import { Skeleton, SkeletonRows } from '@/components/ui/skeleton'
-import { requireUser } from '@/lib/auth'
+import { LeadsSkeleton } from '@/components/skeletons'
+import { claimedUserId, early, requireUser } from '@/lib/auth'
 import { dueState, formatDate, istDate, relativeAge } from '@/lib/dates'
 import { formatNumber, hostOf } from '@/lib/format'
 import { activeFilterCount, filtersToQuery, parseLeadFilters } from '@/lib/leads-filters'
 import { canEdit, canSeeMoney } from '@/lib/roles'
 import { PHONE_TYPE_LABEL, countryLabel, pitchLabel, signalLabel } from '@/lib/signals'
-import { getCities, getLeadsPage, getSavedViews } from '@/lib/queries/leads'
+import { getCities, getLeadsPage, getSavedViews, withDealValues } from '@/lib/queries/leads'
 import { getSegments, getTeam, segmentLabeler } from '@/lib/queries/shared'
 
 export const metadata: Metadata = { title: 'Leads' }
@@ -33,17 +33,22 @@ export default function LeadsPage({ searchParams }: PageProps<'/leads'>) {
 }
 
 async function Leads({ searchParams }: Pick<PageProps<'/leads'>, 'searchParams'>) {
-  const [user, sp] = await Promise.all([requireUser(), searchParams])
+  const [sp, userId] = await Promise.all([searchParams, claimedUserId()])
   const filters = parseLeadFilters(sp)
   const now = new Date()
   const today = istDate(now)
+  // The list, cities and saved views run as the user (RLS) and start while the session is checked.
+  const pageP = early(getLeadsPage(filters, { userId: userId ?? '', today }))
+  const citiesP = early(getCities(filters.country))
+  const viewsP = early(getSavedViews(userId ?? ''))
+  const user = await requireUser()
   const isAdmin = canSeeMoney(user.role)
   const [page, segments, team, cities, views] = await Promise.all([
-    getLeadsPage(filters, { userId: user.id, today, withMoney: isAdmin }),
+    isAdmin ? pageP.then(withDealValues) : pageP,
     getSegments(),
     getTeam(),
-    getCities(filters.country),
-    getSavedViews(user.id),
+    citiesP,
+    viewsP,
   ])
   const segmentOf = segmentLabeler(segments)
   const teamName = new Map(team.map((m) => [m.id, m.name]))
@@ -133,26 +138,5 @@ async function Leads({ searchParams }: Pick<PageProps<'/leads'>, 'searchParams'>
         </div>
       </div>
     </>
-  )
-}
-
-function LeadsSkeleton() {
-  return (
-    <div aria-busy>
-      <PageHeader title="Leads" />
-      <div className="lg:grid lg:grid-cols-[208px_minmax(0,1fr)] lg:gap-6">
-        <div className="hidden space-y-3 lg:block">
-          {Array.from({ length: 8 }, (_, i) => (
-            <Skeleton key={i} className="h-4 w-3/4" />
-          ))}
-        </div>
-        <div>
-          <Skeleton className="mb-3 h-10 w-full rounded-full" />
-          <Card>
-            <SkeletonRows rows={8} />
-          </Card>
-        </div>
-      </div>
-    </div>
   )
 }

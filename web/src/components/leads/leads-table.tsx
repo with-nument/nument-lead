@@ -123,7 +123,7 @@ export function LeadsTable({
           <div className="flex max-w-[280px] min-w-[200px] items-center gap-2.5">
             <GradeBadge grade={row.original.grade} />
             <div className="min-w-0">
-              <Link href={`/leads/${row.original.id}`} prefetch className="block truncate font-medium text-tx-1 hover:text-indigo-800">
+              <Link href={`/leads/${row.original.id}`} className="block truncate font-medium text-tx-1 hover:text-indigo-800">
                 {row.original.name}
               </Link>
               <div className="truncate text-xs text-tx-3">{[row.original.city, row.original.segment].filter(Boolean).join(' · ') || row.original.host}</div>

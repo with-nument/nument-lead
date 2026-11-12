@@ -6,13 +6,12 @@ import { Tag, type Tone } from '@/components/ui/badge'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/ui/page-header'
-import { Skeleton } from '@/components/ui/skeleton'
-import { requireRole } from '@/lib/auth'
+import { ENGINE_DESCRIPTION, ENGINE_TITLE, EngineBody } from '@/components/skeletons'
+import { early, requireRole } from '@/lib/auth'
 import { formatDateTime, relativeAge } from '@/lib/dates'
 import { formatInr, formatNumber } from '@/lib/format'
 import { isDispatchConfigured } from '@/lib/github'
-import { getEngineOverview } from '@/lib/queries/engine'
-import { segmentFallbackLabel } from '@/lib/signals'
+import { getEngineLive, getEngineOverview } from '@/lib/queries/engine'
 import { cn } from '@/lib/cn'
 
 export const metadata: Metadata = { title: 'Engine' }
@@ -28,8 +27,8 @@ const td = 'h-11 px-3 align-middle first:pl-4 last:pr-4 sm:first:pl-5 sm:last:pr
 export default function EnginePage() {
   return (
     <>
-      <PageHeader title="Engine" description="Segments, budget, sources and runs. Changes apply from the next run." />
-      <Suspense fallback={<EngineSkeleton />}>
+      <PageHeader title={ENGINE_TITLE} description={ENGINE_DESCRIPTION} />
+      <Suspense fallback={<EngineBody />}>
         <Engine />
       </Suspense>
     </>
@@ -57,10 +56,12 @@ function duration(start: string, end: string | null) {
 }
 
 async function Engine() {
+  // The live reads run as the user (RLS: admin only) and start while the role is checked.
+  const live = early(getEngineLive())
   await requireRole(['admin'])
-  const data = await getEngineOverview()
+  const data = await getEngineOverview(live)
   const now = new Date()
-  const segments = data.segments.map((s) => ({ ...s, label: s.display_name || segmentFallbackLabel(s.id) }))
+  const segments = data.segments
 
   return (
     <div className="flex flex-col gap-6">
@@ -222,18 +223,6 @@ async function Engine() {
           ) : null}
         </CardBody>
       </Card>
-    </div>
-  )
-}
-
-function EngineSkeleton() {
-  return (
-    <div className="flex flex-col gap-6" aria-busy>
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Skeleton className="h-64 rounded-2xl" />
-        <Skeleton className="h-64 rounded-2xl" />
-      </div>
-      <Skeleton className="h-72 rounded-2xl" />
     </div>
   )
 }

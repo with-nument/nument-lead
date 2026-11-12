@@ -6,8 +6,8 @@ import { Tag, type Tone } from '@/components/ui/badge'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/ui/page-header'
-import { SkeletonRows } from '@/components/ui/skeleton'
-import { requireRole } from '@/lib/auth'
+import { INBOX_DESCRIPTION, INBOX_TITLE, InboxBody } from '@/components/skeletons'
+import { early, requireRole } from '@/lib/auth'
 import { relativeAge } from '@/lib/dates'
 import { hostOf, safeUrl } from '@/lib/format'
 import { getInboxPosts } from '@/lib/queries/inbox'
@@ -21,14 +21,8 @@ const STATUS_LABEL: Record<string, string> = { new: 'New', processing: 'Processi
 export default function InboxPage() {
   return (
     <>
-      <PageHeader title="Inbox" description="Paste public posts where someone asks for help. The engine works from the text you paste and never opens LinkedIn or X." />
-      <Suspense
-        fallback={
-          <Card>
-            <SkeletonRows rows={4} />
-          </Card>
-        }
-      >
+      <PageHeader title={INBOX_TITLE} description={INBOX_DESCRIPTION} />
+      <Suspense fallback={<InboxBody />}>
         <Inbox />
       </Suspense>
     </>
@@ -36,8 +30,10 @@ export default function InboxPage() {
 }
 
 async function Inbox() {
+  // Posts run as the user (RLS: admin only) and start while the role is checked.
+  const postsP = early(getInboxPosts())
   await requireRole(['admin'])
-  const [posts, segments] = await Promise.all([getInboxPosts(), getSegments()])
+  const [posts, segments] = await Promise.all([postsP, getSegments()])
   const segmentOf = segmentLabeler(segments)
   const now = new Date()
   return (

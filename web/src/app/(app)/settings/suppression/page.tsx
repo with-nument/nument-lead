@@ -4,7 +4,7 @@ import { AddSuppressionForm, RemoveSuppressionButton } from '@/components/settin
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { SkeletonRows } from '@/components/ui/skeleton'
-import { requireRole } from '@/lib/auth'
+import { early, requireRole } from '@/lib/auth'
 import { formatDate } from '@/lib/dates'
 import { formatPhone } from '@/lib/phone'
 import { getSuppression } from '@/lib/queries/settings'
@@ -28,8 +28,10 @@ export default function SuppressionPage() {
 }
 
 async function Suppression() {
+  // The list runs as the user (RLS) and starts while the role is checked.
+  const rowsP = early(getSuppression())
   await requireRole(['admin'])
-  const [rows, team] = await Promise.all([getSuppression(), getTeam()])
+  const [rows, team] = await Promise.all([rowsP, getTeam()])
   const names = new Map(team.map((m) => [m.id, m.name]))
   const now = new Date()
   const th = 'label-mono h-10 border-b border-line-2 px-3 font-normal whitespace-nowrap first:pl-4 last:pr-4 sm:first:pl-5 sm:last:pr-5'

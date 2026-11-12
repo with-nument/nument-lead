@@ -1,11 +1,17 @@
 import 'server-only'
+import { cacheLife, cacheTag } from 'next/cache'
+import { TAGS } from '@/lib/cache-tags'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 /**
  * Finish time of the last successful sheet sync, for the top bar. Runs are admin-only under RLS;
  * this one timestamp is shown to everyone, so it is read with the service role after the session check.
+ * The engine writes runs, so this is cached by time only: at most a minute old.
  */
 export async function getLastSheetSync(): Promise<string | null> {
+  'use cache'
+  cacheLife('minutes')
+  cacheTag(TAGS.sheetSync)
   try {
     const admin = createAdminClient()
     const { data } = await admin
