@@ -107,7 +107,11 @@ def main(
     ] = None,
     limit: Annotated[int | None, typer.Option("--limit", min=1, help="Max items per stage.")] = None,
     dry_run: Annotated[
-        bool, typer.Option("--dry-run", help="No sheet writes, no batch submission, no paid calls.")
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="No sheet or database writes for leads, no batch submission; sync AI calls still run within --max-spend-inr.",
+        ),
     ] = False,
     max_spend_inr: Annotated[
         float | None,
