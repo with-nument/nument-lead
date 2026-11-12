@@ -14,3 +14,9 @@ regexes = ['''STORAGE_KEY\s*=\s*['"][A-Za-z0-9._:-]+['"]''']
 description = "Throwaway Postgres URLs used only by CI service containers and the test harness"
 regexTarget = "line"
 regexes = ['''postgres(?:ql)?://(?:postgres|ci|nlead-test-guard)(?::(?:postgres|ci))?@(?:localhost|127\.0\.0\.1)''']
+
+[[allowlists]]
+description = "Made-up Google place ids in engine tests (ChIJ followed by a test word), not keys"
+regexTarget = "match"
+regexes = ['''ChIJ[a-z]+(?:-[a-z0-9]+)+''']
+paths = ['''engine/tests/''']
