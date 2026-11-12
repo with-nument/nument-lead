@@ -198,7 +198,7 @@ tiers:
 
     grounded_search:
       primary: g_flash
-      fallbacks: [g_lite]                     # OpenAI web search ($10 per 1K calls) stays out while it is off
+      fallbacks: [g_pro, g_lite]              # Argon searches more reliably than Lite (live check 12 Nov); OpenAI web search stays out while it is off
       mode: sync
       schema: PublicAskResults
       prompt: grounded_public_asks.md

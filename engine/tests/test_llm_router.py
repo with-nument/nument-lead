@@ -359,6 +359,7 @@ def test_a_model_that_never_searches_hands_the_task_to_the_next_model(llm_db: st
         [
             reply("Nothing found.", grounding=None),
             reply("Still nothing.", grounding=None),
+            reply("Nothing again.", grounding=None),
             reply("1. A clinic asks for a WhatsApp bot. https://forum.example.com/t/9", grounding=GROUNDED),
             reply(OUTPUTS["grounded_search"]),
         ],
@@ -366,6 +367,7 @@ def test_a_model_that_never_searches_hands_the_task_to_the_next_model(llm_db: st
     stats: dict[str, object] = {}
     router = make_router({"gemini": gemini}, stats=stats)
     res = router.run_result("grounded_search", _inputs("grounded_search"))
-    assert [c.model for c in gemini.calls[:3]] == ["gemini-3.8-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite"]
-    assert res.model == "gemini-3.5-flash-lite" and res.fallback_from == "gemini:gemini-3.8-flash"
+    assert [c.model for c in gemini.calls[:4]] == ["gemini-3.8-flash"] * 3 + ["gemini-4-argon"]
+    assert gemini.calls[2].user.count("You have not run a Google Search yet") == 1  # nudged once, not twice
+    assert res.model == "gemini-4-argon" and res.fallback_from == "gemini:gemini-3.8-flash"
     assert stats["ai_errors"] == {"grounded_search:invalid_output": 1}

@@ -88,6 +88,22 @@ def _same_url(a: str, b: str) -> bool:
     return ca == cb or ca.startswith(cb.rstrip("/") + "/") or cb.startswith(ca.rstrip("/") + "/")
 
 
+# The prompt reads "a business in {country} ... for a {domain} business"; segment codes ("in", "clinics")
+# read badly there, and a garbled ask makes the model more likely to answer without searching.
+COUNTRY_NAMES: dict[str, str] = {
+    "in": "India",
+    "ae": "the UAE",
+    "sa": "Saudi Arabia",
+    "qa": "Qatar",
+    "uk": "the UK",
+    "gb": "the UK",
+    "sg": "Singapore",
+    "us": "the US",
+    "au": "Australia",
+}
+DOMAIN_WORDS: dict[str, str] = {"clinics": "clinic", "realestate": "real estate", "education": "coaching or education"}
+
+
 class GroundedSearchAdapter(SourceAdapter):
     name = "grounded_search"
     policy = "official_api"
@@ -237,8 +253,8 @@ class GroundedSearchAdapter(SourceAdapter):
                 "grounded_search",
                 {
                     "segment_id": seg.id,
-                    "domain": seg.domain,
-                    "country": seg.country,
+                    "domain": DOMAIN_WORDS.get(seg.domain, seg.domain),
+                    "country": COUNTRY_NAMES.get(seg.country, seg.country.upper()),
                     "cities": [c.name for c in seg.cities],
                     "query": query,
                     "queries": [query],

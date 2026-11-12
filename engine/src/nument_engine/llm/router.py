@@ -58,6 +58,7 @@ TRUNCATED_NOTE = (
     "\n\nYour previous answer was cut off before it finished. Keep every text field short and reply again "
     "with complete JSON that matches the required schema."
 )
+SEARCH_ATTEMPTS = 3  # per model: the first try plus two nudged tries
 SEARCH_NUDGE = (
     "\n\nYou have not run a Google Search yet. Use the Google Search tool now for the ideas above, then "
     "answer only from what it finds."
@@ -549,13 +550,14 @@ class Router:
         """A web-search call whose answer is only used if the model really searched (it has citations).
 
         Verified 2026-11-12: Gemini sometimes skips the search tool and still answers "I found nothing" or
-        describes "search results" it never fetched. Such an answer gets one nudge; if the model still does
-        not search, the answer is refused and the next model in the chain gets the task.
+        describes "search results" it never fetched (live night run: 4 of 4 answers without a search; a retry
+        usually searches). Such an answer gets up to two nudges; if the model still does not search, the
+        answer is refused and the next model in the chain gets the task.
         """
         ref = spec.ref
         resp: LLMResponse | None = None
-        for attempt in range(2):
-            if attempt:
+        for attempt in range(SEARCH_ATTEMPTS):
+            if attempt == 1:  # the nudge is added once and kept for the last try
                 req = replace(req, user=req.user + SEARCH_NUDGE)
                 self.budget.check(cfg.name, cfg.priority, self._estimate(cfg, ref, req.system, req.user))
                 log.info("llm.search_nudge", task=cfg.name, model=ref.model)
