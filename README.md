@@ -301,5 +301,8 @@ The complete table is in [docs/runbook.md](docs/runbook.md#troubleshooting).
 | [docs/data-policy.md](docs/data-policy.md) | Sources, enforcement, personal data, retention, country rules, security |
 | [docs/incidents.md](docs/incidents.md) | Incident playbook and log |
 | [docs/segments-guide.md](docs/segments-guide.md) | How to add a market |
+| [docs/sources.md](docs/sources.md) | Every data source, its pace, the week 1 data check and the sources not built |
+| [docs/decisions.md](docs/decisions.md) | Changes to the plan made while building and running, with the reasons |
+| [web/README.md](web/README.md) | Web app setup, routes, roles, tests and deployment |
 
 Private repository. Copyright Nument. All rights reserved.
