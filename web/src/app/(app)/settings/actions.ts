@@ -1,9 +1,10 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, updateTag } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { requireUser } from '@/lib/auth'
+import { TAGS } from '@/lib/cache-tags'
 import { createClient } from '@/lib/supabase/server'
 import { fail, fieldErrorsOf, ok, SAVE_FAILED, type ActionResult } from '@/lib/action-result'
 import { PasswordSchema } from '@/lib/password'
@@ -18,6 +19,7 @@ export async function updateProfile(_: unknown, formData: FormData): Promise<Act
   const sb = await createClient()
   const { error } = await sb.from('profiles').update({ full_name: parsed.data.fullName }).eq('user_id', user.id)
   if (error) return fail(SAVE_FAILED)
+  updateTag(TAGS.team)
   revalidatePath('/', 'layout')
   return ok('Name saved')
 }

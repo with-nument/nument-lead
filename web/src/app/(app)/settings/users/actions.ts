@@ -1,8 +1,9 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, updateTag } from 'next/cache'
 import { z } from 'zod'
 import { requireRole } from '@/lib/auth'
+import { TAGS } from '@/lib/cache-tags'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { fail, fieldErrorsOf, ok, type ActionResult } from '@/lib/action-result'
 import { generateTempPassword } from '@/lib/password'
@@ -46,6 +47,8 @@ export async function createUser(_: unknown, formData: FormData): Promise<Action
   }
   // The database trigger makes a viewer profile; set the chosen role and name with the service role.
   const { error: profileError } = await admin.from('profiles').upsert({ user_id: data.user.id, full_name: fullName, role }, { onConflict: 'user_id' })
+  // A new profile exists either way (the trigger makes one), so the cached team list is out of date.
+  updateTag(TAGS.team)
   if (profileError) {
     console.error('profile upsert failed', profileError.code)
     return fail('The account was created but the role was not saved. Set the role in the table below.')
@@ -63,6 +66,7 @@ export async function setRole(input: { userId: string; role: string }): Promise<
   const admin = createAdminClient()
   const { error } = await admin.from('profiles').update({ role: parsed.data.role }).eq('user_id', parsed.data.userId)
   if (error) return fail('Could not change the role. Try again.')
+  updateTag(TAGS.team)
   revalidatePath('/settings/users')
   return ok('Role changed')
 }

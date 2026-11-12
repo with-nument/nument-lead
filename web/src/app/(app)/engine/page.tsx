@@ -7,12 +7,11 @@ import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/ui/page-header'
 import { Skeleton } from '@/components/ui/skeleton'
-import { requireRole } from '@/lib/auth'
+import { early, requireRole } from '@/lib/auth'
 import { formatDateTime, relativeAge } from '@/lib/dates'
 import { formatInr, formatNumber } from '@/lib/format'
 import { isDispatchConfigured } from '@/lib/github'
-import { getEngineOverview } from '@/lib/queries/engine'
-import { segmentFallbackLabel } from '@/lib/signals'
+import { getEngineLive, getEngineOverview } from '@/lib/queries/engine'
 import { cn } from '@/lib/cn'
 
 export const metadata: Metadata = { title: 'Engine' }
@@ -57,10 +56,12 @@ function duration(start: string, end: string | null) {
 }
 
 async function Engine() {
+  // The live reads run as the user (RLS: admin only) and start while the role is checked.
+  const live = early(getEngineLive())
   await requireRole(['admin'])
-  const data = await getEngineOverview()
+  const data = await getEngineOverview(live)
   const now = new Date()
-  const segments = data.segments.map((s) => ({ ...s, label: s.display_name || segmentFallbackLabel(s.id) }))
+  const segments = data.segments
 
   return (
     <div className="flex flex-col gap-6">

@@ -1,8 +1,9 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, updateTag } from 'next/cache'
 import { z } from 'zod'
 import { requireRole } from '@/lib/auth'
+import { TAGS } from '@/lib/cache-tags'
 import { createClient, type ServerClient } from '@/lib/supabase/server'
 import { fail, fieldErrorsOf, ok, SAVE_FAILED, type ActionResult } from '@/lib/action-result'
 import type { Json } from '@/lib/database.types'
@@ -26,6 +27,7 @@ export async function setSegmentEnabled(input: { id: string; enabled: boolean })
   const { error } = await sb.from('segments').update({ enabled: parsed.data.enabled }).eq('id', parsed.data.id)
   if (error) return fail(SAVE_FAILED)
   await setMapKey(sb, 'segments_enabled', parsed.data.id, parsed.data.enabled)
+  updateTag(TAGS.segments)
   revalidatePath('/engine')
   return ok(parsed.data.enabled ? 'Segment on' : 'Segment off')
 }
@@ -37,6 +39,7 @@ export async function setSegmentQuota(input: { id: string; quota: number }): Pro
   const sb = await createClient()
   const { error } = await sb.from('segments').update({ daily_quota: parsed.data.quota }).eq('id', parsed.data.id)
   if (error) return fail(SAVE_FAILED)
+  updateTag(TAGS.segments)
   revalidatePath('/engine')
   return ok('Daily quota saved')
 }
@@ -55,6 +58,7 @@ export async function saveBudget(_: unknown, formData: FormData): Promise<Action
   const results = await Promise.all(
     (Object.keys(parsed.data) as (keyof typeof parsed.data)[]).map((key) => sb.from('settings').update({ value: parsed.data[key] }).eq('key', key)),
   )
+  updateTag(TAGS.budget)
   if (results.some((r) => r.error)) return fail(SAVE_FAILED)
   revalidatePath('/engine')
   return ok('Budget saved')
