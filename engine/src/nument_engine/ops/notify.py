@@ -18,6 +18,7 @@ from ..settings import get_settings
 log = get_logger()
 
 RESEND_URL = "https://api.resend.com/emails"
+DEFAULT_SENDER = "Nument Leads <onboarding@resend.dev>"
 TIMEOUT_S = 20.0
 
 
@@ -31,7 +32,8 @@ def send_email(subject: str, markdown: str) -> bool:
     s = get_settings()
     if not (s.alert_email and s.resend_api_key):
         return False
-    payload = {"from": s.alert_email_from, "to": [s.alert_email], "subject": subject, "text": markdown}
+    sender = s.alert_email_from.strip() or DEFAULT_SENDER  # an empty ALERT_EMAIL_FROM means the default
+    payload = {"from": sender, "to": [s.alert_email], "subject": subject, "text": markdown}
     headers = {"Authorization": f"Bearer {s.resend_api_key.get_secret_value()}", "User-Agent": s.user_agent}
     try:
         with httpx.Client(timeout=TIMEOUT_S, trust_env=False) as client:
