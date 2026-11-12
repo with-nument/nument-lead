@@ -44,8 +44,8 @@ TRUTH = Truth.model_validate(
         "checked_by": "builder",
         "checked_at": "2026-12-01",
         "facts": {
-            "decision_maker": {"name": "Dr. Snehal Badjate", "role": "Founder"},
-            "phones": [{"e164": "+919156096262", "type": "mobile"}],
+            "decision_maker": {"name": "Dr. Anika Deshmane", "role": "Founder"},
+            "phones": [{"e164": "+919800054321", "type": "mobile"}],
             "branches_count": 12,
             "staff_count_min": 30,
             "booking_method": "phone and WhatsApp",
@@ -124,9 +124,9 @@ def test_subset_file_round_trip(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("field", "value", "expected"),
     [
-        ("decision_maker", {"name": "Snehal Badjate", "role": "Director"}, True),
+        ("decision_maker", {"name": "Anika Deshmane", "role": "Director"}, True),
         ("decision_maker", {"name": "Dr. Someone Else"}, False),
-        ("phone", {"number": "091560 96262"}, True),
+        ("phone", {"number": "098000 54321"}, True),
         ("phone", {"number": "+91 99999 00000"}, False),
         ("branches", {"count": 12}, True),
         ("branches", {"count": 11}, False),
@@ -213,8 +213,8 @@ def test_messages_claims_and_errors_fail_the_gate() -> None:
 def test_fact_metrics_against_the_truth() -> None:
     lab = Label(business_id=bid(1), segment="clinics-in", label="good", labeled_at=date(2026, 12, 1))
     facts = [
-        OutcomeFact("decision_maker", {"name": "Snehal Badjate"}, True),
-        OutcomeFact("phone", {"number": "+91 91560 96262"}, True),
+        OutcomeFact("decision_maker", {"name": "Anika Deshmane"}, True),
+        OutcomeFact("phone", {"number": "+91 98000 54321"}, True),
         OutcomeFact("branches", {"count": 10}, True),  # wrong
         OutcomeFact("service", {"name": "Radiology"}, True),
         OutcomeFact("whatsapp_present", {"value": True}, False),  # not verified: ignored
@@ -225,7 +225,7 @@ def test_fact_metrics_against_the_truth() -> None:
         total=80,
         grade="A",
         facts=facts,
-        top_phone_e164="+919156096262",
+        top_phone_e164="+919800054321",
         message=MessageOutcome(True, 9.0),
     )
     report = measures.evaluate([out], {lab.business_id: lab}, {bid(1): TRUTH}, subset=True)
