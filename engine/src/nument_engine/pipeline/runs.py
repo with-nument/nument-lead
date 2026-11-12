@@ -344,6 +344,7 @@ def morning_phases() -> list[Phase]:
         Phase("sheet_sync", sheet_sync(light=False), essential=True),
         Phase("prune", stage("ops.health", "prune_run")),  # daily, so 30-day Places content never overstays
         Phase("summary", summary, essential=True),
+        Phase("email", stage("ops.emails", "morning")),  # the morning list by email; never fails the run
     ]
 
 
@@ -376,7 +377,7 @@ def night(rc: RunContext) -> None:
 
 
 def morning(rc: RunContext) -> None:
-    """06:00 IST pipeline part 2: extract collect, verify, score, judge, message, sheet sync, prune, summary."""
+    """06:00 IST pipeline part 2: extract collect, verify, score, judge, message, sheet sync, prune, summary, email."""
     execute(rc, morning_phases())
 
 

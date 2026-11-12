@@ -3,7 +3,8 @@
 Built every Monday for the last complete IST week (Monday to Sunday) and stored in `reports` (kind
 'weekly') as numbers (`content`, for the app) and markdown. `content.caller` and `content.caller_markdown`
 are the same report without money (no money won, no cost section) for the caller's view; the admin version
-also goes to the GitHub job summary and, when configured, by email to the founder.
+also goes to the GitHub job summary and, when configured, by email to everyone opted into the weekly report
+(admins get the admin version, everyone else the caller version; `ops.emails`).
 
 Sections, in order: headline; funnel by segment and country; signal type; pitch mode, angle and writer;
 test groups to scale or cut; lead quality; cost (admin only); engine health; what the engine changed;
@@ -27,7 +28,7 @@ import yaml
 
 from .. import db
 from ..logging import get_logger
-from ..ops import notify
+from ..ops import emails, notify
 from ..pipeline.runs import RunContext
 from ..settings import ENGINE_DIR
 from . import fmt
@@ -784,7 +785,7 @@ def weekly(rc: RunContext, *, week_start: date | None = None) -> dict[str, Any]:
     else:
         result["report_id"] = save(period, content, admin_md)
         notify.step_summary(admin_md)
-        result["emailed"] = notify.send_email(f"Nument Leads weekly report: {content['period']['label']}", admin_md)
+        result["emailed"] = emails.send_weekly(content, admin_md, content["caller_markdown"]) > 0
     log.info("report.weekly", **{k: v for k, v in result.items() if k != "period"}, period=content["period"]["label"])
     rc.stats["report"] = {k: v for k, v in result.items() if k != "period"}
     return result

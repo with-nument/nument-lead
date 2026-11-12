@@ -441,24 +441,35 @@ def prune_run(rc: RunContext) -> dict[str, int]:
 # ---------------------------------------------------------------------------
 
 
+def alert_checks(checks: Sequence[Check]) -> list[Check]:
+    """Checks worth an email: alert and fail, plus spend past the alert line (budget near the cap)."""
+    return [c for c in checks if SEVERITY[c.status] >= SEVERITY["alert"] or (c.name == "spend" and c.status == "warn")]
+
+
 def alerts(checks: Sequence[Check]) -> list[str]:
-    """Lines worth an email: alert and fail checks."""
-    return [f"{c.name}: {c.detail}" for c in checks if SEVERITY[c.status] >= SEVERITY["alert"]]
+    """Lines worth an email (see alert_checks)."""
+    return [f"{c.name}: {c.detail}" for c in alert_checks(checks)]
+
+
+def _key(line: str) -> str:
+    return hashlib.sha1(line.encode()).hexdigest()[:12]
 
 
 def notify_alerts(*, now: datetime | None = None) -> dict[str, Any]:
-    """Email new alerts once per IST day (Step 14.7). Quiet when email is not configured."""
+    """Email new alerts once per IST day (Step 14.7) to everyone opted into alerts. Quiet without a Resend key."""
+    from . import emails
+
     now = now or datetime.now(UTC)
-    lines = alerts(collect(now=now))
+    worth = alert_checks(collect(now=now))
+    lines = [f"{c.name}: {c.detail}" for c in worth]
     day = now.astimezone(fmt.IST).date().isoformat()
     sent = db.get_setting(ALERTS_KEY, {}) or {}
     seen = set(sent.get("keys", [])) if sent.get("day") == day else set()
-    new = [ln for ln in lines if hashlib.sha1(ln.encode()).hexdigest()[:12] not in seen]
+    new = [(c, ln) for c, ln in zip(worth, lines, strict=True) if _key(ln) not in seen]
     emailed = False
     if new and notify.email_configured():
-        body = "\n".join(f"- {ln}" for ln in new) + "\n\nOpen the Engine page or run `nlead health` for details.\n"
-        emailed = notify.send_email(f"Nument Leads: {len(new)} problem(s) need attention", body)
+        items = [emails.alert_item(c.name, c.status, c.detail) for c, _ in new]
+        emailed = emails.send_alerts(items) > 0
         if emailed:
-            keys = sorted(seen | {hashlib.sha1(ln.encode()).hexdigest()[:12] for ln in new})
-            db.set_setting(ALERTS_KEY, {"day": day, "keys": keys})
-    return {"alerts": lines, "new": new, "emailed": emailed}
+            db.set_setting(ALERTS_KEY, {"day": day, "keys": sorted(seen | {_key(ln) for _, ln in new})})
+    return {"alerts": lines, "new": [ln for _, ln in new], "emailed": emailed}

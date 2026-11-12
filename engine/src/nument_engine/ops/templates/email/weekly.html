@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% set sans = "-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" %}
+{% block body %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  <tr><td class="pad" style="padding:32px 36px 8px 36px;">
+    <div style="font:600 12px/16px {{ sans }};letter-spacing:.08em;text-transform:uppercase;color:#4250d5;">Weekly report</div>
+    <div class="h1" style="font:400 30px/38px Georgia,'Times New Roman',serif;color:#1f1f1f;margin:10px 0 8px 0;">{{ headline }}</div>
+    <div style="font:400 15px/23px {{ sans }};color:#666666;">{{ intro }}</div>
+  </td></tr>
+  {% for row in kpi_rows %}
+  <tr><td class="pad" style="padding:{{ '20px' if loop.first else '8px' }} 36px 0 36px;">
+    <table class="kpis" role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+      {% for k in row %}
+      <td class="kpi" width="25%" style="padding:0 8px 0 0;vertical-align:top;">
+        <div style="background:#fafafa;border:1px solid #f0f0f0;border-radius:12px;padding:12px 14px;">
+          <div style="font:600 11px/14px {{ sans }};letter-spacing:.06em;text-transform:uppercase;color:#999999;">{{ k.label }}</div>
+          <div style="font:400 24px/30px Georgia,serif;color:{{ k.color or '#1f1f1f' }};margin-top:4px;">{{ k.value }}</div>
+          <div style="font:400 12px/16px {{ sans }};color:#999999;">{{ k.note or "&nbsp;"|safe }}</div>
+        </div>
+      </td>
+      {% endfor %}
+      {% for _ in range(4 - row|length) %}<td class="kpi" width="25%" style="padding:0 8px 0 0;"></td>{% endfor %}
+    </tr></table>
+  </td></tr>
+  {% endfor %}
+  {% if actions %}
+  <tr><td class="pad" style="padding:24px 36px 0 36px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #ececec;border-radius:14px;">
+      <tr><td style="padding:18px 20px 8px 20px;">
+        <div style="font:600 12px/16px {{ sans }};letter-spacing:.08em;text-transform:uppercase;color:#4250d5;">Do this week</div>
+        {% for a in actions %}
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;"><tr>
+          <td width="26" style="vertical-align:top;font:600 13px/22px {{ sans }};color:#999999;">{{ loop.index }}.</td>
+          <td style="font:400 14px/22px {{ sans }};color:#3d3d3d;padding-bottom:4px;">{{ a|inline }}</td>
+        </tr></table>
+        {% endfor %}
+      </td></tr>
+    </table>
+  </td></tr>
+  {% endif %}
+  {% for s in sections %}
+  <tr><td class="pad" style="padding:{{ '28px' if loop.first else '22px' }} 36px 0 36px;">
+    <div style="border-top:1px solid #f0f0f0;padding-top:22px;font:600 12px/16px {{ sans }};letter-spacing:.08em;text-transform:uppercase;color:#999999;">{{ s.title }}</div>
+    {% for line in s.lines %}
+    <div style="font:400 14px/22px {{ sans }};color:{{ '#666666' if line.startswith('  ') else '#3d3d3d' }};margin-top:8px;{% if line.startswith('  ') %}padding-left:14px;{% endif %}">{{ line.strip()|inline }}</div>
+    {% endfor %}
+  </td></tr>
+  {% endfor %}
+  <tr><td class="pad" style="padding:26px 36px 0 36px;">
+    <a class="btn" href="{{ app_url }}/insights" style="display:inline-block;background:#2a2c33;color:#ffffff;font:600 14px/20px {{ sans }};text-decoration:none;padding:10px 18px;border-radius:10px;">Open Insights</a>
+  </td></tr>
+  <tr><td style="padding:32px 0 0 0;"></td></tr>
+</table>
+{% endblock %}
+{% block footer %}Sent every Monday morning for the week before.{% endblock %}

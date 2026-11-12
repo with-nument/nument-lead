@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from typer.testing import CliRunner
 
@@ -33,6 +35,7 @@ TOP_LEVEL = [
     "migrate-legacy",
     "run",
     "db",
+    "notify",
 ]
 EVERY_COMMAND = [
     ["universe"],
@@ -63,6 +66,8 @@ EVERY_COMMAND = [
     ["db", "migrate"],
     ["db", "status"],
     ["db", "sync-segments"],
+    ["notify", "test"],
+    ["notify", "preview"],
 ]
 
 
@@ -219,3 +224,42 @@ def test_hoist_global_options() -> None:
     assert hoist_global_options(["eval", "--subset", "5", "--dry-run"]) == ["--dry-run", "eval", "--subset", "5"]
     assert hoist_global_options(["health", "--", "--env", "x"]) == ["health", "--", "--env", "x"]
     assert hoist_global_options(["signals", "--limit"]) == ["signals", "--limit"]  # missing value: Click reports it
+
+
+# ---------------------------------------------------------------------------
+# nlead notify
+# ---------------------------------------------------------------------------
+
+
+def test_notify_test_needs_a_key_and_a_real_address(monkeypatch: pytest.MonkeyPatch) -> None:
+    result = runner.invoke(app, ["notify", "test", "--to", "founder@example.com"])
+    assert result.exit_code == 1 and "RESEND_API_KEY is not set" in plain(result.output)
+    bad = runner.invoke(app, ["notify", "test", "--to", "not-an-email"])
+    assert bad.exit_code == 2 and "is not an email address" in plain(bad.output)
+    kind = runner.invoke(app, ["notify", "test", "--to", "founder@example.com", "--kind", "daily"])
+    assert kind.exit_code == 2 and "morning, morning-empty, alert, weekly" in plain(kind.output)
+
+
+def test_notify_test_sends_one_sample_to_one_address(monkeypatch: pytest.MonkeyPatch) -> None:
+    import json
+
+    import respx
+
+    from nument_engine.ops import notify
+
+    monkeypatch.setenv("RESEND_API_KEY", "re_test_not_real")
+    with respx.mock() as mock:
+        route = mock.post(notify.RESEND_URL).respond(200, json={"id": "1"})
+        result = runner.invoke(app, ["notify", "test", "--to", "Founder@Example.com", "--kind", "weekly"])
+    assert result.exit_code == 0, result.output
+    assert "Sent the weekly sample to founder@example.com" in plain(result.output)
+    assert route.call_count == 1
+    payload = json.loads(route.calls.last.request.content)
+    assert payload["to"] == ["founder@example.com"] and payload["subject"].startswith("[Test] Weekly report")
+
+
+def test_notify_preview_writes_files(tmp_path: Path) -> None:
+    out = tmp_path / "previews"
+    result = runner.invoke(app, ["notify", "preview", "--out", str(out)])
+    assert result.exit_code == 0, result.output
+    assert (out / "morning.html").is_file() and (out / "alert-team.txt").is_file()

@@ -9,7 +9,7 @@ import pytest
 
 from nument_engine import db
 from nument_engine import settings as settings_module
-from nument_engine.ops import health, notify
+from nument_engine.ops import health
 
 from . import seed
 from .helpers import Conn
@@ -134,18 +134,7 @@ def test_collect_and_daily_summary_on_a_real_database(engine_db: str, gemini_key
 # ---------------------------------------------------------------------------
 
 
-def test_alerts_are_emailed_once_a_day(engine_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    db.set_setting(health.ALERTS_KEY, {})
-    alert = health.Check("run.night", "alert", "failed")
-    monkeypatch.setattr(health, "collect", lambda *a, **k: [alert, health.Check("spend", "ok", "fine")])
-    quiet = health.notify_alerts()
-    assert quiet["new"] == ["run.night: failed"] and quiet["emailed"] is False  # email not configured
-    sent: list[str] = []
-    monkeypatch.setattr(notify, "email_configured", lambda: True)
-    monkeypatch.setattr(notify, "send_email", lambda subject, body: sent.append(subject) or True)
-    assert health.notify_alerts()["emailed"] is True and len(sent) == 1
-    assert health.notify_alerts()["new"] == [] and len(sent) == 1  # same alert, same day: not sent again
-    db.set_setting(health.ALERTS_KEY, {})
+# Alert emails: tests/test_ops_emails.py
 
 
 # ---------------------------------------------------------------------------

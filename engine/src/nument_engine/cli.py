@@ -78,11 +78,13 @@ sheet_app = typer.Typer(help="Google Sheet two-way sync.", **_TYPER_SETTINGS)
 report_app = typer.Typer(help="Reports.", **_TYPER_SETTINGS)
 run_app = typer.Typer(help="Orchestrated runs used by GitHub Actions.", **_TYPER_SETTINGS)
 db_app = typer.Typer(help="Database schema and configuration: migrations and segment sync.", **_TYPER_SETTINGS)
+notify_app = typer.Typer(help="Email: send a sample, or write previews of every email.", **_TYPER_SETTINGS)
 app.add_typer(extract_app, name="extract")
 app.add_typer(sheet_app, name="sheet")
 app.add_typer(report_app, name="report")
 app.add_typer(run_app, name="run")
 app.add_typer(db_app, name="db")
+app.add_typer(notify_app, name="notify")
 
 
 class Env(StrEnum):
@@ -584,6 +586,51 @@ def migrate_legacy(
     from .ops import migrate_legacy as m
 
     _execute(ctx, "manual", lambda rc: _record(rc, "migrate_legacy", m.run(rc, root=root)))
+
+
+# ---------------------------------------------------------------------------
+# Email (the morning list, alerts and the weekly report go out from the runs themselves)
+# ---------------------------------------------------------------------------
+
+EMAIL_ADDRESS = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+SAMPLE_HELP = "Which email: morning, morning-empty, alert or weekly."
+
+
+@notify_app.command("test")
+def notify_test(
+    ctx: typer.Context,
+    to: Annotated[str, typer.Option("--to", help="Send the sample to this one address only.")],
+    kind: Annotated[str, typer.Option("--kind", help=SAMPLE_HELP)] = "morning",
+) -> None:
+    """Send one sample email (made-up leads) through Resend, to check delivery and looks."""
+    from .ops import emails, notify
+
+    _bootstrap(ctx)
+    address = to.strip().lower()
+    if not EMAIL_ADDRESS.match(address):
+        raise typer.BadParameter(f"{to!r} is not an email address", param_hint="--to")
+    if kind not in emails.SAMPLE_KINDS:
+        raise typer.BadParameter(f"choose one of {', '.join(emails.SAMPLE_KINDS)}", param_hint="--kind")
+    if not notify.email_configured():
+        raise _fail("RESEND_API_KEY is not set: nothing was sent.")
+    sample = emails.sample(kind)
+    sent = notify.send(notify.Email(f"[Test] {sample.subject}", sample.html, sample.text), [address])
+    if not sent:
+        raise _fail("Resend did not accept the email; see the log line above.")
+    typer.echo(f"Sent the {kind} sample to {address}.")
+
+
+@notify_app.command("preview")
+def notify_preview(
+    ctx: typer.Context,
+    out: Annotated[Path, typer.Option("--out", help="Folder for the HTML and text files.", file_okay=False)],
+) -> None:
+    """Write every email as HTML and text with sample data, for the admin view and the team view. Sends nothing."""
+    from .ops import emails
+
+    _bootstrap(ctx)
+    for path in emails.write_previews(out):
+        typer.echo(path)
 
 
 # ---------------------------------------------------------------------------
