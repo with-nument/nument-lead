@@ -151,5 +151,5 @@ web/
 ## Notes for later
 
 - A Content Security Policy needs per-request nonces, which would turn the prerendered page frames dynamic. Worth adding if the app ever loads third-party scripts.
-- Supabase Realtime is not needed for two or three users; pages refresh every 60 seconds while visible and on focus.
+- Supabase Realtime is not needed for two or three users; pages refresh quietly at most every 5 minutes while visible, and when someone comes back after 5 minutes away, never while they type or have a dialog open.
 - Two-factor sign-in (TOTP) can be added when the team grows (plan 15.3.9).
