@@ -36,6 +36,12 @@ services:
         sync: false              # server only, never NEXT_PUBLIC_
       - key: GH_DISPATCH_TOKEN
         sync: false              # fine-grained token: Actions read and write on this repository only
+      - key: RESEND_API_KEY
+        sync: false              # server only: Settings > Email recipients > Send test (same key as GitHub)
+      - key: ALERT_EMAIL_FROM
+        value: Nument Leads <leads@nument.in>
+      - key: ALERT_REPLY_TO
+        value: heyy.abhigyan@gmail.com
       - key: GH_REPO
         value: with-nument/nument-lead
       - key: GH_DISPATCH_REF

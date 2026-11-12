@@ -102,3 +102,18 @@ why, and how to undo it. The plan itself is [IMPLEMENTATION_PLAN.md](../IMPLEMEN
   runs only and `SHEET_STAGING_ID` to dev runs only.
 - **Why:** environments need a paid plan on a private repository owned by a personal account. The rule that a
   dev run never writes a live sheet still holds.
+
+### Email goes to an admin-managed list, one email per person
+
+- **Change:** the engine emails the morning list (last phase of the morning run, non-essential, once per IST
+  day), alerts (a failed run, spend past the alert line or at the cap, and the other alert-level health
+  checks, once a day for each problem) and the weekly report, as HTML with a plain-text part, through Resend
+  from `Nument Leads <leads@nument.in>` with replies to the founder. Recipients are the `notify_recipients`
+  table (migration 0011), managed by admins on Settings > Email recipients, each with Morning list, Alerts,
+  Weekly report and Active switches. While the table is empty, or cannot be read, `ALERT_EMAIL` gets
+  everything. Each recipient gets a separate API call, so nobody sees another address. `nlead notify test
+  --to <email>` sends a sample; `nlead notify preview --out <dir>` writes every email to files.
+- **Why:** the founder wants the team to get the list by email, and alerts must reach more than one person.
+  Money (spend, the cap, money won, the cost section) goes only to recipients who are admins in the app, or
+  to the `ALERT_EMAIL` fallback; everyone else gets the same email without it (callers never see money).
+- **Undo:** remove the `email` phase from `runs.morning_phases`; empty `RESEND_API_KEY` stops every email.

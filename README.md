@@ -157,7 +157,10 @@ cloud. They are never committed; [.env.example](.env.example) lists every name.
 | `ASSOCIATE_NAME`, `USER_AGENT` | engine | no |
 | `GH_REPO`, `GH_DISPATCH_REF`, `GH_DISPATCH_TOKEN` | web server | the token is secret |
 | `BACKUP_PASSPHRASE` | engine in CI | yes |
-| `ALERT_EMAIL`, `ALERT_EMAIL_FROM`, `RESEND_API_KEY` | engine, optional email | the key is secret |
+| `RESEND_API_KEY` | engine (GitHub secret), web server (Render, Send test only) | yes, server side only |
+| `ALERT_EMAIL_FROM`, `ALERT_REPLY_TO` | engine, web server | no (defaults `Nument Leads <leads@nument.in>`, `heyy.abhigyan@gmail.com`) |
+| `APP_URL` | engine (links in emails) | no (default `https://nument-leads-web.onrender.com`) |
+| `ALERT_EMAIL` | engine | no (gets every email while Settings > Email recipients is empty) |
 | `DEV_DATABASE_URL` | CI eval gate | yes |
 
 Two safety rules are built in: dev refuses to start with the live sheet ids, and prod refuses to start

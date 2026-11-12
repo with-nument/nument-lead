@@ -54,7 +54,10 @@ variables always win). The full list is A.12.7 in the plan; `../.env.example` ha
 | `SHEET_STAGING_ID` | dev sheet sync | Dev writes only to the staging sheet |
 | `SHEET_MASTER_ID`, `SHEET_CALLER_ID` | prod sheet sync | **Refused in dev**: the engine will not start with them when `APP_ENV=dev` |
 | `ASSOCIATE_NAME`, `USER_AGENT` | messages, polite crawling | Defaults: `Aditya`, `NumentLeadBot/1.0 (+https://nument.in)` |
-| `BACKUP_PASSPHRASE`, `ALERT_EMAIL` | backups, alerts | CI |
+| `BACKUP_PASSPHRASE` | backups | CI |
+| `RESEND_API_KEY` | email (morning list, alerts, weekly report) | Without it nothing is sent. `nlead notify test --to <email>` sends a sample; `nlead notify preview --out <dir>` writes every email as HTML and text |
+| `ALERT_EMAIL_FROM`, `ALERT_REPLY_TO`, `APP_URL` | email sender, reply-to and links | Defaults: `Nument Leads <leads@nument.in>`, `heyy.abhigyan@gmail.com`, `https://nument-leads-web.onrender.com`. Empty means the default |
+| `ALERT_EMAIL` | email fallback | Gets every email while the `notify_recipients` list (Settings > Email recipients) is empty |
 
 Secrets are typed `SecretStr`, so they never appear in logs, reprs or error messages.
 
