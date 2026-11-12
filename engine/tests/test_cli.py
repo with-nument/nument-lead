@@ -172,15 +172,19 @@ def test_orchestrated_runs_record_their_kind(engine_db: str) -> None:
     assert "HealthCheckFailed" in row["stats"]["phases"]["health"]["error"] and "GEMINI_API_KEY" in row["error"]
 
 
-def test_a_healthy_night_run_goes_on_until_an_unbuilt_essential_stage(
-    engine_db: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_healthy_night_run_runs_every_phase(engine_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """All night stages exist now. The ones that go to the internet are stubbed; the pre-filter runs for real."""
+    from nument_engine.pipeline import extract, research, signals, universe
+
     monkeypatch.setenv("GEMINI_API_KEY", "test-key-not-used")
+    for module, name in ((universe, "run"), (signals, "run"), (research, "run"), (extract, "submit")):
+        monkeypatch.setattr(module, name, lambda rc, _n=name, **kw: {"stubbed": _n})
     result = runner.invoke(app, ["run", "night"])
-    assert result.exit_code == 2 and "not built yet (Built in Step 8)" in plain(result.output)
+    assert result.exit_code == 0, plain(result.output)
     phases = db.scalar("select stats -> 'phases' from public.runs order by started_at desc limit 1")
     assert phases["health"]["status"] in ("ok", "info", "warn", "alert")
-    assert phases["universe"]["skipped"] == "not built" and phases["prefilter"]["skipped"] == "not built"
+    assert phases["universe"]["stubbed"] == "run" and phases["extract_submit"]["stubbed"] == "submit"
+    assert "queued" in phases["prefilter"] and "slots" in phases["prefilter"]
 
 
 def test_db_commands(engine_db: str) -> None:
