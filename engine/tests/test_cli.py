@@ -140,10 +140,15 @@ def test_unbuilt_stage_says_so_and_records_a_failed_run(engine_db: str) -> None:
     assert row["stats"]["segments"] == ["clinics-in"] and row["stats"]["limit"] == 5
 
 
-def test_eval_finds_the_evals_package(engine_db: str) -> None:
+def test_eval_finds_the_evals_package(
+    engine_db: str, monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    import evals.run_eval
+
+    monkeypatch.setattr(evals.run_eval, "GOLDEN_DIR", tmp_path_factory.mktemp("no-golden-set"))
     result = runner.invoke(app, ["eval", "--subset", "10"])
     assert result.exit_code == 2
-    assert "Built in Step 17" in result.output
+    assert "golden set" in result.output and "no labels yet" in result.output
 
 
 def test_orchestrated_runs_record_their_kind(engine_db: str) -> None:
