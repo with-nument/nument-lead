@@ -150,7 +150,7 @@ def snapshot(bid: str) -> dict[str, Any]:
 def test_verify_writes_facts_contacts_and_status_and_is_idempotent(pipeline_db: str) -> None:
     ids = seed_academy(pipeline_db)
     stats = verify.run(rc_for(), router=FakeRouter({}), deps=DEPS)
-    assert stats["businesses"] == 1 and stats["status.researched"] == 1
+    assert stats["businesses"] == 1 and stats["status.researched"] == 1 and "errors" not in stats
     snap = snapshot(ids["business"])
     by_id = {str(f["id"]): f for f in snap["facts"]}
     assert by_id[ids["invented"]]["verified"] is False
