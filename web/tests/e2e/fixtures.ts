@@ -16,8 +16,13 @@ export type TestUser = { id: string; email: string; password: string }
 export type LeadKey = 'new1' | 'new2' | 'contacted' | 'talking' | 'proposal'
 export type Run = {
   runId: string
+  /** The everyday test users. Their product tour is already done, so it never covers the page. */
   admin: TestUser
   caller: TestUser
+  /** Fresh users for the tour specs: no tour yet, and one still on a temporary password. */
+  tourAdmin: TestUser
+  tourCaller: TestUser
+  tourNew: TestUser
   businessIds: string[]
   leadIds: Record<LeadKey, string>
   names: Record<LeadKey, string>
@@ -60,16 +65,18 @@ export async function assertFixtureLead(leadId: string, run: Run = readRun()) {
   }
 }
 
-async function createUser(sb: ReturnType<typeof serviceClient>, role: 'admin' | 'caller', runId: string): Promise<TestUser> {
-  const email = `e2e-${role}-${runId}@example.com`
+type UserPlan = { key: string; role: 'admin' | 'caller'; name: string; tourDone: boolean; mustChange?: boolean }
+
+async function createUser(sb: ReturnType<typeof serviceClient>, plan: UserPlan, runId: string): Promise<TestUser> {
+  const { key, role, name } = plan
+  const email = `e2e-${key}-${runId}@example.com`
   const password = strongPassword()
-  const name = role === 'admin' ? 'E2E Admin' : 'E2E Caller'
   const { data, error } = await sb.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
-    user_metadata: { full_name: name },
-    app_metadata: { must_change_password: false },
+    user_metadata: plan.tourDone ? { full_name: name, tour_completed_at: new Date().toISOString() } : { full_name: name },
+    app_metadata: { must_change_password: Boolean(plan.mustChange) },
   })
   if (error || !data.user) throw new Error(`Could not create the ${role} test user (${error?.code ?? 'unknown'}).`)
   const { error: pe } = await sb.from('profiles').upsert({ user_id: data.user.id, full_name: name, role }, { onConflict: 'user_id' })
@@ -80,12 +87,20 @@ async function createUser(sb: ReturnType<typeof serviceClient>, role: 'admin' | 
 export const GOOD_MESSAGE =
   'Hi Test Owner, saw your clinic is hiring a receptionist to handle calls and bookings. We are Nument, a small team that sets up WhatsApp booking replies so patients get answers even when the desk is busy. Would a short look at how it works be useful?'
 
-/** Two test users and five fixture leads (2 new, 3 on the pipeline, one with a deal value). */
+/**
+ * Five test users and five fixture leads (2 new, 3 on the pipeline, one with a deal value).
+ * E2E_FIXTURE_LEADS=0 skips the leads, to see the app as it is with no leads at all.
+ */
 export async function createFixtures(): Promise<Run> {
   const sb = serviceClient()
   await deleteFixtures() // leftovers from an interrupted run, if any
   const runId = `${Date.now().toString(36)}${randomBytes(2).toString('hex')}`
-  const [admin, caller] = [await createUser(sb, 'admin', runId), await createUser(sb, 'caller', runId)]
+  const admin = await createUser(sb, { key: 'admin', role: 'admin', name: 'E2E Admin', tourDone: true }, runId)
+  const caller = await createUser(sb, { key: 'caller', role: 'caller', name: 'E2E Caller', tourDone: true }, runId)
+  const tourAdmin = await createUser(sb, { key: 'touradmin', role: 'admin', name: 'E2E Tour Admin', tourDone: false }, runId)
+  const tourCaller = await createUser(sb, { key: 'tourcaller', role: 'caller', name: 'E2E Tour Caller', tourDone: false }, runId)
+  const tourNew = await createUser(sb, { key: 'tournew', role: 'caller', name: 'E2E Tour New', tourDone: false, mustChange: true }, runId)
+  const withLeads = process.env.E2E_FIXTURE_LEADS !== '0'
   const now = Date.now()
   const day = 86_400_000
   const plan: { key: LeadKey; stage: string; grade: 'A' | 'B'; city: string }[] = [
@@ -99,7 +114,7 @@ export async function createFixtures(): Promise<Run> {
   const phones: string[] = []
   const leadIds = {} as Run['leadIds']
   const names = {} as Run['names']
-  for (const [i, p] of plan.entries()) {
+  for (const [i, p] of (withLeads ? plan : []).entries()) {
     const n = i + 1
     const name = `${FIXTURE_PREFIX} Clinic ${n} ${runId}`
     names[p.key] = name
@@ -189,7 +204,7 @@ export async function createFixtures(): Promise<Run> {
     if (le) throw le
     leadIds[p.key] = l.id
   }
-  const run: Run = { runId, admin, caller, businessIds, leadIds, names, phones }
+  const run: Run = { runId, admin, caller, tourAdmin, tourCaller, tourNew, businessIds, leadIds, names, phones }
   saveRun(run)
   return run
 }

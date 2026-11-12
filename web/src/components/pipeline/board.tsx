@@ -104,7 +104,7 @@ export function Board({ cards, canEdit, isAdmin }: { cards: CardView[]; canEdit:
   }
 
   const columns = (
-    <div className="relative flex gap-3 overflow-x-auto pb-4" role="list" aria-label="Pipeline stages">
+    <div className="relative flex gap-3 overflow-x-auto pb-4" role="list" aria-label="Pipeline stages" data-tour="pipeline-board">
       {BOARD_STAGES.map((s) => (
         <Column key={s.value} stage={s.value} label={s.label} closed={s.closed} cards={byStage.get(s.value) ?? []} canEdit={canEdit} isAdmin={isAdmin} />
       ))}

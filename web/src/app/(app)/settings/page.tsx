@@ -31,7 +31,7 @@ async function Profile({ searchParams }: Pick<PageProps<'/settings'>, 'searchPar
           </div>
         </div>
       ) : null}
-      <Card aria-labelledby="password-title">
+      <Card aria-labelledby="password-title" data-tour="settings-password">
         <CardHeader id="password-title" title="Password" />
         <CardBody>
           <PasswordForm forced={forced} />

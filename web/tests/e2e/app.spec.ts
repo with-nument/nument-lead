@@ -114,6 +114,11 @@ test('Admin creates a user; a new caller must change the password and never sees
   await caller.getByLabel('New password').fill(fresh)
   await caller.getByLabel('Type it again').fill(fresh)
   await caller.getByRole('button', { name: 'Set my password' }).click()
+  // A brand new user gets the product tour on Today; skipping it lets the checks below see the page.
+  const tour = caller.getByTestId('tour')
+  await expect(tour).toBeVisible()
+  await tour.getByRole('button', { name: 'Skip tour' }).click()
+  await expect(tour).toBeHidden()
   await expect(caller.getByRole('heading', { name: 'Today' })).toBeVisible()
 
   await caller.goto(`/leads/${run.leadIds.proposal}`)

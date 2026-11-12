@@ -5,6 +5,7 @@ import { connection } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { mustChangePassword } from '@/lib/password-flag'
 import { isRole, type Role } from '@/lib/roles'
+import { completedAtOf } from '@/lib/tour'
 
 export type SessionUser = {
   id: string
@@ -12,6 +13,8 @@ export type SessionUser = {
   name: string
   role: Role
   mustChangePassword: boolean
+  /** When the product tour was finished or skipped (user_metadata, so only ever used to hide the tour). */
+  tourCompletedAt: string | null
 }
 
 /**
@@ -42,6 +45,7 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     name: profile.full_name?.trim() || email.split('@')[0] || 'User',
     role: profile.role,
     mustChangePassword: mustChangePassword(user.app_metadata),
+    tourCompletedAt: completedAtOf(user.user_metadata),
   }
 })
 

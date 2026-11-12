@@ -112,7 +112,7 @@ async function Lead({ params, searchParams }: Pick<PageProps<'/leads/[id]'>, 'pa
           </div>
         </div>
 
-        <div className="mt-5 flex flex-wrap items-end gap-3 rounded-2xl border border-line-2 bg-surface p-4">
+        <div data-tour="lead-controls" className="mt-5 flex flex-wrap items-end gap-3 rounded-2xl border border-line-2 bg-surface p-4">
           {editable ? (
             <>
               <StageSelect leadId={lead.id} stage={lead.stage} isAdmin={isAdmin} />

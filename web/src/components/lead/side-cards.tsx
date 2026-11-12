@@ -28,7 +28,7 @@ export function NotesCard({ leadId, summary, canEdit }: { leadId: string; summar
   const { pending, run } = useRun()
   const [text, setText] = useState('')
   return (
-    <Card aria-labelledby="notes-title">
+    <Card aria-labelledby="notes-title" data-tour="lead-notes">
       <CardHeader id="notes-title" title="Notes" description="The newest note is also shown in the sheet's Notes column." />
       <CardBody className="flex flex-col gap-3">
         {summary ? <p className="rounded-xl bg-surface-2 px-3.5 py-2.5 text-base whitespace-pre-line text-tx-2">{summary}</p> : <p className="text-base text-tx-3">No notes yet.</p>}
@@ -73,7 +73,7 @@ export function DealCard({
   const [uploading, startUpload] = useTransition()
   const foreign = country && country.trim().toLowerCase() !== 'in'
   return (
-    <Card aria-labelledby="deal-title">
+    <Card aria-labelledby="deal-title" data-tour="lead-deal">
       <CardHeader id="deal-title" title="Deal" description="Admins only. Callers never see this card." />
       <CardBody className="flex flex-col gap-4">
         <form

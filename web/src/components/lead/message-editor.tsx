@@ -125,7 +125,7 @@ export function MessageCard({
     })
 
   return (
-    <Card aria-labelledby="message-title">
+    <Card aria-labelledby="message-title" data-tour="lead-message">
       <CardHeader
         id="message-title"
         title="Message"

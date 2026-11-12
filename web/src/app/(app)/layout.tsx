@@ -2,7 +2,8 @@ import Link from 'next/link'
 import { Suspense } from 'react'
 import { Logo } from '@/components/brand/logo'
 import { NavLinksStatic } from '@/components/shell/nav'
-import { AccountMenu, MobileMenu, SidebarNav, TopbarStatus } from '@/components/shell/shell-parts'
+import { AccountMenu, MobileMenu, SidebarNav, TopbarStatus, TourHost } from '@/components/shell/shell-parts'
+import { TourButton } from '@/components/tour/tour-button'
 
 /**
  * App shell. The frame (sidebar, top bar, page area) is prerendered; everything that depends on
@@ -40,6 +41,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <Suspense fallback={null}>
               <TopbarStatus />
             </Suspense>
+            <TourButton />
             <Suspense fallback={<span className="size-10 rounded-full bg-surface-2" />}>
               <AccountMenu />
             </Suspense>
@@ -49,6 +51,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+      <Suspense fallback={null}>
+        <TourHost />
+      </Suspense>
     </div>
   )
 }

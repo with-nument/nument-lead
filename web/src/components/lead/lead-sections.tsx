@@ -49,7 +49,7 @@ export function WhyCard({ score, pitchMode, testGroup, judgeNote }: { score: Sco
   const lines = score ? reasonLines(score.reasons) : []
   const note = score?.judge_note ?? judgeNote
   return (
-    <Card aria-labelledby="why-title">
+    <Card aria-labelledby="why-title" data-tour="lead-why">
       <CardHeader id="why-title" title="Why this lead" />
       <CardBody className="flex flex-col gap-5">
         {score ? (
@@ -365,7 +365,7 @@ function sentence(a: Activity, who: string): string {
 
 export function Timeline({ activities, names, now }: { activities: Activity[]; names: Map<string, string>; now: Date }) {
   return (
-    <Card aria-labelledby="timeline-title">
+    <Card aria-labelledby="timeline-title" data-tour="lead-timeline">
       <CardHeader id="timeline-title" title="Timeline" description="Every change, from the app, the sheet and the engine." />
       <CardBody>
         {activities.length ? (

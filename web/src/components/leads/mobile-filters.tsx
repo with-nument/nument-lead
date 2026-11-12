@@ -11,7 +11,7 @@ export function MobileFilters({ filters, options, showOwner }: { filters: LeadFi
   return (
     <Drawer>
       <DrawerTrigger asChild>
-        <Button variant="secondary" className="lg:hidden">
+        <Button variant="secondary" className="lg:hidden" data-tour="lead-filters-mobile">
           <SlidersHorizontal aria-hidden />
           Filters{count ? ` · ${count}` : ''}
         </Button>
