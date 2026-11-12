@@ -58,6 +58,8 @@ jobs:
       ASSOCIATE_NAME: ${{ vars.ASSOCIATE_NAME }}
       USER_AGENT: ${{ vars.USER_AGENT }}
       ALERT_EMAIL: ${{ vars.ALERT_EMAIL }}
+      ALERT_EMAIL_FROM: ${{ vars.ALERT_EMAIL_FROM }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }} # optional: alerts and reports by email (14.7)
       IN_SEGMENT: ${{ inputs.segment }}
       IN_LIMIT: ${{ inputs.limit }}
       IN_DRY_RUN: ${{ inputs.dry_run }}
@@ -81,6 +83,11 @@ jobs:
         if: always()
         working-directory: engine
         run: uv run nlead health --summary --env "$APP_ENV" >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Email new alerts
+        if: always()
+        working-directory: engine
+        run: uv run nlead health --notify --env "$APP_ENV" || true # quiet unless ALERT_EMAIL and RESEND_API_KEY are set
 
       - name: Report the failure
         if: failure() && github.event_name == 'schedule'

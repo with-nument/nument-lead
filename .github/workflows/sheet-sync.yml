@@ -52,9 +52,11 @@ jobs:
       APP_ENV: ${{ inputs.env || 'prod' }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }} # 09:00 catch-up only
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }} # the 09:00 catch-up only (verify, score, judge, message)
       GEMINI_API_KEY_BACKUP: ${{ secrets.GEMINI_API_KEY_BACKUP }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
       GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
       SHEET_MASTER_ID: ${{ vars.SHEET_MASTER_ID }}
       SHEET_CALLER_ID: ${{ vars.SHEET_CALLER_ID }}
