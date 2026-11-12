@@ -54,3 +54,15 @@ export async function getSuppression() {
   if (error) throw error
   return data ?? []
 }
+
+/** Settings > Email recipients. Admin only: Row Level Security returns nothing to anyone else. */
+export async function getRecipients() {
+  const sb = await createClient()
+  const { data, error } = await sb
+    .from('notify_recipients')
+    .select('id, email, name, morning, alerts, weekly, active, created_at')
+    .order('created_at', { ascending: true })
+    .limit(200)
+  if (error) throw error
+  return data ?? []
+}

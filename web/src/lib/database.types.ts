@@ -960,6 +960,50 @@ export type Database = {
         }
         Relationships: []
       }
+      notify_recipients: {
+        Row: {
+          active: boolean
+          alerts: boolean
+          created_at: string
+          created_by: string | null
+          email: string
+          id: string
+          morning: boolean
+          name: string | null
+          weekly: boolean
+        }
+        Insert: {
+          active?: boolean
+          alerts?: boolean
+          created_at?: string
+          created_by?: string | null
+          email: string
+          id?: string
+          morning?: boolean
+          name?: string | null
+          weekly?: boolean
+        }
+        Update: {
+          active?: boolean
+          alerts?: boolean
+          created_at?: string
+          created_by?: string | null
+          email?: string
+          id?: string
+          morning?: boolean
+          name?: string | null
+          weekly?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notify_recipients_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       pages: {
         Row: {
           business_id: string | null

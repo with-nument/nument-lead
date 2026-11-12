@@ -14,6 +14,10 @@ const ServerEnv = z.object({
     .optional(),
   GH_DISPATCH_TOKEN: z.string().optional(),
   GH_DISPATCH_REF: z.string().min(1).default('main'),
+  // Settings > Email recipients: "Send test email". Server only, like the service role key.
+  RESEND_API_KEY: z.string().min(10).optional(),
+  ALERT_EMAIL_FROM: z.string().min(3).default('Nument Leads <leads@nument.in>'),
+  ALERT_REPLY_TO: z.email().default('heyy.abhigyan@gmail.com'),
 })
 
 export type ServerEnv = z.infer<typeof ServerEnv>
@@ -31,6 +35,9 @@ export function env(): ServerEnv {
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || undefined,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || undefined,
     SUPABASE_URL: process.env.SUPABASE_URL || undefined,
+    RESEND_API_KEY: process.env.RESEND_API_KEY || undefined,
+    ALERT_EMAIL_FROM: process.env.ALERT_EMAIL_FROM?.trim() || undefined,
+    ALERT_REPLY_TO: process.env.ALERT_REPLY_TO?.trim() || undefined,
   })
   if (!parsed.success) {
     const fields = parsed.error.issues.map((i) => i.path.join('.')).join(', ')
