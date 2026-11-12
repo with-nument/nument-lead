@@ -22,6 +22,7 @@ EXPECTED_FILES = [
     "0007_learning.sql",
     "0008_llm.sql",
     "0009_sheet_targets.sql",
+    "0010_review_sources.sql",
 ]
 
 

@@ -195,6 +195,7 @@ SourceName = Literal[
     "careers_watch",
     "adzuna",
     "practo",
+    "maps_reviews",
     "legacy",
     "legacy_skip",
 ]

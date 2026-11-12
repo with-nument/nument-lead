@@ -28,7 +28,8 @@ def test_settings_switch_turns_a_source_off(clean_db: str) -> None:
     db.set_setting("sources_enabled", {**flags, "apna": False})
     usable, why = health.source_status("apna")
     assert not usable and "settings.sources_enabled" in why
-    assert health.source_status("practo")[0] is False  # off by default (Step 5.7)
+    assert health.source_status("adzuna")[0] is False  # off by default (no keys yet)
+    assert health.source_status("practo")[0] is True  # founder approved (migration 0010)
 
 
 def test_disabled_and_paused_sources(clean_db: str) -> None:
