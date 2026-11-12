@@ -24,6 +24,8 @@ win; this page is updated in the same change.
   User-Agent, obeying robots.txt path rules, and stopping when blocked.
 - Search-engine results that mention LinkedIn or X posts. The snippet is read; the page itself is never opened.
 
+Each source, its pace and what the first live check measured: [sources.md](sources.md).
+
 **Never**
 - Logging in to any third-party site, or using fake accounts.
 - Solving or bypassing CAPTCHAs.
@@ -44,7 +46,7 @@ never open their own HTTP client; a test fails the build if they do.
 | robots.txt | Read once per host per run. Our product token `NumentLeadBot` first, then `*`. 401 or 403 means the whole host is off limits; 404 means allowed; a disallowed page is skipped and recorded |
 | Honest identity | `User-Agent: NumentLeadBot/1.0 (+https://nument.in)` on every request, including the browser used for script-heavy pages. Never a browser User-Agent, never rotated |
 | Pace | Business websites 2 seconds per host and 8 pages per business a night; registries 3 seconds; Practo 5 seconds; grey sources 6 seconds; official APIs at their documented limits |
-| Stop when blocked | 401, 403, 429, 503 or a challenge page raises `SourceBlocked`: the source (or host) rests for 7 days. Two blocks in 7 days switch a grey source off until the founder turns it back on |
+| Stop when blocked | 401, 403, 429, 503 or a challenge page raises `SourceBlocked`: the source rests 24 hours, then 72 hours, then 7 days for repeated blocks in 30 days, and a blocked business website is skipped for the rest of the run. Two blocks in 7 days switch a grey source off until the founder turns it back on |
 | No proxies | The HTTP client ignores proxy settings in the environment and has no proxy configured; a test checks it |
 | No evasion tools | CI fails if a CAPTCHA solver, stealth plugin, proxy-rotation service or private-API scraper appears in the dependencies |
 
