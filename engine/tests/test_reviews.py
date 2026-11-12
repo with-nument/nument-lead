@@ -141,3 +141,32 @@ def test_a_fresh_grounded_review_count_passes_the_size_rule() -> None:
     stale = {"id": "b1", "review_count": 874, "extra": {"reviews_at": (now - timedelta(days=40)).isoformat()}}
     assert eval_size_rule(rule, fresh, World(), now) is True
     assert eval_size_rule(rule, stale, World(), now) is None
+
+
+class Down(Exception):
+    pass
+
+
+Down.__name__ = "AllProvidersDown"
+
+
+def test_one_business_without_a_cited_answer_is_skipped_not_the_stage(seg_db: str) -> None:
+    with pf.connect(seg_db) as conn:
+        first, second = pf.business(conn, review_count=None), pf.business(conn, review_count=None)
+
+    class Flaky(FakeRouter):
+        def run_result(self, task: str, inputs: dict[str, Any], **_: Any) -> Result:
+            self.calls.append(inputs)
+            if len(self.calls) == 1:
+                raise Down("lookup_reviews: no usable provider (answered without using web search)")
+            return Result(lookup(), GROUNDING)
+
+    stats = reviews.run(pf.rc_for(), router=Flaky([]))
+    assert stats["error.AllProvidersDown"] == 1 and stats["looked_up"] == 1
+    counts = {
+        r["id"]: r["review_count"]
+        for r in db.fetch_all(
+            "select id::text as id, review_count from public.businesses where id in (%s, %s)", [first, second]
+        )
+    }
+    assert sorted(v for v in counts.values() if v is not None) == [874]

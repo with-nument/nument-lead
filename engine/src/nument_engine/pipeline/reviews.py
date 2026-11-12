@@ -30,6 +30,7 @@ log = get_logger()
 TASK: Final = "lookup_reviews"
 SETTING: Final = "reviews.lookups_per_day"
 DEFAULT_PER_DAY: Final = 120
+MAX_DOWN_STREAK: Final = 3  # consecutive "no usable provider" answers before the stage stops
 KEEP_DAYS: Final = 30
 SOURCE: Final = "grounded_search"
 COUNTRY_NAMES: Final[dict[str, str]] = {"in": "India", "ae": "the UAE", "sa": "Saudi Arabia", "qa": "Qatar"}
@@ -186,6 +187,7 @@ def run(rc: RunContext, router: Any = None) -> dict[str, Any]:
         return dict(stats)
     budget = getattr(router, "budget", None)
     spent = 0.0
+    down_streak = 0
     for b in rows:
         quota = budget.grounding_quota_left() if budget is not None and hasattr(budget, "grounding_quota_left") else 1
         if quota is not None and quota <= 0:
@@ -194,13 +196,17 @@ def run(rc: RunContext, router: Any = None) -> dict[str, Any]:
         seg = segments[b["segment_id"]]
         try:
             res = run_result(TASK, _inputs(b, seg))
-        except Exception as exc:  # typed router errors: stop on budget or providers down, skip on a bad answer
+        except Exception as exc:  # typed router errors: stop on budget, skip one stubborn business
             name = type(exc).__name__
             stats[f"error.{name}"] += 1
-            if name in ("BudgetExceeded", "BudgetStop", "AllProvidersDown"):
+            down_streak += name == "AllProvidersDown"
+            # One business whose answers never cite a search must not stop the stage (live run 12 Nov); three
+            # in a row look like a real outage.
+            if name in ("BudgetExceeded", "BudgetStop") or down_streak >= MAX_DOWN_STREAK:
                 log.warning("reviews.stopped", reason=f"{name}: {str(exc)[:200]}")
                 break
             continue
+        down_streak = 0
         found = accepted(res.output, res.grounding)
         sources = (res.grounding or {}).get("sources") or []
         url = str(sources[0].get("uri")) if sources else None
