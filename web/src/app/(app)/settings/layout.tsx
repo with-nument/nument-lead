@@ -6,7 +6,13 @@ import { requireUser } from '@/lib/auth'
 async function Tabs() {
   const user = await requireUser()
   const tabs = [{ href: '/settings', label: 'Profile and password' }]
-  if (user.role === 'admin') tabs.push({ href: '/settings/users', label: 'Users and roles' }, { href: '/settings/suppression', label: 'Do not contact' })
+  if (user.role === 'admin') {
+    tabs.push(
+      { href: '/settings/users', label: 'Users and roles' },
+      { href: '/settings/suppression', label: 'Do not contact' },
+      { href: '/settings/email', label: 'Email recipients' },
+    )
+  }
   return <LinkTabs tabs={tabs} />
 }
 
