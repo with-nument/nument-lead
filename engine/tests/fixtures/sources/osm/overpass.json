@@ -1,0 +1,42 @@
+{
+ "version": 0.6,
+ "elements": [
+  {
+   "type": "node",
+   "id": 101,
+   "lat": 18.56,
+   "lon": 73.79,
+   "tags": {
+    "amenity": "dentist",
+    "healthcare": "dentist",
+    "name": "Bright Smile Dental",
+    "website": "https://brightsmile-nlead.in",
+    "phone": "+91 20 2551 1111",
+    "addr:street": "Baner Road",
+    "addr:suburb": "Baner"
+   }
+  },
+  {
+   "type": "way",
+   "id": 202,
+   "center": {
+    "lat": 18.52,
+    "lon": 73.85
+   },
+   "tags": {
+    "healthcare": "clinic",
+    "healthcare:speciality": "dermatology",
+    "name": "Derma Plus"
+   }
+  },
+  {
+   "type": "node",
+   "id": 303,
+   "lat": 18.5,
+   "lon": 73.8,
+   "tags": {
+    "amenity": "clinic"
+   }
+  }
+ ]
+}
