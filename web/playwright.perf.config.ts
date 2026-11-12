@@ -5,6 +5,7 @@ import { defineConfig, devices } from '@playwright/test'
 // Page timings: TTFB, content ready, full load and Supabase calls per page, signed in as the temporary
 // admin from the e2e fixtures (created and deleted around the run, never a real user).
 // `pnpm build` first, then: PERF_OUT=/abs/path/result.json pnpm exec playwright test -c playwright.perf.config.ts
+// PERF_SERVER=/abs/path/server.js measures another standalone build (for example the one before a change).
 if (existsSync('.env.local')) process.loadEnvFile('.env.local')
 
 const port = process.env.PERF_PORT ?? '3100'
@@ -25,7 +26,7 @@ export default defineConfig({
     channel: process.env.PW_CHANNEL || undefined,
   },
   webServer: {
-    command: 'node .next/standalone/server.js',
+    command: `node ${process.env.PERF_SERVER ?? '.next/standalone/server.js'}`,
     url: `http://127.0.0.1:${port}/api/health`,
     reuseExistingServer: false,
     timeout: 60_000,
