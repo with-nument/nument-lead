@@ -30,7 +30,9 @@ _MONTHS = itertools.count()
 
 
 def unique_day() -> datetime:
-    """Noon IST on the 15th of a month that no other test in this session uses (from 2031 on)."""
+    """Noon IST on the 15th of a month that no other test in this session uses (from 2031 on).
+
+    The fixture deletes cost rows stamped with these future dates after each test."""
     n = next(_MONTHS)
     return datetime(2031 + n // 12, n % 12 + 1, 15, 6, 30, tzinfo=UTC)
 
@@ -171,6 +173,15 @@ def make_router(
 
 
 def reset_llm_state() -> None:
+    """Empty the router's tables and remove what these tests wrote elsewhere, so other suites see a clean
+    database: cost rows stamped by the fake clocks (always after 2031, so "today" sums elsewhere would
+    count them) and the test leads with their activities."""
+    db.execute("delete from public.costs where at > now() + interval '1 day'")
+    db.execute(
+        "delete from public.leads where business_id in "
+        "(select id from public.businesses where name like 'LLM Test Clinic %')"
+    )
+    db.execute("delete from public.businesses where name like 'LLM Test Clinic %'")
     db.execute("delete from public.llm_batch_reservations")
     db.execute("delete from public.llm_batches")
     db.execute("delete from public.llm_cache")

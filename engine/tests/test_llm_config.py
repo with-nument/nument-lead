@@ -365,6 +365,25 @@ PIPELINE_SHAPES: dict[str, dict[str, Any]] = {
         "avoid_openers": ["hi, saw your"],
         "avoid_questions": ["worth a look?"],
     },
+    # ops/audit.py (Step 17.6): facts carry no quote
+    "weekly_audit": {
+        "business_name": "Sunrise Dental",
+        "segment_id": "clinics-in",
+        "grade": "B",
+        "pitch_mode": "visible_pain",
+        "message": "Hi, saw Sunrise Dental is hiring. We're Nument. Worth a look?",
+        "facts": [{"id": "f-1", "field": "branches", "value": {"count": 2}}],
+        "pages": [{"url": "https://x.in/", "text": "Sunrise Dental. Two branches in Baner."}],
+    },
+    # evals/pipeline.py (Step 17): code-verified context instead of a context block, signals without age_days
+    "extract_facts": {
+        "segment_id": "clinics-in",
+        "business_name": "Sunrise Dental",
+        "website": "https://x.in/",
+        "structured_data": {},
+        "tech_flags": {},
+        "pages": [{"url": "https://x.in/", "text": "Sunrise Dental. f-1 Two branches in Baner."}],
+    },
     "check_message": {
         "message": "Hi, saw Sunrise Dental is hiring. We're Nument. Worth a look?",
         "message_alt": "Hi, quick one. We're Nument. Is the role still open?",
@@ -386,8 +405,7 @@ def test_prompts_render_with_the_pipeline_input_shapes(task: str) -> None:
     prompt = prompts.load(load_registry("balanced").task(task).prompt)
     system, user = prompt.render(**PIPELINE_SHAPES[task])
     assert "{{" not in system + user
-    for fact_id in ("f-1",):
-        assert fact_id in user
+    assert "f-1" in user
     if task == "write_message":
         assert "Greeting to start with: Hi," in user and "too long" in user and "worth a look?" in user
     if task == "judge_lead":
@@ -405,3 +423,14 @@ def test_appendix_a_minimum_inputs_are_enough(task: str) -> None:
     if task == "write_message":
         minimal["signals"] = [{"id": "s-1", "type": "news"}]
     prompt.render(**minimal)
+
+
+def test_judge_renders_with_eval_signals_that_have_no_age() -> None:
+    """evals/pipeline.py passes signal rows (points, observed_at, expires_at) without age_days or summary."""
+    shape = dict(PIPELINE_SHAPES["judge_lead"])
+    shape["signals"] = [
+        {"id": "s-9", "type": "news", "category": "growth", "points": 3, "observed_at": "2026-11-01",
+         "expires_at": None, "quote": None, "url": "https://x.in/news", "details": {"event": "launch"}}
+    ]  # fmt: skip
+    _, user = prompts.load("judge_lead.md").render(**shape)
+    assert '- [s-9] news (growth): {"event": "launch"}' in user

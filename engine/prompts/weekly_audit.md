@@ -29,7 +29,7 @@ Message sent or ready:
 
 Stored facts:
 {% for f in facts %}
-- [{{ f.id }}] {{ f.field }}: {{ f.value | tojson }}{% if f.quote %} ("{{ f.quote }}"){% endif %}
+- [{{ f.id }}] {{ f.field }}: {{ f.value | tojson }}{% if f.quote is defined and f.quote %} ("{{ f.quote }}"){% endif %}
 
 {% endfor %}
 Fresh page texts:

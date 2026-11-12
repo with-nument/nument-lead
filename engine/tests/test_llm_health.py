@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from typer.testing import CliRunner
@@ -102,5 +103,6 @@ def test_cli_health_models_without_keys_fails_clearly(llm_db: str) -> None:
 def test_cli_health_help_lists_the_router_flags() -> None:
     result = CliRunner().invoke(app, ["health", "--help"])
     assert result.exit_code == 0
-    for flag in ("--models", "--llm-smoke", "--providers"):
-        assert flag in result.output
+    plain = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", result.output)  # rich colours help text in CI
+    for flag in ("--models", "--llm-smoke", "--providers", "--prune", "--summary"):
+        assert flag in plain

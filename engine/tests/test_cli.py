@@ -8,7 +8,10 @@ from typer.testing import CliRunner
 from nument_engine import db
 from nument_engine.cli import app, hoist_global_options
 
+from .cli_text import plain
+
 runner = CliRunner()
+
 
 TOP_LEVEL = [
     "universe",
@@ -66,17 +69,19 @@ EVERY_COMMAND = [
 def test_help_lists_every_command() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
+    out = plain(result.stdout)
     for name in TOP_LEVEL:
-        assert name in result.stdout
+        assert name in out
     for flag in ("--env", "--segment", "--limit", "--dry-run", "--max-spend-inr"):
-        assert flag in result.stdout
+        assert flag in out
 
 
 def test_run_help_lists_every_orchestrated_run() -> None:
     result = runner.invoke(app, ["run", "--help"])
     assert result.exit_code == 0
+    out = plain(result.stdout)
     for name in ("night", "morning", "sheet", "weekly", "monthly"):
-        assert name in result.stdout
+        assert name in out
 
 
 @pytest.mark.parametrize("command", EVERY_COMMAND, ids=" ".join)
@@ -84,7 +89,7 @@ def test_every_command_has_help_without_any_configuration(command: list[str], mo
     monkeypatch.delenv("DATABASE_URL")
     result = runner.invoke(app, [*command, "--help"])
     assert result.exit_code == 0, result.output
-    assert "Usage" in result.stdout
+    assert "Usage" in plain(result.stdout)
 
 
 def test_dev_refuses_live_sheet_ids(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -108,7 +113,7 @@ def test_dev_refuses_live_sheet_ids(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_bad_global_flags_are_rejected(args: list[str], message: str) -> None:
     result = runner.invoke(app, args)
     assert result.exit_code == 2
-    assert message in result.output
+    assert message in plain(result.output)
 
 
 def test_configuration_errors_are_clear_and_never_echo_values(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -116,8 +121,9 @@ def test_configuration_errors_are_clear_and_never_echo_values(monkeypatch: pytes
     monkeypatch.setenv("SHEET_MASTER_ID", "secret-sheet-id-123")
     result = runner.invoke(app, ["signals"])
     assert result.exit_code == 2
-    assert "Configuration error for APP_ENV=dev" in result.output
-    assert "database_url" in result.output
+    out = plain(result.output)
+    assert "Configuration error for APP_ENV=dev" in out
+    assert "database_url" in out
     assert "secret-sheet-id-123" not in result.output
 
 
@@ -125,7 +131,7 @@ def test_unreachable_database_is_reported_plainly(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(db, "POOL_TIMEOUT_S", 1.0)
     result = runner.invoke(app, ["signals"])
     assert result.exit_code == 1
-    assert "cannot reach the database" in result.output
+    assert "cannot reach the database" in plain(result.output)
     assert "nlead-test-guard" not in result.output  # the connection string is never printed
 
 
@@ -140,10 +146,15 @@ def test_unbuilt_stage_says_so_and_records_a_failed_run(engine_db: str) -> None:
     assert row["stats"]["segments"] == ["clinics-in"] and row["stats"]["limit"] == 5
 
 
-def test_eval_finds_the_evals_package(engine_db: str) -> None:
+def test_eval_finds_the_evals_package(
+    engine_db: str, monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    import evals.run_eval
+
+    monkeypatch.setattr(evals.run_eval, "GOLDEN_DIR", tmp_path_factory.mktemp("no-golden-set"))
     result = runner.invoke(app, ["eval", "--subset", "10"])
     assert result.exit_code == 2
-    assert "Built in Step 17" in result.output
+    assert "golden set" in result.output and "no labels yet" in result.output
 
 
 def test_orchestrated_runs_record_their_kind(engine_db: str) -> None:
