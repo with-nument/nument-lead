@@ -20,7 +20,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <Logo />
           </Link>
         </div>
-        <nav aria-label="Main" className="flex-1 overflow-y-auto px-3 pt-3">
+        <nav aria-label="Main" className="relative flex-1 overflow-y-auto px-3 pt-3">
           <Suspense fallback={<NavLinksStatic />}>
             <SidebarNav />
           </Suspense>

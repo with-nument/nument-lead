@@ -8,7 +8,7 @@ import { cn } from '@/lib/cn'
 export function LinkTabs({ tabs, className }: { tabs: { href: string; label: string }[]; className?: string }) {
   const path = usePathname()
   return (
-    <nav aria-label="Sections" className={cn('mb-6 flex gap-5 overflow-x-auto border-b border-line-2', className)}>
+    <nav aria-label="Sections" className={cn('relative mb-6 flex gap-5 overflow-x-auto border-b border-line-2', className)}>
       {tabs.map((t) => {
         const active = path === t.href
         return (

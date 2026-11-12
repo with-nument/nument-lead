@@ -114,7 +114,7 @@ async function Insights({ searchParams }: Pick<PageProps<'/insights'>, 'searchPa
 
           <Card aria-labelledby="works-title">
             <CardHeader id="works-title" title={`What works · by ${GROUPS[group].toLowerCase()}`} description={`Rows with fewer than ${MIN_SAMPLE} contacted leads are too few to judge.`} />
-            <div className="mt-3 overflow-x-auto border-t border-line-2">
+            <div className="relative mt-3 overflow-x-auto border-t border-line-2">
               <table className="w-full text-left text-base">
                 <thead>
                   <tr>

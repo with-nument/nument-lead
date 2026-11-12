@@ -82,7 +82,7 @@ async function Engine() {
 
       <Card aria-labelledby="segments-title">
         <CardHeader id="segments-title" title="Segments" description="Daily quota is how many businesses the engine researches per day in that segment." />
-        <div className="mt-3 overflow-x-auto border-t border-line-2">
+        <div className="relative mt-3 overflow-x-auto border-t border-line-2">
           <table className="w-full text-left text-base">
             <thead>
               <tr>
@@ -119,7 +119,7 @@ async function Engine() {
 
       <Card aria-labelledby="sources-title">
         <CardHeader id="sources-title" title="Sources" description="Turn a source off to stop the engine using it at once (kill switch)." />
-        <div className="mt-3 overflow-x-auto border-t border-line-2">
+        <div className="relative mt-3 overflow-x-auto border-t border-line-2">
           {data.sources.length ? (
             <table className="w-full text-left text-base">
               <thead>
@@ -164,7 +164,7 @@ async function Engine() {
 
       <Card aria-labelledby="runs-title">
         <CardHeader id="runs-title" title="Runs" description="The last 20 runs, newest first." />
-        <div className="mt-3 overflow-x-auto border-t border-line-2">
+        <div className="relative mt-3 overflow-x-auto border-t border-line-2">
           {data.runs.length ? (
             <table className="w-full text-left text-base">
               <thead>
