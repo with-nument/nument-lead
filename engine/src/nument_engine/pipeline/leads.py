@@ -79,7 +79,7 @@ class Candidate:
         """whatsapp for a mobile; email when only a landline or an email; form for a contact form only."""
         if self.reach_kind in ("decision_maker_mobile", "business_mobile"):
             return "whatsapp"
-        if self.reach_kind == "email" or (self.reach_kind == "landline" and self.has_email):
+        if self.reach_kind in ("email", "decision_maker_email") or (self.reach_kind == "landline" and self.has_email):
             return "email"
         if self.reach_kind == "form":
             return "form"

@@ -42,6 +42,13 @@ reach:                          # share of the reach points: how directly we can
   form: 0.20
   none: 0.00                    # no usable contact: grade D
 
+reach_email_first:              # segments with outreach_channel: email (US, UK, AU, CA, SG; 13 Nov 2026)
+  decision_maker_email: 1.00    # a decision maker's own address, published by the business
+  email: 0.70                   # a company address published on its own site
+  phone: 0.40                   # a phone only: a call, never a cold WhatsApp
+  form: 0.30
+  none: 0.00
+
 total:
   reach_points: 20              # total = need + can_pay / cap * can_pay.points + fit bonus + reach * reach_points
 

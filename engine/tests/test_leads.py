@@ -135,3 +135,4 @@ def test_channel_follows_the_best_contact() -> None:
     assert replace(BASE, reach_kind="landline").channel == "whatsapp"
     assert replace(BASE, reach_kind="email").channel == "email"
     assert replace(BASE, reach_kind="form").channel == "form"
+    assert replace(BASE, reach_kind="decision_maker_email").channel == "email"  # email-first countries

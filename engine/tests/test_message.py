@@ -243,3 +243,21 @@ def test_only_usable_mobiles_get_a_whatsapp_link() -> None:
     assert not can_whatsapp({**mobile, "phone_type": "landline"})
     assert not can_whatsapp({**mobile, "do_not_contact": True})
     assert not can_whatsapp(mobile, frozenset({"+919876543210"}))
+
+
+def test_email_first_countries_get_the_compliance_footer(clean_db: str) -> None:
+    """13 Nov 2026 (plan 18.4): who we are, a postal address once set, and an easy opt-out; never a person."""
+    from nument_engine import db
+    from nument_engine.pipeline.message import OPT_OUT_LINE, with_footer
+    from nument_engine.segments import load_segments
+
+    segs = load_segments()
+    body = "Hi Maya,\n\nSaw you're hiring a full-stack engineer. We can ship it in weeks."
+    assert with_footer(body, segs["firms-in"]) == body  # WhatsApp-first countries: no footer
+    us = with_footer(body, segs["firms-us"])
+    assert us is not None and us.endswith(f"Team Nument\n{OPT_OUT_LINE}")
+    db.set_setting("outreach.postal_address", "Nument, 1 Example Road, New Delhi 110001, India")
+    us = with_footer(body, segs["firms-us"])
+    assert us is not None and "Team Nument\nNument, 1 Example Road" in us
+    assert with_footer(us, segs["firms-us"]) == us  # never twice
+    assert with_footer(None, segs["firms-us"]) is None

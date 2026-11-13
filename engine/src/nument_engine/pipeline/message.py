@@ -491,6 +491,24 @@ def load_day(segment_ids: Sequence[str], now: datetime) -> DayLog:
     return day
 
 
+FOOTER_SETTING: Final = "outreach.postal_address"
+OPT_OUT_LINE: Final = 'Not relevant? Just reply "no" and we won\'t write again.'
+
+
+def email_footer(address: str | None) -> str:
+    """The sign-off every email to an email-first country carries (plan 18.4: who we are, a postal address, an
+    easy opt-out; CAN-SPAM, UK PECR, Canada CASL, Australia Spam Act). Nument, never a person (memory rule)."""
+    lines = ["Team Nument", *([address.strip()] if address and address.strip() else []), OPT_OUT_LINE]
+    return "\n\n--\n" + "\n".join(lines)
+
+
+def with_footer(body: str | None, seg: Segment) -> str | None:
+    if not body or seg.outreach_channel != "email" or OPT_OUT_LINE in body:
+        return body
+    address = db.get_setting(FOOTER_SETTING)
+    return body.rstrip() + email_footer(str(address) if isinstance(address, str) else None)
+
+
 def store(li: LeadInput, best: Checked, flags: list[str], run_id: str) -> bool:
     """Write the result unless a person changed the message meanwhile. Returns True when stored."""
     d = best.draft
@@ -499,7 +517,7 @@ def store(li: LeadInput, best: Checked, flags: list[str], run_id: str) -> bool:
         "followup_d3": None if "followup_d3" in best.drop else d.followup_d3,
         "followup_d7": None if "followup_d7" in best.drop else d.followup_d7,
         "email_subject": (d.email_subject if li.needs_email and "email_subject" not in best.drop else None),
-        "email_body": (d.email_body if li.needs_email and "email_body" not in best.drop else None),
+        "email_body": with_footer(d.email_body, li.segment) if li.needs_email and "email_body" not in best.drop else None,
     }
     with db.tx("engine", {"run_id": run_id, "stage": "message"}) as conn:
         cur = conn.execute(

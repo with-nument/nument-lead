@@ -221,6 +221,9 @@ class Segment(BaseModel):
     # "map": businesses come from Overture, Places, OSM and registries. "signals_only" (the need-first track,
     # 13 Nov 2026): a business exists only because it said it needs a build (a job post or a public ask).
     universe: Literal["map", "signals_only"] = "map"
+    # How the founder reaches these businesses (plan 18.4): WhatsApp first in India and the UAE; email first in
+    # the US, the UK, Australia, Canada and Singapore, where a cold WhatsApp reads as spam (13 Nov 2026).
+    outreach_channel: Literal["whatsapp", "email"] = "whatsapp"
 
     @model_validator(mode="after")
     def _consistency(self) -> Segment:

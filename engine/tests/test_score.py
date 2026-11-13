@@ -294,6 +294,25 @@ def test_reach_ladder() -> None:
     assert reach_of([old_listing], [], c, NOW).kind == "none"
 
 
+def test_reach_in_email_first_countries() -> None:
+    """13 Nov 2026: in the US, the UK, Australia, Canada and Singapore the founder emails first, so a published
+    decision-maker or company email is the best route and a phone only means a call."""
+    c = cfg("firms-us")
+    boss = {"id": "c4", "email": "maya@brightcart.io", "source": "website", "verified": True,
+            "do_not_contact": False, "is_decision_maker": True}  # fmt: skip
+    team = {"id": "c5", "email": "hello@brightcart.io", "source": "website", "verified": True, "do_not_contact": False}
+    form = [fact("f9", "contact_form_url", {"url": "https://brightcart.io/contact"})]
+    r = reach_of([mobile(dm=True), team, boss], [], c, NOW, email_first=True)
+    assert (r.kind, r.value) == ("decision_maker_email", 1.0)
+    assert reach_of([mobile(dm=True), team], [], c, NOW, email_first=True).value == 0.7
+    assert reach_of([mobile()], form, c, NOW, email_first=True).kind == "form"
+    phone_only = reach_of([LANDLINE], [], c, NOW, email_first=True)
+    assert (phone_only.kind, phone_only.value) == ("landline", 0.4)
+    assert reach_of([], [], c, NOW, email_first=True).kind == "none"
+    assert load_segments()["firms-us"].outreach_channel == "email"
+    assert load_segments()["firms-in"].outreach_channel == "whatsapp"
+
+
 def test_pitch_mode_order() -> None:
     assert pitch_mode_of([sig("a", "review_pain", 6, 1, 90), sig("b", "public_ask", 10, 1, 14)]) == "stated_need"
     assert pitch_mode_of([sig("a", "news", 3, 1, 30), sig("b", "slow_site", 2, 1, 60)]) == "visible_pain"

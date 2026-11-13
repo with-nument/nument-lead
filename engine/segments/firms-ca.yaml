@@ -11,6 +11,7 @@ enabled: true
 timezone: America/Toronto
 currency: CAD
 universe: signals_only
+outreach_channel: email          # the founder emails from his own mailbox; a cold WhatsApp reads as spam here
 
 quota:
   daily_research: 20

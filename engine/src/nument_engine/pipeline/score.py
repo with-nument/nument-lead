@@ -137,6 +137,7 @@ class ScoringConfig:
     category_cap: Mapping[str, float] = field(default_factory=dict)  # signal category -> most need points
     fit_only_min_per_day: int = 1
     signal_points: Mapping[str, float] = field(default_factory=dict)
+    reach_email_first: Mapping[str, float] = field(default_factory=dict)  # outreach_channel: email segments
 
     @classmethod
     def build(cls, raw: Mapping[str, Any], segment_id: str, weights: Mapping[str, Any] | None = None) -> ScoringConfig:
@@ -170,6 +171,7 @@ class ScoringConfig:
             stack_bonus_per_type=float(raw["intent"]["stack_bonus_per_type"]),
             stack_bonus_max=float(raw["intent"]["stack_bonus_max"]),
             reach={k: float(v) for k, v in raw["reach"].items()},
+            reach_email_first={k: float(v) for k, v in (raw.get("reach_email_first") or {}).items()},
             reach_points=float(raw["total"]["reach_points"]),
             grades={k: float(v) for k, v in (raw.get("grades") or DEFAULT_GRADES).items()},
             fit_only_max_pct=float(share) * 100 if share is not None else float(raw.get("fit_only_max_pct", 10)),
@@ -496,9 +498,13 @@ def reach_of(
     cfg: ScoringConfig,
     now: datetime,
     suppressed: Suppression | None = None,
+    *,
+    email_first: bool = False,
 ) -> Reach:
     """How we can reach the decision maker, as a multiplier from 0 to 1 (11.5)."""
     usable = usable_contacts(contacts, now, suppressed)
+    if email_first:
+        return _reach_email_first(usable, facts, cfg)
     phones = [c for c in usable if c.get("phone_e164")]
     for kind, test in (
         (
@@ -523,6 +529,28 @@ def reach_of(
     if form:
         return Reach(cfg.reach["form"], "form", None, f"contact form only (fact {evidence.short_id(form[0]['id'])})")
     return Reach(cfg.reach["none"], "none", None, "no usable contact")
+
+
+def _reach_email_first(usable: Sequence[Row], facts: Sequence[Row], cfg: ScoringConfig) -> Reach:
+    """Email-first countries: a published address of a decision maker, then the company's, then a form, then a
+    phone (a call). Never a guessed address."""
+    share = {**{"decision_maker_email": 1.0, "email": 0.7, "phone": 0.4, "form": 0.3, "none": 0.0},
+             **cfg.reach_email_first}  # fmt: skip
+    mails = [c for c in usable if c.get("email")]
+    boss = next((c for c in mails if c.get("is_decision_maker")), None)
+    if boss is not None:
+        why = f"decision maker email (contact {evidence.short_id(boss['id'])}, {boss.get('source')})"
+        return Reach(share["decision_maker_email"], "decision_maker_email", boss, why)
+    if mails:
+        return Reach(share["email"], "email", mails[0], f"company email (contact {evidence.short_id(mails[0]['id'])})")
+    form = evidence.by_field(facts, "contact_form_url")
+    if form:
+        return Reach(share["form"], "form", None, f"contact form only (fact {evidence.short_id(form[0]['id'])})")
+    phone = next((c for c in usable if c.get("phone_e164")), None)
+    if phone is not None:
+        kind = "business_mobile" if phone.get("phone_type") == "mobile" else "landline"
+        return Reach(share["phone"], kind, phone, f"phone only, a call (contact {evidence.short_id(phone['id'])})")
+    return Reach(share["none"], "none", None, "no usable contact")
 
 
 def pitch_mode_of(kept: Sequence[Mapping[str, Any]]) -> str:
@@ -617,7 +645,7 @@ def score_business(
         cfg,
         seg,
     )
-    reach = reach_of(contacts, facts, cfg, now, suppressed)
+    reach = reach_of(contacts, facts, cfg, now, suppressed, email_first=seg.outreach_channel == "email")
     fit_bonus = cfg.fit_bonus.get(fit, 0.0)
     pay_part = can_pay / cfg.can_pay_cap * cfg.can_pay_points if cfg.can_pay_cap else 0.0
     total = min(100, round_half_up(round(intent, 2) + pay_part + fit_bonus + reach.value * cfg.reach_points))
