@@ -125,6 +125,38 @@ def flags(tools: list[dict[str, Any]], web_domain: str | None = None) -> dict[st
     }
 
 
+_VIEWPORT = re.compile(r"<meta[^>]+name\s*=\s*[\"']?viewport", re.I)
+_COPYRIGHT = re.compile(
+    r"(?:\u00a9|&copy;|copyright)\s*(?:\u00a9|&copy;)?\s*((?:19|20)\d{2})(?:\s*[-\u2013]\s*((?:19|20)\d{2}))?", re.I
+)
+_OLD_JQUERY = re.compile(r"jquery[.\-/](?:min\.)?(?:v)?([12])\.\d+(?:\.\d+)?(?:\.min)?\.js", re.I)
+_WP_GENERATOR = re.compile(r"<meta[^>]+content=[\"']WordPress\s+(\d+)\.(\d+)", re.I)
+OLD_SITE_YEARS = 5  # a newest copyright year this many years back reads as an unmaintained site
+
+
+def site_issues(home_url: str | None, home_html: str | None, today_year: int) -> list[str]:
+    """Signs, from the home page alone, that a website is old or not built for phones (13 Nov 2026: the
+    `slow_site` signal without a PageSpeed key). Each reason names what code found."""
+    html = home_html or ""
+    if not html:
+        return []
+    reasons: list[str] = []
+    if not _VIEWPORT.search(html):
+        reasons.append("no mobile layout (no viewport tag)")
+    if (home_url or "").startswith("http://"):
+        reasons.append("no HTTPS")
+    years = [int(y) for m in _COPYRIGHT.finditer(html) for y in m.groups() if y]
+    if years and max(years) <= today_year - OLD_SITE_YEARS:
+        reasons.append(f"copyright {max(years)}")
+    jq = _OLD_JQUERY.search(html)
+    if jq:
+        reasons.append(f"jQuery {jq.group(1)}.x")
+    wp = _WP_GENERATOR.search(html)
+    if wp and (int(wp.group(1)), int(wp.group(2))) < (5, 5):
+        reasons.append(f"WordPress {wp.group(1)}.{wp.group(2)}")
+    return reasons
+
+
 def tech_value(tools: list[dict[str, Any]], web_domain: str | None = None) -> dict[str, Any]:
     """The `tech_stack` fact value: the tools (without snippets) plus the derived flags."""
     return {

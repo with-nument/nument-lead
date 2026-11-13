@@ -505,6 +505,41 @@ def ads_signal(business_id: str) -> Signal | None:
     )
 
 
+# One of these alone is enough; otherwise two reasons are needed (an old jQuery alone is common on fine sites).
+STRONG_SITE_ISSUES: Final = ("no mobile layout", "no HTTPS", "copyright")
+
+
+def old_site_signal(business_id: str) -> Signal | None:
+    """An old or phone-unfriendly website (no viewport, no HTTPS, a copyright year 5+ years back, jQuery 1 or 2,
+    WordPress before 5.5), found by research on the home page: visible pain, angle slow_site (13 Nov 2026)."""
+    row = db.fetch_one(
+        """select b.web_domain, f.value as tech
+             from public.businesses b
+             join public.facts f on f.business_id = b.id and f.field = 'tech_stack' and f.model in ('rule', 'code')
+            where b.id = %s
+            order by f.created_at desc limit 1""",
+        [business_id],
+    )
+    tech = (row or {}).get("tech")
+    issues = [str(i) for i in (tech or {}).get("site_issues") or []] if isinstance(tech, dict) else []
+    if not row or not tech or not issues:
+        return None
+    strong = any(i.startswith(STRONG_SITE_ISSUES) for i in issues)
+    if not strong and len(issues) < 2:
+        return None
+    now = datetime.now(UTC)
+    return Signal(
+        type="slow_site",
+        source="research",
+        observed_at=now,
+        url=str(tech.get("site_issues_url") or "") or None,
+        quote=f"Their website: {'; '.join(issues)}"[:300],
+        evidence_key=f"{row['web_domain'] or business_id}|old_site|{now:%Y-%m}",
+        business_id=business_id,
+        details={"issues": issues, "from": "home_page"},
+    )
+
+
 def ingest(results: Iterable[Any], ctx: SourceContext, segments: dict[str, Segment]) -> Counter[str]:
     """Write facts for each finished item (`llm.batch.ItemResult`); a failed one stays queued for tomorrow."""
     stats: Counter[str] = Counter()
@@ -537,7 +572,7 @@ def ingest(results: Iterable[Any], ctx: SourceContext, segments: dict[str, Segme
         seg_id = db.scalar("select segment_id from public.businesses where id = %s", [bid])
         if seg_id not in segments:
             continue
-        found = [no_booking_signal(bid, facts), ads_signal(bid), *hiring_signals(bid, facts)]
+        found = [no_booking_signal(bid, facts), ads_signal(bid), old_site_signal(bid), *hiring_signals(bid, facts)]
         for sig in found:
             if sig is not None:
                 sink.add(sig, segments[seg_id])

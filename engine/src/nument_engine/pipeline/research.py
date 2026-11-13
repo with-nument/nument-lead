@@ -323,7 +323,13 @@ def code_facts(crawl: Crawl, seg: Segment, web_dom: str | None) -> list[FactRow]
     if own:
         tools = techstack.detect((p.url, p.html) for p in own)
         quote = tools[0]["snippet"] if tools else "no booking, chat, WhatsApp or CRM tool found"
-        add(FactRow("tech_stack", techstack.tech_value(tools, web_dom), quote, tools[0]["page_url"] if tools else home))
+        value = techstack.tech_value(tools, web_dom)
+        home_page = next((p for p in own if p.kind == "home"), own[0])
+        issues = techstack.site_issues(home_page.url, home_page.html, datetime.now(UTC).year)
+        if issues:
+            value["site_issues"] = issues
+            value["site_issues_url"] = home_page.url
+        add(FactRow("tech_stack", value, quote, tools[0]["page_url"] if tools else home))
     for raw, url in crawl.tel:
         parsed = phone(raw, region)
         if parsed:
