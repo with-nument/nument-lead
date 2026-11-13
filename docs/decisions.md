@@ -3,6 +3,42 @@
 Changes to the plan made while building and running the system, newest first. Each entry says what changed,
 why, and how to undo it. The plan itself is [IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md).
 
+## 2026-11-13 (evening): a near-100 plan, seven countries, 50 to 60 leads a day
+
+The founder rated the engine on conversion (100 = nearly every lead converts) and wants paying clients who stay
+on a retainer, any industry, any region; he is flexible on the tech. Rated about 40/100 that evening: data
+accuracy about 80, can-pay about 65, need-now about 20 (33 of about 26,000 businesses had a fresh buying sign).
+
+Founder's choices: English-speaking, high-pay countries (India, UAE, US, UK, Australia, Canada, Singapore);
+marketing and design agencies as white-label partners; no hard floor abroad, about $750 at least; **50 to 60 A
+and B leads a day**, so research goes to 800 a day, grounded searches to 400 and the AI cap to Rs 1,250.
+
+- **Stated need from anywhere.** `job_feeds` reads the monthly Hacker News "Who is hiring?" thread (Algolia API),
+  Himalayas contractor roles and We Work Remotely RSS; a cheap classify call says what kind of company it is and
+  its home country, and only product companies and small businesses become firms leads. RemoteOK (terms ask a
+  public link back) and Remotive (robots.txt) are not used. Live check: 15 posts, 5 real hiring leads, Rs 0.9.
+- **Need-first segments abroad:** firms-ae, -us, -gb, -au, -ca, -sg (signals only). Remote companies without a
+  city link by name; the website lookup stage finds their site.
+- **Partner track:** partners-in, -us, -gb, -au, -ae (domain `partners`, migration 0015): marketing, advertising,
+  social, branding and design agencies from Overture plus agencies posting developer roles. Being an agency is the
+  point there; software, app and IT shops, staffing and recruitment firms stay competitors everywhere.
+- **Volume abroad:** clinics-us, -gb, -au and professional-us, -gb, -au (law and accounting firms) from Overture.
+  Category names were checked on release 2026-10-21.0 in Pune, London and Austin.
+- **Email first** in the US, UK, Australia, Canada and Singapore (plan 18.4): reach counts a published decision
+  maker's email as 1.0 and a company email as 0.7; every email draft there ends with Team Nument, the postal
+  address (setting `outreach.postal_address`) and a one-line opt-out. WhatsApp stays first in India and the UAE.
+- **Speed:** a 13:00 IST midday run (migration 0017) reads the day's new signals, scores and writes messages, and
+  emails the A and B leads made since the morning email.
+- **People:** the founder or owner of A and B leads from Google Search (plan 5.11.4), kept only when a backed
+  sentence names them in charge of this business; name only, never a phone or email.
+- **Found pain:** an old or phone-unfriendly website (no viewport, no HTTPS, copyright 5+ years old, jQuery 1
+  or 2, old WordPress) is a slow_site signal; the careers watch finds pages by id (it matched 11 of 48 by URL).
+- **Retainer fit:** +3 can-pay for a partner agency, a full-time builder hire or an online store; -4 at 200+ staff.
+- **Learning:** one-tap Replied, a required lost reason, monthly retainer value and currency (migration 0016);
+  the weekly report adds cuts by source, lost reasons and new retainers.
+- **Fix:** a NUL character in one page failed the whole morning batch of 60; facts are cleaned and one bad
+  business is skipped. The batch was collected again the same evening.
+
 ## 2026-11-13: lead quality toward 95 (founder: "not more than 50/100")
 
 The first live morning gave 4 leads shown as "A, 56/100" and "B, 40/100". Live data showed 29 buying signals
