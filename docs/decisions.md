@@ -3,6 +3,17 @@
 Changes to the plan made while building and running the system, newest first. Each entry says what changed,
 why, and how to undo it. The plan itself is [IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md).
 
+## 2026-11-13: the morning email always goes out
+
+- **Change:** the `reviews` stage stops after `reviews.minutes_per_run` (default 8) minutes and always leaves
+  10 minutes of the run for score, judge, message and email; the businesses it did not reach wait for the
+  next morning. The email phase runs even past the run's deadline. The morning job may take 45 minutes
+  (deadline 40), up from 30 (26).
+- **Why:** on 13 Nov 25 grounded review lookups took 16 minutes (about 38 seconds each), the run hit its
+  deadline and skipped both the messages and the email. The repository is public, so Actions minutes are free.
+- **Undo:** `RESERVE_S` and `reviews.minutes_per_run` in `pipeline/reviews.py`, `after_deadline` on the email
+  phase in `pipeline/runs.py`, and `DEADLINE_MIN["morning"]` with the `morning.yml` timeout.
+
 ## 2026-11-13: runs start from Supabase, not from GitHub's scheduler
 
 - **Change:** migration 0013 adds pg_cron and pg_net jobs in Supabase. Every 10 minutes they ping the web
