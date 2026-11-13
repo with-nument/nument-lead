@@ -90,7 +90,9 @@ class GdeltAdapter(SourceAdapter):
             self._pages = None
         await super().aclose()
 
-    async def search(self, query: str, timespan: str = "1d") -> list[Article]:
+    async def search(self, query: str, timespan: str = "3d") -> list[Article]:
+        """Articles of the last `timespan` (3 days since 13 Nov 2026: a night lost to a rate limit or a timeout
+        no longer loses that day's news; the signal's evidence key keeps an article from counting twice)."""
         params = {
             "query": query,
             "mode": "ArtList",
@@ -100,7 +102,7 @@ class GdeltAdapter(SourceAdapter):
             "sort": "DateDesc",
         }
         for attempt in range(2):
-            res = await self.http.get(API, params=params, check_robots=False, raise_on_block=False)
+            res = await self.http.get(API, params=params, check_robots=False, raise_on_block=False, retries=1)
             self.ctx.budget.record("other", None, QUERY_TASK)  # free, counted for the daily query cap
             if res.status == 429:
                 self.http.blocked_hosts.pop("api.gdeltproject.org", None)
