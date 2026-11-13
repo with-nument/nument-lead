@@ -10,9 +10,13 @@ The tables cover leads first contacted in the last 180 days; the line above is t
 
 {{ t.country }}
 
-## 2. By signal type
+## 2. By signal type and source
+
+Source is the watcher that found the lead's strongest signal when the lead was made; fit only means it had no signal.
 
 {{ t.signal_type }}
+
+{{ t.source }}
 
 ## 3. By pitch mode, angle and writer
 
@@ -32,7 +36,13 @@ Fit only is the control group: if it books meetings as often as the signal group
 - No test group has enough judged leads yet (50 or more past the meeting window).
 {% endfor %}
 
-## 5. Lead quality
+## 5. Lost and not now
+
+{% for line in c.outcomes.lines %}
+- {{ line }}
+{% endfor %}
+
+## 6. Lead quality
 
 {% for line in c.quality.lines %}
 - {{ line }}
@@ -55,7 +65,7 @@ Messages marked "bad message" this week:
 {% endif %}
 {% if admin %}
 
-## 6. Cost
+## 7. Cost
 
 {% for line in c.cost.lines %}
 - {{ line }}
@@ -66,25 +76,25 @@ Messages marked "bad message" this week:
 {% endif %}
 {% endif %}
 
-## {{ 7 if admin else 6 }}. Engine health
+## {{ 8 if admin else 7 }}. Engine health
 
 {% for line in c.health.lines %}
 - {{ line }}
 {% endfor %}
 
-## {{ 8 if admin else 7 }}. What the engine changed
+## {{ 9 if admin else 8 }}. What the engine changed
 
 {% for line in c.changes.lines %}
 - {{ line }}
 {% endfor %}
 
-## {{ 9 if admin else 8 }}. Last eval and audit
+## {{ 10 if admin else 9 }}. Last eval and audit
 
 {% for line in c.eval_audit.lines %}
 - {{ line }}
 {% endfor %}
 
-## {{ 10 if admin else 9 }}. Suggested actions
+## {{ 11 if admin else 10 }}. Suggested actions
 
 {% for line in c.actions %}
 - {{ line }}

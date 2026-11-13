@@ -5,7 +5,7 @@ Plain words, no dashes: ranges are written "3 to 9%", missing values "n/a".
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -37,6 +37,19 @@ def inr(value: float | None, decimals: int = 0) -> str:
         frac = f"{abs(value) - whole:.{decimals}f}"[1:]
         return ("-" if value < 0 else "") + "₹" + group_indian(whole) + frac
     return "₹" + group_indian(round(value))
+
+
+def money(value: float | None, currency: str = "INR") -> str:
+    """'₹1,23,457' in rupees, 'USD 1,500' in any other currency (no conversion)."""
+    if value is None:
+        return NA
+    return inr(value) if currency == "INR" else f"{currency} {value:,.0f}"
+
+
+def amounts(by_currency: Mapping[str, float]) -> str:
+    """{'USD': 1500, 'INR': 40000} -> '₹40,000 + USD 1,500' (rupees first, then by code)."""
+    order = sorted(by_currency, key=lambda c: (c != "INR", c))
+    return " + ".join(money(by_currency[c], c) for c in order) or NA
 
 
 def pct(value: float | None, decimals: int | None = None) -> str:

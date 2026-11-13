@@ -573,6 +573,7 @@ def send_alerts(items: Sequence[AlertItem]) -> int:
 
 WEEKLY_SECTIONS: Final[tuple[tuple[str, str], ...]] = (
     ("test_groups", "Test groups"),
+    ("outcomes", "Lost and not now"),
     ("quality", "Lead quality"),
     ("cost", "Cost"),
     ("health", "Engine health"),
@@ -597,7 +598,9 @@ def render_weekly(content: Mapping[str, Any], markdown: str, *, admin: bool) -> 
         Kpi("Won", str(won), "new clients", GREEN if won else ""),
     ]
     if admin and "money_won_inr" in h:
-        kpis.append(Kpi("Money won", fmt.inr(h["money_won_inr"]), "deal value"))
+        retainers = h.get("retainer_monthly") or {}
+        note = f"plus {fmt.amounts(retainers)} a month in retainers" if retainers else "deal value"
+        kpis.append(Kpi("Money won", fmt.inr(h["money_won_inr"]), note))
     sections = []
     for key, title in WEEKLY_SECTIONS:
         part = c.get(key)
@@ -740,7 +743,8 @@ def sample_alerts() -> list[AlertItem]:
 
 def sample_weekly() -> tuple[dict[str, Any], str]:
     headline = {"leads_added": 84, "good_added": 31, "contacted": 52, "replied": 9, "meetings": 3,
-                "proposals": 1, "won": 1, "money_won_inr": 85000.0}  # fmt: skip
+                "proposals": 1, "won": 1, "money_won_inr": 85000.0,
+                "retainer_monthly": {"INR": 40000.0}}  # fmt: skip
     content: dict[str, Any] = {
         "period": {"start": "2026-11-02", "end": "2026-11-08", "label": "2 to 8 Nov 2026"},
         "headline": headline,
@@ -750,6 +754,12 @@ def sample_weekly() -> tuple[dict[str, Any], str]:
             "Add 2 name(s) or domain(s) to exclusions.yaml (see Lead quality).",
         ],
         "test_groups": {"lines": ["Scale `clinics-in:review_pain:v1`: 12% meetings from 25 contacted."]},
+        "outcomes": {
+            "lines": [
+                "This week: lost 2 (price 1, no reply 1); not now 1 (no need right now 1).",
+                "Last 180 days: lost 9 (no reply 4, price 3, chose another vendor 2); not now 5 (no need right now 5).",
+            ]
+        },
         "quality": {
             "lines": [
                 "Wrong contacts: 3.8% of numbers tried in the last 30 days (2 of 52). Target under 5%.",
@@ -771,7 +781,7 @@ def sample_weekly() -> tuple[dict[str, Any], str]:
         "eval_audit": {"lines": ["Last eval 8 Nov 2026: passed on 20 businesses."]},
     }
     caller = {k: v for k, v in content.items() if k != "cost"}
-    caller["headline"] = {k: v for k, v in headline.items() if k != "money_won_inr"}
+    caller["headline"] = {k: v for k, v in headline.items() if k not in ("money_won_inr", "retainer_monthly")}
     content["caller"] = caller
     markdown = "## Weekly report, 2 to 8 Nov 2026\n\n" + "\n".join(f"- {a}" for a in content["actions"]) + "\n"
     return content, markdown

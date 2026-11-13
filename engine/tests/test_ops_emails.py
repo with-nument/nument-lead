@@ -110,6 +110,8 @@ def test_team_members_never_see_money() -> None:
     assert "Money won" not in weekly.html and ">Cost</div>" not in weekly.html
     admin_weekly = emails.sample("weekly", admin=True)
     assert "Money won" in admin_weekly.html and "₹85,000" in admin_weekly.html and ">Cost</div>" in admin_weekly.html
+    assert "plus ₹40,000 a month in retainers" in visible_text(admin_weekly.html)
+    assert "retainers" not in visible_text(weekly.html)
 
 
 def test_weekly_report_renders_the_report_content() -> None:
@@ -119,6 +121,7 @@ def test_weekly_report_renders_the_report_content() -> None:
     assert email.subject == "Weekly report: 2 to 8 Nov 2026"
     assert "The week of 2 to 8 Nov 2026" in text and "Do this week" in text
     assert "17% reply rate" in text and "Lead quality" in text and "Exclusion idea" in text
+    assert "Lost and not now" in text and "lost 2 (price 1, no reply 1)" in text
     assert "<span" in email.html and "clinics-in:review_pain:v1" in text  # `code` styled, not raw backticks
     assert "`" not in text
     assert email.text.startswith(markdown.rstrip())

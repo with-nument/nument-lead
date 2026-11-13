@@ -2,13 +2,14 @@
 
 Built every Monday for the last complete IST week (Monday to Sunday) and stored in `reports` (kind
 'weekly') as numbers (`content`, for the app) and markdown. `content.caller` and `content.caller_markdown`
-are the same report without money (no money won, no cost section) for the caller's view; the admin version
+are the same report without money (no money won or new retainers, no cost section) for the caller's view; the admin version
 also goes to the GitHub job summary and, when configured, by email to everyone opted into the weekly report
 (admins get the admin version, everyone else the caller version; `ops.emails`).
 
-Sections, in order: headline; funnel by segment and country; signal type; pitch mode, angle and writer;
-test groups to scale or cut; lead quality; cost (admin only); engine health; what the engine changed;
-last eval and audit; suggested actions (at most five).
+Sections, in order: headline; funnel by segment and country; signal type and source; pitch mode, angle and
+writer; test groups to scale or cut; lost and not now (with the reasons marked in the app); lead quality;
+cost (admin only); engine health; what the engine changed; last eval and audit; suggested actions (at most
+five).
 """
 
 from __future__ import annotations
@@ -32,7 +33,17 @@ from ..ops import emails, notify
 from ..pipeline.runs import RunContext
 from ..settings import ENGINE_DIR
 from . import fmt
-from .metrics import CUTS, CutRow, FunnelRow, all_cuts, ist_day_start, load_funnel, median
+from .metrics import (
+    CLOSED_WITH_REASON,
+    CUTS,
+    LOOKBACK_DAYS,
+    CutRow,
+    FunnelRow,
+    all_cuts,
+    ist_day_start,
+    load_funnel,
+    median,
+)
 from .store import store_report
 
 log = get_logger()
@@ -59,6 +70,7 @@ CUT_TITLES: Final[dict[str, str]] = {
     "segment_id": "Segment",
     "country": "Country",
     "signal_type": "Signal type",
+    "source": "Source",
     "pitch_mode": "Pitch mode",
     "angle": "Angle",
     "test_group": "Test group",
@@ -66,6 +78,19 @@ CUT_TITLES: Final[dict[str, str]] = {
     "reach_type": "Reach",
     "writer": "Writer",
 }
+# leads.lost_reason (0016), as the report words them. A lead closed without one is "not recorded".
+LOST_REASONS: Final[dict[str, str]] = {
+    "price": "price",
+    "no_need_now": "no need right now",
+    "chose_other_vendor": "chose another vendor",
+    "no_reply": "no reply",
+    "not_a_fit": "not a fit",
+    "wrong_person": "wrong person",
+    "other": "other",
+}
+NOT_RECORDED: Final[str] = "not_recorded"
+CLOSED_STAGE_WORDS: Final[dict[str, str]] = {"lost": "lost", "not_now": "not now"}
+MONEY_KEYS: Final[frozenset[str]] = frozenset({"money_won_inr", "retainer_monthly"})
 LABELS: Final[dict[tuple[str, str | None], str]] = {
     ("scale", None): "Scale",
     ("keep", None): "Keep",
@@ -146,6 +171,34 @@ select
   count(*) filter (where at5 >= %(s)s and at5 < %(e)s) as won,
   coalesce(sum(deal_value_inr) filter (where at5 >= %(s)s and at5 < %(e)s), 0)::float as money_won_inr
 from x
+"""
+
+# New retainers: a lead's retainer starts when it first moved to Retainer, or to Won when it never did.
+RETAINERS_SQL = """
+with started as (
+  select a.lead_id,
+         coalesce(min(a.at) filter (where a.payload ->> 'to' = 'retainer'),
+                  min(a.at) filter (where a.payload ->> 'to' = 'won')) as at
+  from public.activities a
+  where a.type = 'stage_change' and a.payload ->> 'to' in ('won', 'retainer')
+  group by a.lead_id
+)
+select l.deal_currency as currency, sum(l.retainer_monthly_value)::float as monthly
+from public.leads l
+join started s on s.lead_id = l.id
+where s.at >= %(s)s and s.at < %(e)s and l.retainer_monthly_value is not null
+group by 1 order by 1
+"""
+
+# Leads that moved to Lost or Not now this week and are still there, by reason.
+CLOSED_WEEK_SQL = """
+select l.stage, coalesce(l.lost_reason, 'not_recorded') as reason, count(*)::int as n
+from public.leads l
+where l.stage in ('lost', 'not_now')
+  and exists (select 1 from public.activities a
+              where a.lead_id = l.id and a.type = 'stage_change' and a.payload ->> 'to' = l.stage
+                and a.at >= %(s)s and a.at < %(e)s)
+group by 1, 2
 """
 
 PHONES_SQL = """
@@ -318,6 +371,8 @@ def _headline(rec: Mapping[str, Any], admin: bool) -> str:
     ]
     if admin:
         parts.append(f"**Money won** {fmt.inr(rec['money_won_inr'])}")
+        if rec.get("retainer_monthly"):
+            parts.append(f"**New retainers** {fmt.amounts(rec['retainer_monthly'])} a month")
     return " · ".join(parts)
 
 
@@ -337,6 +392,42 @@ def _test_group_lines(rows: Sequence[CutRow]) -> list[str]:
                 "(meetings not judged yet)."
             )
     return lines
+
+
+def _closed_line(label: str, counts: Mapping[str, Mapping[str, int]]) -> str | None:
+    """'This week: lost 3 (price 2, no reply 1); not now 1 (no need right now 1).' or None when empty."""
+    parts: list[str] = []
+    for stage in CLOSED_WITH_REASON:
+        reasons = counts.get(stage) or {}
+        if total := sum(reasons.values()):
+            words = ", ".join(f"{LOST_REASONS.get(k, k.replace('_', ' '))} {n}" for k, n in reasons.items())
+            parts.append(f"{CLOSED_STAGE_WORDS[stage]} {total} ({words})")
+    return f"{label}: " + "; ".join(parts) + "." if parts else None
+
+
+def _ordered(counter: Counter[str]) -> dict[str, int]:
+    """Most common first, then by name; 'not recorded' last."""
+    return dict(sorted(counter.items(), key=lambda kv: (kv[0] == NOT_RECORDED, -kv[1], kv[0])))
+
+
+def _outcomes(conn: Any, p: Period, rows: Sequence[FunnelRow]) -> dict[str, Any]:
+    """Lost and not now, by the reason marked in the app: this week, and over the funnel's 180 days."""
+    week: dict[str, Counter[str]] = {s: Counter() for s in CLOSED_WITH_REASON}
+    for r in db.fetch_all(CLOSED_WEEK_SQL, p.params(), conn=conn):
+        week[r["stage"]][r["reason"]] += r["n"]
+    window: dict[str, Counter[str]] = {s: Counter() for s in CLOSED_WITH_REASON}
+    for f in rows:
+        if f.stage in window:
+            window[f.stage][f.lost_reason or NOT_RECORDED] += 1
+    week_counts = {s: _ordered(c) for s, c in week.items()}
+    window_counts = {s: _ordered(c) for s, c in window.items()}
+    lines = [_closed_line("This week", week_counts) or "No leads closed as lost or not now this week."]
+    if line := _closed_line(f"Last {LOOKBACK_DAYS} days", window_counts):
+        lines.append(line)
+    unrecorded = sum(c[NOT_RECORDED] for c in window.values())
+    if unrecorded:
+        lines.append(f"Closed without a reason: {unrecorded}. Add one on the lead page so the next report can use it.")
+    return {"week": week_counts, "window": window_counts, "lines": lines}
 
 
 def parse_reasons(raw: str | None) -> list[str]:
@@ -722,12 +813,12 @@ def _row_from_dict(d: Mapping[str, Any]) -> CutRow:
 
 
 def caller_view(content: Mapping[str, Any]) -> dict[str, Any]:
-    """The report without money: no money won, no cost section (16.6.1)."""
+    """The report without money: no money won or new retainers, no cost section (16.6.1)."""
     view = copy.deepcopy(dict(content))
     view.pop("cost", None)
     view.pop("caller", None)
     view.pop("caller_markdown", None)
-    view["headline"] = {k: v for k, v in view["headline"].items() if k != "money_won_inr"}
+    view["headline"] = {k: v for k, v in view["headline"].items() if k not in MONEY_KEYS}
     view["actions"] = [a for a in view["actions"] if "Spend averaged" not in a]
     return view
 
@@ -738,6 +829,8 @@ def build_weekly(
     """(content, admin markdown, caller markdown) for one week."""
     headline = db.fetch_one(HEADLINE_SQL, period.params(), conn=conn) or {}
     headline = {k: (float(v) if k == "money_won_inr" else int(v or 0)) for k, v in headline.items()}
+    retainers = db.fetch_all(RETAINERS_SQL, period.params(), conn=conn)
+    headline["retainer_monthly"] = {r["currency"]: float(r["monthly"]) for r in retainers}
     rows = load_funnel(conn, as_of=period.end_at)
     cuts = all_cuts(rows, period.end_at)
     content: dict[str, Any] = {
@@ -752,12 +845,13 @@ def build_weekly(
         "headline": headline,
         "cuts": {cut: [r.as_dict() for r in rows_] for cut, rows_ in cuts.items()},
         "test_groups": {"lines": _test_group_lines(cuts["test_group"])},
+        "outcomes": _outcomes(conn, period, rows),
         "quality": _quality(conn, period, rows),
         "cost": _cost(conn, period, headline),
         "health": _health(conn, period),
         "changes": _changes(conn, period, reweight),
         "eval_audit": _eval_audit(conn),
-        "admin_only": ["headline.money_won_inr", "cost"],
+        "admin_only": ["headline.money_won_inr", "headline.retainer_monthly", "cost"],
     }
     content["actions"] = suggested_actions(content)
     admin_md = _render(content, admin=True)

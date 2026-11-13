@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import pytest
 
@@ -228,3 +230,55 @@ def test_load_funnel_window_bounds(db_conn: Conn) -> None:
     recent = seed.contacted(db_conn, 30)
     ids = {r.lead_id for r in m.load_funnel(db_conn, as_of=seed.NOW, since_days=180)}
     assert recent in ids and old not in ids
+
+
+# ---------------------------------------------------------------------------
+# Source cut and lost reasons (Phase 4)
+# ---------------------------------------------------------------------------
+
+
+def test_source_cut_groups_by_watcher_with_the_usual_labels() -> None:
+    assert row(50).key("source") == ["fit_only"]
+    assert row(50, source="job_feeds").key("source") == ["job_feeds"]
+    # job_feeds: 7 meetings and 4 proposals from 64 (11%, 1.25 per 20). Fit only: 2 meetings from 120.
+    reached = [{2: 1, 3: 5, 4: 20}] * 4 + [{2: 1, 3: 5}] * 3 + [{}] * 57
+    scaled = [replace(row(60, r, source="job_feeds"), lead_id=f"jf-{i}") for i, r in enumerate(reached)]
+    weak = [replace(row(60, {2: 1, 3: 5} if i < 2 else None), lead_id=f"fo-{i}") for i in range(120)]
+    cuts = {c.key: c for c in m.rates_by_cut([*scaled, *weak], "source", AS_OF)}
+    assert set(cuts) == {"job_feeds", "fit_only"}
+    assert (cuts["job_feeds"].meetings, cuts["job_feeds"].proposals, cuts["job_feeds"].label) == (7, 4, "scale")
+    assert (cuts["fit_only"].meetings, cuts["fit_only"].label) == (2, "cut")
+    assert "source" in m.CUTS and {"segment_id", "country"} <= set(m.CUTS)
+
+
+def _business_of(conn: Conn, lead_id: str) -> str:
+    rec = conn.execute("select business_id::text as id from public.leads where id = %s", [lead_id]).fetchone()
+    assert rec is not None
+    return str(rec["id"])
+
+
+def _signal(conn: Conn, business_id: str, source: str, points: float, observed: datetime, days: int = 60) -> None:
+    conn.execute(
+        "insert into public.signals (business_id, type, category, points, observed_at, expires_at, source, "
+        "dedupe_key) values (%s, 'hiring_builder', 'stated_need', %s, %s, %s, %s, %s)",
+        [business_id, points, observed, observed + timedelta(days=days), source, f"test:{uuid4().hex}"],
+    )
+
+
+def test_load_funnel_reads_the_source_and_the_lost_reason(db_conn: Conn) -> None:
+    now = seed.NOW
+    found = seed.contacted(db_conn, 60, reached=[("talking", 3), ("lost", 9)])
+    created = now - timedelta(days=61)
+    biz = _business_of(db_conn, found)
+    _signal(db_conn, biz, "job_feeds", 8, created - timedelta(days=5))
+    _signal(db_conn, biz, "gdelt", 5, created - timedelta(days=2))
+    _signal(db_conn, biz, "careers_watch", 12, created + timedelta(days=3))  # found after the lead: not the source
+    expired = seed.contacted(db_conn, 60)
+    _signal(db_conn, _business_of(db_conn, expired), "apna", 9, created - timedelta(days=90), days=30)
+    reopened = seed.contacted(db_conn, 60, reached=[("lost", 5), ("talking", 9)])
+    db_conn.execute("update public.leads set lost_reason = 'price' where id in (%s, %s)", [found, reopened])
+
+    rows = {r.lead_id: r for r in m.load_funnel(db_conn, as_of=now, since_days=120)}
+    assert (rows[found].source, rows[found].lost_reason) == ("job_feeds", "price")
+    assert rows[expired].source == "fit_only" and rows[expired].lost_reason is None
+    assert rows[reopened].stage == "talking" and rows[reopened].lost_reason is None  # stale reason ignored

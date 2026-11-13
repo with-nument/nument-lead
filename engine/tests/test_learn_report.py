@@ -151,17 +151,20 @@ def test_build_weekly_sections_and_numbers(db_conn: Conn) -> None:
     for heading in (
         "# Weekly report: 7 to 13 Dec 2026",
         "## 1. Funnel by segment and country",
-        "## 2. By signal type",
+        "## 2. By signal type and source",
         "## 4. Test groups to scale or cut",
-        "## 5. Lead quality",
-        "## 6. Cost",
-        "## 7. Engine health",
-        "## 8. What the engine changed",
-        "## 9. Last eval and audit",
-        "## 10. Suggested actions",
+        "## 5. Lost and not now",
+        "## 6. Lead quality",
+        "## 7. Cost",
+        "## 8. Engine health",
+        "## 9. What the engine changed",
+        "## 10. Last eval and audit",
+        "## 11. Suggested actions",
     ):
         assert heading in admin_md, heading
-    assert "**Money won** ₹1,50,000" in admin_md
+    assert "**Money won** ₹1,50,000" in admin_md and "New retainers" not in admin_md  # none this week
+    assert "| Source |" in admin_md and {r["key"] for r in content["cuts"]["source"]} == {"fit_only"}
+    assert "- No leads closed as lost or not now this week." in admin_md
     assert not any(d in admin_md + caller_md for d in DASHES)
 
 
@@ -170,8 +173,8 @@ def test_caller_view_has_no_money(db_conn: Conn) -> None:
     content, _, caller_md = report.build_weekly(WEEK, conn=db_conn)
     caller = content["caller"]
     assert "cost" not in caller and "money_won_inr" not in caller["headline"]
-    assert "Money won" not in caller_md and "## 6. Cost" not in caller_md and "₹" not in caller_md
-    assert "## 6. Engine health" in caller_md and content["caller_markdown"] == caller_md
+    assert "Money won" not in caller_md and ". Cost" not in caller_md and "₹" not in caller_md
+    assert "## 7. Engine health" in caller_md and content["caller_markdown"] == caller_md
 
 
 def test_save_stores_a_weekly_row(db_conn: Conn) -> None:
@@ -193,3 +196,45 @@ def test_changes_section_reports_rejected_proposals(db_conn: Conn) -> None:
     }
     _, admin_md, _ = report.build_weekly(WEEK, reweight=reweight, conn=db_conn)
     assert "Weights proposal rejected by eval: precision at 50: 62%" in admin_md
+
+
+def test_lost_reasons_and_new_retainers(db_conn: Conn) -> None:
+    at = WEEK.start_at
+    week_end = at + timedelta(days=5)
+    price = seed.contacted(db_conn, 4, reached=[("talking", 1), ("lost", 3)], as_of=week_end)
+    no_reply = seed.contacted(db_conn, 4, reached=[("lost", 2)], as_of=week_end)
+    seed.contacted(db_conn, 4, reached=[("not_now", 2)], as_of=week_end)  # no reason recorded
+    seed.contacted(db_conn, 60, reached=[("lost", 10)], as_of=week_end)  # closed weeks ago, no reason
+    reopened = seed.contacted(db_conn, 4, reached=[("lost", 1), ("talking", 2)], as_of=week_end)
+    for lead_id, reason in ((price, "price"), (no_reply, "no_reply"), (reopened, "price")):
+        db_conn.execute("update public.leads set lost_reason = %s where id = %s", [reason, lead_id])
+    rupees = seed.contacted(
+        db_conn, 100, reached=[("talking", 2), ("discovery_booked", 10), ("retainer", 97)], as_of=week_end
+    )
+    dollars = seed.contacted(db_conn, 50, reached=[("talking", 2), ("won", 48)], as_of=week_end)
+    upgraded = seed.contacted(db_conn, 90, reached=[("won", 30), ("retainer", 88)], as_of=week_end)
+    old = seed.contacted(db_conn, 200, reached=[("retainer", 100)], as_of=week_end)  # signed long ago
+    for lead_id, value, currency in (
+        (rupees, 40000, "INR"),
+        (dollars, 1500, "USD"),
+        (upgraded, 25000, "INR"),
+        (old, 99999, "INR"),
+    ):
+        db_conn.execute(
+            "update public.leads set retainer_monthly_value = %s, deal_currency = %s where id = %s",
+            [value, currency, lead_id],
+        )
+
+    content, admin_md, caller_md = report.build_weekly(WEEK, conn=db_conn)
+    out = content["outcomes"]
+    assert out["week"] == {"lost": {"no_reply": 1, "price": 1}, "not_now": {"not_recorded": 1}}
+    assert out["window"]["lost"] == {"no_reply": 1, "price": 1, "not_recorded": 1}
+    assert "- This week: lost 2 (no reply 1, price 1); not now 1 (not recorded 1)." in admin_md
+    assert "- Last 180 days: lost 3 (no reply 1, price 1, not recorded 1); not now 1 (not recorded 1)." in admin_md
+    assert "Closed without a reason: 2." in admin_md and "lost 2 (no reply 1, price 1)" in caller_md
+
+    assert content["headline"]["retainer_monthly"] == {"INR": 65000.0, "USD": 1500.0}
+    assert "**New retainers** ₹65,000 + USD 1,500 a month" in admin_md
+    caller = content["caller"]
+    assert "retainer_monthly" not in caller["headline"] and "New retainers" not in caller_md
+    assert "headline.retainer_monthly" in content["admin_only"]

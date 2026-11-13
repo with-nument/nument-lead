@@ -8,6 +8,8 @@ if it later closed: Contacted, then Talking, then Lost still counts as contacted
 - Events count only inside their window after first contact (21, 45, 60 and 120 days, 16.1.3).
 - Rates use mature leads only: a lead counts towards a rate once that event's window has closed. Leads
   still inside the meeting window are reported separately as "still open".
+- The source cut is the watcher (signals.source) of the lead's strongest signal when the lead was made, or
+  `fit_only` when it had none.
 
 `load_funnel()` reads one row per contacted lead; `rates_by_cut()` groups them; `decision_label()` turns a
 row into scale, keep, cut, watch or early_signal (16.2.4). The engine only recommends: it never turns a
@@ -55,6 +57,7 @@ CUTS: Final[tuple[str, ...]] = (
     "segment_id",
     "country",
     "signal_type",
+    "source",  # the watcher behind the strongest signal at lead creation, or fit_only
     "pitch_mode",
     "angle",
     "test_group",
@@ -63,6 +66,8 @@ CUTS: Final[tuple[str, ...]] = (
     "writer",  # leads.message_model, so writers can be compared (Step 12.4)
 )
 NONE_KEY: Final[str] = "none"
+FIT_ONLY_KEY: Final[str] = "fit_only"
+CLOSED_WITH_REASON: Final[tuple[str, ...]] = ("lost", "not_now")  # stages that carry leads.lost_reason
 CI_MASS: Final[float] = 0.90
 # Decision label thresholds (16.2.4)
 SCALE_MEETING_RATE, KEEP_MEETING_RATE = 0.08, 0.03
@@ -114,6 +119,8 @@ class FunnelRow:
     signal_age_days: float | None = None
     score_total: float | None = None
     deal_value_inr: float | None = None
+    source: str = FIT_ONLY_KEY
+    lost_reason: str | None = None  # only while the stage is lost or not_now
 
     @property
     def contacted(self) -> bool:
@@ -406,7 +413,7 @@ wrong as (
 ),
 base as (
   select f.*, l.business_id, l.created_at, l.last_activity_at, l.message_model, l.deal_value_inr,
-         l.score_id, h.at2, h.at3, h.at4, h.at5, w.wrong_at,
+         l.lost_reason, l.score_id, h.at2, h.at3, h.at4, h.at5, w.wrong_at,
          coalesce(f.contacted_at, h.at1) as first_contact_at
   from public.v_lead_funnel f
   join public.leads l on l.id = f.lead_id
@@ -416,7 +423,7 @@ base as (
 )
 select b.lead_id::text as lead_id, b.segment_id, b.country, b.pitch_mode, b.angle, b.test_group, b.grade,
        b.stage, b.max_rank, b.is_wrong_contact, b.first_contact_at, b.at2, b.at3, b.at4, b.at5, b.wrong_at,
-       b.created_at, b.last_activity_at, b.message_model, b.deal_value_inr,
+       b.created_at, b.last_activity_at, b.message_model, b.deal_value_inr, b.lost_reason,
        sc.total as score_total, sc.reasons,
        bz.branches_count, bz.staff_count, bz.review_count,
        pc.phone_type, coalesce(pc.has_phone, false) as has_phone, coalesce(pc.has_email, false) as has_email,
@@ -424,7 +431,8 @@ select b.lead_id::text as lead_id, b.segment_id, b.country, b.pitch_mode, b.angl
        exists (select 1 from public.facts fa
                where fa.business_id = b.business_id and fa.field = 'contact_form_url' and fa.verified) as has_form,
        sig.types as active_signal_types,
-       top.observed_at as top_signal_observed_at
+       top.observed_at as top_signal_observed_at,
+       src.source as top_signal_source
 from base b
 join public.businesses bz on bz.id = b.business_id
 left join public.scores sc on sc.id = b.score_id
@@ -450,6 +458,14 @@ left join lateral (
   order by s.points desc, s.observed_at desc
   limit 1
 ) top on true
+-- The strongest signal of any kind when the lead was made, in v_top_signal's order: who found the lead.
+left join lateral (
+  select s.source
+  from public.signals s
+  where s.business_id = b.business_id and s.observed_at <= b.created_at and s.expires_at > b.created_at
+  order by s.points desc, s.observed_at desc
+  limit 1
+) src on true
 where coalesce(b.first_contact_at, b.wrong_at, b.last_activity_at) >= %(since)s
   and coalesce(b.first_contact_at, b.wrong_at, b.last_activity_at) < %(until)s
 order by b.first_contact_at nulls last, b.lead_id
@@ -507,6 +523,8 @@ def _row_from_db(rec: Mapping[str, Any], tiers_by_segment: Mapping[str, Any]) ->
         signal_age_days=None if age is None else max(age, 0.0),
         score_total=None if rec["score_total"] is None else float(rec["score_total"]),
         deal_value_inr=None if rec["deal_value_inr"] is None else float(rec["deal_value_inr"]),
+        source=rec["top_signal_source"] or FIT_ONLY_KEY,
+        lost_reason=rec["lost_reason"] if rec["stage"] in CLOSED_WITH_REASON else None,
     )
 
 
