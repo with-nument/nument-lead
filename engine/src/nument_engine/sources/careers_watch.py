@@ -31,7 +31,8 @@ select p.id as page_id, p.url, p.text, p.text_hash, p.fetched_at, f.field, b.id 
        b.segment_id
 from public.facts f
 join public.businesses b on b.id = f.business_id
-join public.pages p on p.url = f.value->>'url' and p.business_id = b.id
+join public.pages p on p.business_id = b.id
+ and (p.id = f.page_id or (f.page_id is null and p.url = f.value->>'url'))
 where f.field in ('careers_url', 'locations_url')
   and f.model in ('rule', 'code')
   and (b.status in ('researched', 'qualified')

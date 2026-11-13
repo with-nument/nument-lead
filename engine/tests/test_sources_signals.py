@@ -122,6 +122,36 @@ async def test_check_refetches_classifies_and_stores_the_new_text(
     assert stored["text_hash"] == text_hash(stored["text"])
 
 
+def test_a_careers_fact_finds_its_page_by_id_even_when_the_link_is_not_canonical(clean_db: str) -> None:
+    """13 Nov 2026: facts keep the raw link ("https://www.x.in/careers/") while pages store the canonical URL,
+    so joining on the URL found 11 of 48 careers pages. The fact's page_id always matches."""
+    bid = insert_business(name="Lotus Skin Clinic", status="researched", website="https://www.lotusskin-nlead.in/")
+    page_id = db.scalar(
+        "insert into public.pages (business_id, url, text, text_hash, fetched_at) values (%s, %s, %s, %s, %s) "
+        "returning id",
+        [
+            bid,
+            "https://lotusskin-nlead.in/careers",
+            OLD_CAREERS,
+            text_hash(OLD_CAREERS),
+            datetime.now(UTC) - timedelta(days=2),
+        ],
+    )
+    db.execute(
+        "insert into public.facts (business_id, field, value, quote, url, page_id, model, verified) "
+        "values (%s, 'careers_url', %s, %s, %s, %s, 'rule', true)",
+        [
+            bid,
+            db.Jsonb({"url": "https://www.lotusskin-nlead.in/careers/"}),
+            "careers",
+            "https://www.lotusskin-nlead.in/careers/",
+            page_id,
+        ],
+    )
+    watcher = CareersWatchAdapter(ctx(FakeRouter({})))
+    assert [t.page_id for t in watcher.targets(["clinics-in"], 10)] == [str(page_id)]
+
+
 # ---- GDELT -------------------------------------------------------------------------------------------
 
 
