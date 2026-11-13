@@ -77,7 +77,8 @@ fit:
   categories: [educational_service, test_preparation, college_counseling, vocational_and_technical_school,
                academy, civil_examinations_academy]
   # Low-ticket classes rarely pay Rs 50K+ (founder, 13 Nov 2026): rejected by name before research.
-  exclude_names: [spoken english, english speaking, english classes, tuition, tuitions, tutorial, tutorials,
+  exclude_names: [spoken english, english speaking, english classes, english language, language institute,
+                  language school, language academy, personality development, tuition, tuitions, tutorial, tutorials,
                   home tutor, home tuition, abacus, phonics, handwriting, vedic math, play school, playschool,
                   preschool, pre school, day care, daycare, kids, hobby, dance class, music class, drawing]
   service_keywords: [jee, neet, upsc, cat, clat, gate, ielts, pte, toefl, gre, gmat, sat, study abroad,
