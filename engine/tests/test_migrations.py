@@ -25,6 +25,7 @@ EXPECTED_FILES = [
     "0010_review_sources.sql",
     "0011_notify_recipients.sql",
     "0012_read_performance.sql",
+    "0013_scheduler.sql",
 ]
 
 
