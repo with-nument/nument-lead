@@ -170,3 +170,15 @@ def test_one_business_without_a_cited_answer_is_skipped_not_the_stage(seg_db: st
         )
     }
     assert sorted(v for v in counts.values() if v is not None) == [874]
+
+
+def test_the_stage_leaves_the_end_of_the_run_to_messages_and_email(seg_db: str) -> None:
+    """13 Nov 2026: 25 lookups took 16 minutes and the morning run skipped its messages and email."""
+    with pf.connect(seg_db) as conn:
+        pf.business(conn, review_count=None)
+        pf.business(conn, review_count=None)
+    rc = pf.rc_for()
+    rc.deadline = datetime.now(UTC) + timedelta(seconds=reviews.RESERVE_S - 1)  # less than the reserve left
+    router = FakeRouter([Result(lookup(), GROUNDING)] * 2)
+    stats = reviews.run(rc, router=router)
+    assert stats["stopped_time"] == 2 and router.calls == []

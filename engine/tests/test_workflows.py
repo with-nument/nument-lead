@@ -15,7 +15,7 @@ WORKFLOWS = REPO_DIR / ".github" / "workflows"
 ACTIONS = REPO_DIR / ".github" / "actions"
 SCHEDULED = {
     "night.yml": ("30 20 * * *", 90),
-    "morning.yml": ("30 0 * * *", 30),
+    "morning.yml": ("30 0 * * *", 45),
     "sheet-sync.yml": ("30 3-15/2 * * *", 10),
     "weekly.yml": ("30 1 * * 1", 30),
     "monthly.yml": ("0 17 1 * *", 60),

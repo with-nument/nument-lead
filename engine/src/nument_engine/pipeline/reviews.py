@@ -10,6 +10,9 @@ Stored the way Places data is: `businesses.review_count` and `rating` (never ove
 most 30 days, like Places content (A.4.4): older numbers are cleared and looked up again.
 
 Runs in the morning between verify and score, so the businesses researched overnight are scored with them.
+A lookup can take half a minute, so the stage stops after `reviews.minutes_per_run` minutes, and earlier when
+the run needs the rest of its time for scoring, messages and the email (13 Nov 2026: 25 lookups took 16
+minutes and the morning run skipped its messages and email).
 
 Cheaper sources first: a business whose Google numbers the night's Maps lookup confirmed (`extra.maps_reviews`,
 kept 30 days) is skipped, and one whose Practo profile research matched (`extra.practo`) is asked for its Google
@@ -19,6 +22,7 @@ numbers only. Maps numbers expire after 30 days exactly like grounded ones.
 from __future__ import annotations
 
 import re
+import time
 from collections import Counter
 from datetime import UTC, datetime
 from typing import Any, Final
@@ -34,6 +38,9 @@ log = get_logger()
 TASK: Final = "lookup_reviews"
 SETTING: Final = "reviews.lookups_per_day"
 DEFAULT_PER_DAY: Final = 120
+SETTING_MINUTES: Final = "reviews.minutes_per_run"
+DEFAULT_MINUTES: Final = 8
+RESERVE_S: Final = 600.0  # kept for score, judge, message and email after this stage
 MAX_DOWN_STREAK: Final = 3  # consecutive "no usable provider" answers before the stage stops
 KEEP_DAYS: Final = 30
 SOURCE: Final = "grounded_search"
@@ -209,7 +216,15 @@ def run(rc: RunContext, router: Any = None) -> dict[str, Any]:
     budget = getattr(router, "budget", None)
     spent = 0.0
     down_streak = 0
-    for b in rows:
+    minutes = db.get_setting(SETTING_MINUTES, DEFAULT_MINUTES)
+    stop_at = time.monotonic() + min(
+        float(minutes) * 60.0 if isinstance(minutes, int | float) else DEFAULT_MINUTES * 60.0,
+        max(0.0, rc.time_left() - RESERVE_S),
+    )
+    for i, b in enumerate(rows):
+        if time.monotonic() >= stop_at:
+            stats["stopped_time"] = len(rows) - i  # left for the next morning
+            break
         quota = budget.grounding_quota_left() if budget is not None and hasattr(budget, "grounding_quota_left") else 1
         if quota is not None and quota <= 0:
             stats["stopped_quota"] += 1

@@ -36,11 +36,11 @@ IST: Final = timezone(timedelta(hours=5, minutes=30))
 DRY_RUN_LIMIT: Final = 5  # items per stage in a dry run when --limit is not given (14.4.3)
 # Minutes a run may take before non-essential phases are skipped: each workflow's timeout minus a margin, so
 # the run closes its row itself instead of being killed with the row left 'running'.
-DEADLINE_MIN: Final[dict[str, int]] = {"night": 80, "morning": 26, "sheet_sync": 8, "weekly": 26, "monthly": 55}
+DEADLINE_MIN: Final[dict[str, int]] = {"night": 80, "morning": 40, "sheet_sync": 8, "weekly": 26, "monthly": 55}
 # A 'running' row older than this was killed (timeout or cancel) and is closed as failed by the next run.
 STALE_MIN: Final[dict[str, int]] = {
     "night": 50,
-    "morning": 35,
+    "morning": 50,
     "sheet_sync": 15,
     "weekly": 35,
     "monthly": 65,
@@ -145,6 +145,7 @@ class Phase:
     fn: PhaseFn
     essential: bool = False
     budget: str | None = None  # a budget.PHASE_STOP_AT key (Step 19.6); None = free, never gated
+    after_deadline: bool = False  # runs even past the deadline: a few seconds and the point of the run
 
 
 class EssentialPhaseFailed(RuntimeError):
@@ -202,7 +203,7 @@ def execute(rc: RunContext, phases: list[Phase]) -> None:
 
     phase_stats: dict[str, Any] = rc.stats.setdefault("phases", {})
     for ph in phases:
-        if not ph.essential and rc.time_left() <= 0:
+        if not ph.essential and not ph.after_deadline and rc.time_left() <= 0:
             phase_stats[ph.name] = {"skipped": "deadline"}
             rc.skipped_stages.append(ph.name)
             save_progress(rc)
@@ -344,7 +345,8 @@ def morning_phases() -> list[Phase]:
         Phase("sheet_sync", sheet_sync(light=False), essential=True),
         Phase("prune", stage("ops.health", "prune_run")),  # daily, so 30-day Places content never overstays
         Phase("summary", summary, essential=True),
-        Phase("email", stage("ops.emails", "morning")),  # the morning list by email; never fails the run
+        # the morning list by email; never fails the run, and a late run still sends it (13 Nov 2026)
+        Phase("email", stage("ops.emails", "morning"), after_deadline=True),
     ]
 
 

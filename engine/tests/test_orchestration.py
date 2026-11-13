@@ -137,6 +137,16 @@ def test_deadline_skips_optional_phases_but_not_essential_ones(clean_costs: None
     assert row["stats"]["phases"]["prefilter"]["done"] == 1
 
 
+def test_a_late_morning_run_still_sends_its_email(clean_costs: None) -> None:
+    with run_context("morning", Options()) as rc:
+        rc.started_at = dt.datetime.now(dt.UTC) - dt.timedelta(hours=2)
+        runs.execute(rc, [Phase("message", ok(), budget="message"), Phase("email", ok(), after_deadline=True)])
+    phases = _row(rc.run_id)["stats"]["phases"]
+    assert phases["message"] == {"skipped": "deadline"} and phases["email"]["done"] == 1
+    email = next(ph for ph in runs.morning_phases() if ph.name == "email")
+    assert email.after_deadline and not email.essential  # a failed email never fails the run
+
+
 def test_a_second_run_of_the_same_kind_steps_aside(clean_costs: None) -> None:
     first = str(uuid.uuid4())
     db.execute(

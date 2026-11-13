@@ -36,7 +36,7 @@ jobs:
   morning:
     if: github.event_name == 'workflow_dispatch' || vars.SCHEDULES_ENABLED == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     # Repository-level secrets and variables: GitHub environments need a paid plan on a private personal
     # repository. Live sheet ids reach prod runs only; dev runs see only the staging sheet.
     permissions:
