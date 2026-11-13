@@ -2,7 +2,7 @@ id: realestate-in
 domain: realestate
 country: in
 display_name: Real estate, India
-enabled: true
+enabled: false                  # off since 12 Nov 2026: Overture real estate data was mostly junk
 timezone: Asia/Kolkata
 currency: INR
 quota: {daily_research: 60}

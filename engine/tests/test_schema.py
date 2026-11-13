@@ -89,9 +89,12 @@ def test_every_contract_table_exists(db_conn: Conn) -> None:
 
 def test_seed_segments_and_quotas(db_conn: Conn) -> None:
     rows = db_conn.execute("select id, daily_quota, enabled from public.segments").fetchall()
-    assert {r["id"] for r in rows} == WAVE1
-    assert sum(r["daily_quota"] for r in rows) == 300
-    assert all(r["enabled"] for r in rows)
+    seeded = [r for r in rows if r["id"] in WAVE1]
+    # A segment sync (test_cli runs one) may add newer segments such as firms-in and apply the YAML switches
+    # (real estate is off since 12 Nov 2026); the seed itself is the six wave-1 rows with quotas adding to 300.
+    assert {r["id"] for r in seeded} == WAVE1 and {r["id"] for r in rows} <= WAVE1 | {"firms-in"}
+    assert sum(r["daily_quota"] for r in seeded) == 300
+    assert all(r["enabled"] for r in seeded if not r["id"].startswith("realestate"))
 
 
 def test_seed_settings_with_openai_off_and_review_sources_on(db_conn: Conn) -> None:

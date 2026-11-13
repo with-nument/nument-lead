@@ -22,10 +22,12 @@ from nument_engine.segments import (
 from .helpers import Conn
 
 WAVE1 = {"clinics-in", "realestate-in", "education-in", "clinics-ae", "realestate-ae", "education-ae"}
+NEED_FIRST = {"firms-in"}  # the need-first track (13 Nov 2026): businesses come from signals only
 # A.13.5 rule 7: the only subcategory and ticket class names.
 TICKET_CLASSES = {
     "ivf_fertility", "hair_transplant", "aesthetic", "dermatology", "dental", "physio", "therapy_group",
     "developer", "broker", "property_services", "study_abroad", "coaching_institute", "academy", "tutoring",
+    "funded_startup", "smb",
 }  # fmt: skip
 
 
@@ -40,7 +42,9 @@ def _copy_with(tmp_path: Path, seg_id: str, old: str, new: str, file_name: str |
 
 
 def test_all_segments_load() -> None:
-    assert set(load_segments()) == WAVE1
+    assert set(load_segments()) == WAVE1 | NEED_FIRST
+    firms = load_segments()["firms-in"]
+    assert firms.universe == "signals_only" and not firms.overture.categories and firms.packaged_outcome
 
 
 def test_quotas_fit_research_per_day() -> None:
@@ -168,10 +172,10 @@ def test_file_name_must_match_the_id(tmp_path: Path) -> None:
 
 
 def test_quotas_over_the_daily_research_budget_are_rejected(tmp_path: Path) -> None:
-    for seg_id in WAVE1:
+    for seg_id in WAVE1 | NEED_FIRST:
         (tmp_path / f"{seg_id}.yaml").write_text((SEGMENTS_DIR / f"{seg_id}.yaml").read_text())
-    with pytest.raises(SegmentConfigError, match="more than research_per_day=250"):
-        load_segments(tmp_path, research_per_day=250)
+    with pytest.raises(SegmentConfigError, match="more than research_per_day=200"):
+        load_segments(tmp_path, research_per_day=200)
 
 
 def test_apna_is_india_only(tmp_path: Path) -> None:
@@ -200,7 +204,7 @@ def test_sync_fills_config_honours_the_switch_and_keeps_the_app_quota(db_conn: C
         [Jsonb({"education-ae": False})],
     )
     segments = load_segments()
-    assert sync_segments_to_db(db_conn, segments) == 6
+    assert sync_segments_to_db(db_conn, segments) == 7
     rows = {
         r["id"]: r
         for r in db_conn.execute(
@@ -216,7 +220,7 @@ def test_sync_fills_config_honours_the_switch_and_keeps_the_app_quota(db_conn: C
     assert db_conn.execute("select daily_quota from public.segments where id = 'clinics-in'").fetchone() == {
         "daily_quota": 25
     }
-    assert db_conn.execute("select count(*) as n from public.segments").fetchone() == {"n": 6}
+    assert db_conn.execute("select count(*) as n from public.segments").fetchone() == {"n": 7}
 
 
 def test_sync_inserts_a_new_segment_with_its_file_quota(db_conn: Conn) -> None:

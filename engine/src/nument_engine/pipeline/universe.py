@@ -340,6 +340,9 @@ async def build(ctx: SourceContext, segments: dict[str, Segment], monthly: bool)
                 previous = processed if isinstance(processed, str) and processed in available else None
                 stats["overture_release"] = release
         for seg in segments.values():
+            if seg.universe == "signals_only":  # need-first: businesses come only from signals (13 Nov 2026)
+                stats[seg.id] = {"skipped": "signals_only"}
+                continue
             s: Counter[str] = Counter()
             resolver = Resolver(seg, dry_run=ctx.dry_run)
             if monthly:

@@ -77,11 +77,11 @@ class Quota(BaseModel):
 
 
 class Overture(BaseModel):
-    categories: list[str] = Field(min_length=1)
+    categories: list[str] = Field(default_factory=list)  # required for a map universe (Segment._consistency)
 
 
 class Places(BaseModel):
-    queries: list[str] = Field(min_length=1)
+    queries: list[str] = Field(default_factory=list)  # required for a map universe
     details_per_day: int = Field(ge=0, le=230)
     reviews_per_day: int = Field(ge=0, le=230)
 
@@ -199,6 +199,9 @@ class Segment(BaseModel):
     scoring: dict[str, Any] = Field(default_factory=dict)
     packaged_outcome: str
     angles: list[Angle] = Field(min_length=8)
+    # "map": businesses come from Overture, Places, OSM and registries. "signals_only" (the need-first track,
+    # 13 Nov 2026): a business exists only because it said it needs a build (a job post or a public ask).
+    universe: Literal["map", "signals_only"] = "map"
 
     @model_validator(mode="after")
     def _consistency(self) -> Segment:
@@ -218,6 +221,8 @@ class Segment(BaseModel):
             raise ValueError("one angle must list a growth signal (new_place, new_branch or news)")
         if self.country != "in" and self.apna.pages_per_day:
             raise ValueError("apna is India only")
+        if self.universe == "map" and not (self.overture.categories and self.places.queries):
+            raise ValueError("a map universe needs overture.categories and places.queries")
         for sub in self.ticket_class:
             if not re.fullmatch(r"[a-z0-9_]+", sub):
                 raise ValueError(f"ticket_class key {sub} must be lowercase snake_case")

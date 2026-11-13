@@ -280,6 +280,14 @@ def score(
 
 
 @app.command()
+def lookup(ctx: typer.Context) -> None:
+    """Official websites for businesses born from a job post or an ask (the need-first track)."""
+    from .pipeline import lookup as m
+
+    _execute(ctx, "manual", m.run)
+
+
+@app.command()
 def judge(ctx: typer.Context) -> None:
     """Top-model judgement for the top half (Step 11)."""
     from .pipeline import judge as m

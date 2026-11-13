@@ -2,7 +2,7 @@ id: realestate-ae
 domain: realestate
 country: ae
 display_name: Real estate, UAE
-enabled: true
+enabled: false                  # off since 12 Nov 2026: Overture real estate data was mostly junk
 timezone: Asia/Dubai
 currency: AED
 quota: {daily_research: 40}

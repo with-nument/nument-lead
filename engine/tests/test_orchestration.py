@@ -195,7 +195,7 @@ def test_phase_tables_follow_the_plan() -> None:
         "night": runs.night_phases, "morning": runs.morning_phases, "weekly": runs.weekly_phases, "monthly": runs.monthly_phases,
     }.items()}  # fmt: skip
     assert names["night"] == [
-        "health", "universe", "signals", "prefilter", "research", "extract_submit", "maps_reviews",
+        "health", "universe", "signals", "lookup", "prefilter", "research", "extract_submit", "maps_reviews",
     ]  # fmt: skip
     assert names["morning"] == [
         "health", "extract_collect", "verify", "reviews", "score", "judge", "message", "sheet_sync", "prune", "summary",

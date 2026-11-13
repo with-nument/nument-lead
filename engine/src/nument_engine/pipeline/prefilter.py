@@ -287,8 +287,8 @@ def apply_rules(b: dict[str, Any], seg: Segment | None, excl: Exclusions, world:
     # R10: some way to reach them
     if not (b.get("website") or world.phones.get(bid) or world.emails.get(bid)):
         extra = b.get("extra") or {}
-        if sigs and extra.get("born_from") and not extra.get("places_lookup_at"):
-            return "skip", "R10_waiting_lookup"  # the night's Places lookup may still find their listing
+        if sigs and extra.get("born_from") and not (extra.get("places_lookup_at") or extra.get("website_lookup_at")):
+            return "skip", "R10_waiting_lookup"  # tonight's website or Places lookup may still find them
         return "reject", "no_contact_route"
     # R11: dormant businesses are not researched
     if b.get("status") == "dormant":

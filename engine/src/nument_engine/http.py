@@ -53,6 +53,25 @@ NEVER_FETCH: frozenset[str] = frozenset(
         "justdial.com",
         "indiamart.com",
         "sulekha.com",
+        # Job boards: search snippets only, then the company's own site (old D-042, 13 Nov 2026).
+        "naukri.com",
+        "indeed.com",
+        "instahyre.com",
+        "glassdoor.com",
+        "glassdoor.co.in",
+        "foundit.in",
+        "shine.com",
+        "internshala.com",
+        "cutshort.io",
+        "wellfound.com",
+        "quora.com",
+        # Freelance marketplaces are never a source (CLAUDE.md).
+        "upwork.com",
+        "freelancer.com",
+        "freelancer.in",
+        "fiverr.com",
+        "guru.com",
+        "truelancer.com",
     }
 )
 

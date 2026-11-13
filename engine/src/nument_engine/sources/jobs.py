@@ -287,6 +287,9 @@ def classify_job(
         ctx.add("jobs.low_confidence")
         return None
     seg = segments.get(f"{DOMAIN_MAP.get(domain, domain)}-{country}")
+    if seg is None and role == "builder":
+        # A business hiring a developer is a need-first lead whatever its industry (13 Nov 2026).
+        seg = segments.get(f"firms-{country}")
     if seg is None:
         ctx.add("jobs.domain_not_enabled")
         return None

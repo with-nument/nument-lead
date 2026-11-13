@@ -101,7 +101,14 @@ COUNTRY_NAMES: dict[str, str] = {
     "us": "the US",
     "au": "Australia",
 }
-DOMAIN_WORDS: dict[str, str] = {"clinics": "clinic", "realestate": "real estate", "education": "coaching or education"}
+DOMAIN_WORDS: dict[str, str] = {
+    "clinics": "clinic",
+    "realestate": "real estate",
+    "education": "coaching or education",
+    "firms": "small or mid-size company of any industry (not an IT services firm, agency or staffing company)",
+}
+# A query that starts with this looks for job posts (hiring_builder) instead of public asks (13 Nov 2026).
+HIRING_PREFIX = "hiring:"
 
 
 class GroundedSearchAdapter(SourceAdapter):
@@ -133,9 +140,19 @@ class GroundedSearchAdapter(SourceAdapter):
 
     @staticmethod
     def todays_queries(seg: Segment, day: int | None = None) -> list[str]:
-        """Each query runs every third day, so every segment is searched at least twice a week (5.11.3)."""
+        """Each query runs every third day, so every segment is searched at least twice a week (5.11.3). A
+        need-first segment (`universe: signals_only`) has no other source of businesses: every query runs daily."""
+        if seg.universe == "signals_only":
+            return list(seg.public_ask_queries)
         day = datetime.now(UTC).toordinal() if day is None else day
         return [q for i, q in enumerate(seg.public_ask_queries) if (day + i) % 3 == 0]
+
+    @staticmethod
+    def query_kind(query: str) -> tuple[str, str]:
+        """("jobs", text) for a "hiring:" query, else ("asks", query)."""
+        if query.lower().startswith(HIRING_PREFIX):
+            return "jobs", query[len(HIRING_PREFIX) :].strip()
+        return "asks", query
 
     # ---- citations ----------------------------------------------------------------------------------
     async def resolve_citation(self, cite: Citation) -> str:
@@ -179,7 +196,12 @@ class GroundedSearchAdapter(SourceAdapter):
             return None
         return parsed if parsed and parsed.tzinfo else parsed.replace(tzinfo=UTC) if parsed else None
 
-    def classify(self, item: Any, seg: Segment) -> bool:
+    def classify(self, item: Any, seg: Segment, kind: str = "asks") -> str | None:
+        """The segment the signal belongs to, or None when it is not a target business's ask or builder job.
+
+        A need-first segment (firms) takes a builder job or ask from any industry except agencies and staffing
+        firms; when the poster's own industry has an enabled segment, the signal is routed there first (the sink
+        falls back to firms when that segment is off)."""
         result = self.ctx.ai(
             "classify_signal",
             {
@@ -193,18 +215,27 @@ class GroundedSearchAdapter(SourceAdapter):
                 "employer_name": field_of(item, "poster_business"),
                 "employer": field_of(item, "poster_business"),
                 "address": field_of(item, "poster_city"),
-                "mode": "public_ask",
+                "mode": "job_post" if kind == "jobs" else "public_ask",
                 "text": f"{field_of(item, 'need') or ''}\n{field_of(item, 'quote') or ''}",
             },
         )
         if result is None or not field_of(result, "is_relevant"):
-            return False
+            return None
+        if float(field_of(result, "confidence") or 0) < MIN_CONFIDENCE:
+            return None
         domain = str(field_of(result, "employer_domain") or "other")
-        if domain == "agency_or_staffing" or DOMAIN_MAP.get(domain) != seg.domain:
-            return False
-        return float(field_of(result, "confidence") or 0) >= MIN_CONFIDENCE
+        if domain == "agency_or_staffing":
+            return None
+        if seg.universe == "signals_only":
+            if str(field_of(result, "role_category") or "") != "builder":
+                return None
+            home = DOMAIN_MAP.get(domain)
+            return f"{home}-{seg.country}" if home and home != seg.domain else seg.id
+        return seg.id if DOMAIN_MAP.get(domain) == seg.domain else None
 
-    async def item_signal(self, item: Any, citations: Sequence[Citation], seg: Segment) -> Signal | None:
+    async def item_signal(
+        self, item: Any, citations: Sequence[Citation], seg: Segment, kind: str = "asks"
+    ) -> Signal | None:
         url, quote = str(field_of(item, "url") or ""), str(field_of(item, "quote") or "").strip()
         if not url or len(quote) < 5:
             return None
@@ -226,14 +257,19 @@ class GroundedSearchAdapter(SourceAdapter):
         if not snippet_only and not await self.verify_on_page(cited, quote):
             self.ctx.add("grounded_search.quote_not_on_page")
             return None
-        if not self.classify(item, seg):
+        target = self.classify(item, seg, kind)
+        if target is None:
             self.ctx.add("grounded_search.not_a_business_ask")
             return None
         details: dict[str, Any] = {"need": field_of(item, "need"), "snippet_only": snippet_only}
+        if kind == "jobs":
+            details["role"] = field_of(item, "need")
         if posted is None:
             details["date_estimated"] = True
+        if target != seg.id:
+            details["fallback_segment"] = seg.id  # used when the poster's own segment is off
         return Signal(
-            type="public_ask",
+            type="hiring_builder" if kind == "jobs" else "public_ask",
             source=self.name,
             observed_at=posted or now,
             url=cited,
@@ -242,13 +278,15 @@ class GroundedSearchAdapter(SourceAdapter):
             business_hint={"name": name, "city": city},
             details=details,
             points=SNIPPET_ONLY_POINTS if snippet_only else None,
+            segment_id=target if target != seg.id else None,
         )
 
     async def signals_for(self, seg: Segment, *, budget: int, limit: int | None = None) -> list[Signal]:
         out: list[Signal] = []
-        for query in self.todays_queries(seg)[:budget]:
+        for raw_query in self.todays_queries(seg)[:budget]:
             if self.ctx.ai_stopped:
                 break
+            kind, query = self.query_kind(raw_query)
             result = self.ctx.ai_result(  # output and citations together
                 "grounded_search",
                 {
@@ -258,6 +296,7 @@ class GroundedSearchAdapter(SourceAdapter):
                     "cities": [c.name for c in seg.cities],
                     "query": query,
                     "queries": [query],
+                    "kind": kind,
                     "days": MAX_AGE_DAYS,
                     "today": datetime.now(UTC).date().isoformat(),
                 },
@@ -267,7 +306,7 @@ class GroundedSearchAdapter(SourceAdapter):
             answer = answer_from(result)
             self.ctx.add("grounded_search.items", len(answer.items))
             for item in answer.items:
-                sig = await self.item_signal(item, answer.citations, seg)
+                sig = await self.item_signal(item, answer.citations, seg, kind)
                 if sig is not None:
                     out.append(sig)
                 if limit and len(out) >= limit:

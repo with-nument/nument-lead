@@ -165,6 +165,8 @@ class SignalSink:
 
     def add(self, sig: Signal, seg: Segment) -> None:
         target = self.segments.get(sig.segment_id or seg.id)
+        if target is None and sig.details.get("fallback_segment") in self.segments:
+            target = self.segments[str(sig.details["fallback_segment"])]  # the poster's own segment is off
         if target is None:
             self._count(seg.id, "segment_disabled")
             return

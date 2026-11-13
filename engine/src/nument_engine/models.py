@@ -217,6 +217,7 @@ AITask = Literal[
     "check_message",
     "grounded_search",
     "lookup_reviews",
+    "find_website",
     "classify_reviews",
     "weekly_audit",
 ]
@@ -308,6 +309,14 @@ class ReviewLookup(BaseModel):
     hiring_line: str | None = Field(default=None, description="the Hiring line copied exactly from the answer, or null")
     branch_line: str | None = Field(default=None, description="the New branch line copied exactly, or null")
     complaint_line: str | None = Field(default=None, description="the Complaint line copied exactly, or null")
+
+
+class WebsiteLookup(BaseModel):
+    """`find_website`: the official website of one business found through a job post or a public ask, read
+    through Google Search grounding (no Places key needed). Code checks the site before keeping it."""
+
+    website: str | None = Field(description="the official website address as the answer gives it, or null")
+    website_line: str | None = Field(description="the Website line copied exactly from the answer, or null")
 
 
 ReviewPainFlag = Literal["unanswered_calls", "slow_replies", "booking_trouble", "long_wait", "rude_front_desk"]
@@ -475,6 +484,7 @@ AI_OUTPUT_MODELS: Final[dict[str, type[BaseModel]]] = {
     "check_message": MessageCheck,
     "grounded_search": PublicAskResults,
     "lookup_reviews": ReviewLookup,
+    "find_website": WebsiteLookup,
     "classify_reviews": ReviewPainClassification,
     "weekly_audit": AuditResult,
 }

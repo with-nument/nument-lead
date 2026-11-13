@@ -324,6 +324,8 @@ def night_phases() -> list[Phase]:
         Phase("health", stage("ops.health", "check_all", fail_fast=True), essential=True),  # only a FAIL stops it
         Phase("universe", stage("pipeline.universe"), budget="low_priority_research"),
         Phase("signals", stage("pipeline.signals"), budget="grounded_search"),
+        # websites of businesses born from a job post or an ask (no Places key), before the pre-filter
+        Phase("lookup", stage("pipeline.lookup"), budget="grounded_search"),
         Phase("prefilter", stage("pipeline.prefilter"), essential=True),
         Phase("research", stage("pipeline.research"), budget="research"),
         Phase("extract_submit", stage("pipeline.extract", "submit"), budget="extract"),

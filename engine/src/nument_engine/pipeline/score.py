@@ -274,8 +274,18 @@ def business_count(b: Mapping[str, Any], facts: Sequence[Row], column: str, fact
     return max(counts) if counts else None
 
 
-def fit_gate(b: Mapping[str, Any], facts: Sequence[Row], seg: Segment, excl: Exclusions) -> tuple[int, list[str]]:
-    """0 to 3: type match, size, owner-led without a tech team (11.2)."""
+def fit_gate(
+    b: Mapping[str, Any],
+    facts: Sequence[Row],
+    seg: Segment,
+    excl: Exclusions,
+    stated_need: Mapping[str, Any] | None = None,
+) -> tuple[int, list[str]]:
+    """0 to 3: type match, size, owner-led without a tech team (11.2).
+
+    In a need-first segment (`universe: signals_only`) there is no map category: the business's own stated need
+    (a builder job post or a public ask) is the type match.
+    """
     why: list[str] = []
     fit = 0
     services = [
@@ -289,6 +299,9 @@ def fit_gate(b: Mapping[str, Any], facts: Sequence[Row], seg: Segment, excl: Exc
     if seg.is_type_match(b.get("category"), b.get("subcategory")):
         fit += 1
         why.append(f"type match: {b.get('subcategory') or b.get('category')}")
+    elif seg.universe == "signals_only" and stated_need is not None:
+        fit += 1
+        why.append(f"type match: their own stated need (signal {evidence.short_id(stated_need['id'])})")
     elif services:
         fit += 1
         why.append(f"type match: service '{fact_text(services[0])[:40]}' (fact {evidence.short_id(services[0]['id'])})")
@@ -587,7 +600,10 @@ def score_business(
 ) -> ScoreResult:
     """The whole Step 11 rule score for one business (no AI)."""
     active = [s for s in signals if evidence.is_active(s, now)]
-    fit, fit_why = fit_gate(b, facts, seg, excl)
+    stated = next(
+        (s for s in active if (s.get("category") or SIGNAL_CATEGORY.get(str(s["type"]))) == "stated_need"), None
+    )
+    fit, fit_why = fit_gate(b, facts, seg, excl, stated)
     can_pay, pay_why, pay_proxies = can_pay_breakdown(b, facts, active, seg, cfg)
     intent, kept = intent_score(
         [s for s in active if (s.get("category") or SIGNAL_CATEGORY.get(str(s["type"]))) != "money"], now, cfg, seg

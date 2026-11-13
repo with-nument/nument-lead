@@ -22,6 +22,7 @@ from nument_engine.models import (
     ReviewPainClassification,
     SignalClassification,
     TextFact,
+    WebsiteLookup,
 )
 
 MESSAGE = (
@@ -105,6 +106,7 @@ OUTPUTS: dict[str, BaseModel] = {
         practo_quote=None,
         complaint=None,
     ),
+    "find_website": WebsiteLookup(website="https://brightcart.in", website_line="Website: https://brightcart.in"),
     "classify_reviews": ReviewPainClassification(
         has_pain=True,
         flags=["unanswered_calls"],
