@@ -109,6 +109,8 @@ def test_builder_words_and_website_choice() -> None:
     assert jf.website_from(p, "made-up.io") == "https://brightcart.io"  # a guess is never kept
     ats = FeedPost(feed="hn", post_id="3", url="u", text="Apply", links=["https://jobs.lever.co/brightcart/1"])
     assert jf.website_from(ats, None) is None
+    loxo = FeedPost(feed="hn", post_id="4", url="u", text="Apply at loxo.co", links=["https://app.loxo.co/job/1"])
+    assert jf.website_from(loxo, "loxo.co") is None  # a recruiting tool, not the company (live, 13 Nov 2026)
     assert jf.country_code("UK") == "gb" and jf.country_code("United States") == "us" and jf.country_code("") is None
 
 

@@ -74,6 +74,14 @@ KIND_TO_DOMAIN = {"product_company": "firms", "small_business": "firms", "other"
 COUNTRY_ALIASES = {"uk": "gb", "england": "gb", "united kingdom": "gb", "usa": "us", "united states": "us",
                    "uae": "ae", "united arab emirates": "ae", "india": "in", "australia": "au", "canada": "ca",
                    "singapore": "sg"}  # fmt: skip
+# Hosts a post links to that are never the company's own site: job boards, applicant tracking systems, forms.
+NOT_COMPANY_SITES: tuple[str, ...] = (
+    "ycombinator.com", "himalayas.app", "weworkremotely.com", "greenhouse.io", "lever.co", "ashbyhq.com",
+    "workable.com", "loxo.co", "recruitee.com", "breezy.hr", "bamboohr.com", "smartrecruiters.com", "jobvite.com",
+    "myworkdayjobs.com", "teamtailor.com", "personio.de", "personio.com", "rippling.com", "dover.com", "gem.com",
+    "welcometothejungle.com", "wellfound.com", "notion.site", "notion.so", "google.com", "forms.gle",
+    "typeform.com", "airtable.com", "calendly.com", "github.com", "gitlab.com", "linktr.ee", "bit.ly",
+)  # fmt: skip
 _TAG = re.compile(r"<[^>]+>")
 _HREF = re.compile(r"""href=["']([^"']+)["']""", re.I)
 _ITEM = re.compile(r"<item>(.*?)</item>", re.S)
@@ -217,15 +225,11 @@ def website_from(post: FeedPost, answer: str | None) -> str | None:
     that is not a job board, a social network or an applicant tracking system."""
     text = f"{post.text} {' '.join(post.links)}".lower()
     dom = web_domain(answer or "")
-    if dom and dom in text and not host_blocked(f"https://{dom}"):
+    if dom and dom in text and not host_blocked(f"https://{dom}") and not dom.endswith(NOT_COMPANY_SITES):
         return f"https://{dom}"
     for link in post.links:
         dom = web_domain(link)
-        if not dom or host_blocked(link) or any(
-            dom.endswith(h)
-            for h in ("ycombinator.com", "himalayas.app", "weworkremotely.com", "greenhouse.io", "lever.co",
-                      "ashbyhq.com", "workable.com", "notion.site", "google.com", "forms.gle", "github.com")
-        ):  # fmt: skip
+        if not dom or host_blocked(link) or dom.endswith(NOT_COMPANY_SITES):
             continue
         return f"https://{dom}"
     return None
