@@ -255,6 +255,17 @@ def test_collect_writes_facts_marks_researched_and_adds_no_booking(
     assert sig is not None and sig["type"] == "no_booking" and "pages checked" in sig["quote"]
 
 
+def test_a_nul_character_in_a_page_never_fails_the_batch(clean_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Live, 13 Nov 2026: a stray NUL (0x00) in one page's quote failed the whole morning batch of 60."""
+    bid = seed_business()
+    raw = facts_json(url=f"{SITE}/")
+    raw["business_name"]["value"] = "Extract\x00 Clinic"
+    batch(monkeypatch, FakeBatch([item(bid, FactsExtraction.model_validate(raw))]))
+    out = extract.collect(run_context(segments=["clinics-in"]), router=FakeRouter())
+    assert out["businesses"] == 1 and not out.get("write_failed")
+    assert extract.no_nul({"a\x00": ["b\x00", 1]}) == {"a": ["b", 1]}
+
+
 def test_collect_can_rebuild_inputs_for_a_retry(clean_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
     bid = seed_business()
     fake = batch(monkeypatch, FakeBatch([item(bid, None, error="invalid JSON")]))

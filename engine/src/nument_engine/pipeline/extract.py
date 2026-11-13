@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Final
 
+import psycopg
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ValidationError
 
@@ -363,6 +364,18 @@ def parsed_of(result: Any) -> FactsExtraction | None:
     return None
 
 
+def no_nul(value: Any) -> Any:
+    """The value without NUL characters, which PostgreSQL text and jsonb refuse. Live, 13 Nov 2026: one page's
+    stray NUL failed the whole morning batch of 60 businesses."""
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, dict):
+        return {no_nul(k): no_nul(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [no_nul(v) for v in value]
+    return value
+
+
 def write_facts(business_id: str, facts: FactsExtraction, model_tag: str) -> int:
     """Replace the business's AI facts with these, in one transaction. Returns the number of rows."""
     pages = {
@@ -374,7 +387,7 @@ def write_facts(business_id: str, facts: FactsExtraction, model_tag: str) -> int
     rows = []
     for field_name, value, quote, url in flatten(facts):
         cited, page_id = page_for(url, quote, pages)
-        rows.append([business_id, field_name, Jsonb(value), quote, cited, page_id, model_tag])
+        rows.append([business_id, field_name, Jsonb(no_nul(value)), no_nul(quote), no_nul(cited), page_id, model_tag])
     with db.tx() as conn, conn.cursor() as cur:
         cur.execute(
             "delete from public.facts where business_id = %s and model <> 'rule' and field = any(%s)",
@@ -513,7 +526,12 @@ def ingest(results: Iterable[Any], ctx: SourceContext, segments: dict[str, Segme
         if ctx.dry_run:
             stats["would_write"] += 1
             continue
-        stats["facts"] += write_facts(bid, facts, tag)
+        try:
+            stats["facts"] += write_facts(bid, facts, tag)
+        except psycopg.DataError as exc:  # one bad business never stops the batch
+            stats["write_failed"] += 1
+            log.warning("extract.write_failed", business_id=bid, error=str(exc)[:200])
+            continue
         stats["businesses"] += 1
         stats["sync_answers"] += bool(field_of(result, "sync"))
         seg_id = db.scalar("select segment_id from public.businesses where id = %s", [bid])
