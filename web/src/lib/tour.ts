@@ -88,7 +88,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
     route: '/leads',
     target: ['grade-filter', 'lead-row'],
     title: 'Grades A to D',
-    body: 'Each lead is scored out of 100 on fit, ability to pay, how fresh the need is and whether we can reach them. A is 70 and up, B is 55 and up, and those two land in your send list. C and D wait here for later.',
+    body: 'Each lead is scored out of 100: need (35), ability to pay (35), fit (10) and how directly we can reach them (20). A is 75 and up, B is 55 and up, and those two land in your send list. C and D wait here for later.',
   },
   {
     id: 'lead-why',

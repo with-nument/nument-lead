@@ -268,9 +268,10 @@ def decide(c: Candidate, state: LeadState, now: datetime) -> LeadPlan:
     return LeadPlan(c.business_id, "create", c)
 
 
-def fit_only_allowed(pct: float, other_new: int, fit_only_today: int) -> int:
-    """How many more fit-only leads may be created: 10% of the day's other new leads, rounded up, min 1."""
-    return max(0, max(1, math.ceil(pct / 100 * other_new)) - fit_only_today)
+def fit_only_allowed(pct: float, other_new: int, fit_only_today: int, min_per_day: int = 1) -> int:
+    """How many more fit-only leads may be created today: `pct`% of the day's other new leads, rounded up, and
+    never fewer than `min_per_day` (scoring.yaml fit_only_min_per_day)."""
+    return max(0, max(min_per_day, math.ceil(pct / 100 * other_new)) - fit_only_today)
 
 
 def plan_all(
@@ -282,6 +283,7 @@ def plan_all(
     fetch: Fetcher | None = None,
     stats: Counter[str] | None = None,
     today: Mapping[str, Counter[str]] | None = None,
+    fit_only_min: Mapping[str, int] | None = None,
 ) -> Plans:
     """Decide every lead action, then apply the fit-only cap and the phone freshness rule to creations."""
     stats = stats if stats is not None else Counter()
@@ -299,7 +301,12 @@ def plan_all(
         )
         counts = today.get(seg_id, Counter())
         other_today = sum(n for mode, n in counts.items() if mode != "fit_only")
-        allowed = fit_only_allowed(fit_only_pct.get(seg_id, 10.0), other_today + len(others), counts["fit_only"])
+        allowed = fit_only_allowed(
+            fit_only_pct.get(seg_id, 10.0),
+            other_today + len(others),
+            counts["fit_only"],
+            (fit_only_min or {}).get(seg_id, 1),
+        )
         for p in fit_only[allowed:]:
             p.action, p.reason = "keep", "fit_only_cap"
             plans.capped_ids.add(p.business_id)

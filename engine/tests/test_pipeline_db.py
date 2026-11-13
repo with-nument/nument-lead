@@ -218,12 +218,13 @@ def test_score_creates_the_lead_and_rescoring_changes_nothing(pipeline_db: str) 
     assert stats["leads.create"] == 1
     row = db.fetch_one("select * from public.scores where business_id = %s", [ids["business"]])
     assert row is not None
-    assert (row["fit"], float(row["can_pay"]), float(row["intent"]), float(row["reach"])) == (3, 22, 16, 1)
-    assert (float(row["total"]), row["grade"], row["pitch_mode"], row["version"]) == (60, "B", "visible_pain", "s1.0")
+    # s2.0: need 24 (visible pain cap) + can pay 22/30 x 35 + fit 10 + reach 20 = 80
+    assert (row["fit"], float(row["can_pay"]), float(row["intent"]), float(row["reach"])) == (3, 22, 24, 1)
+    assert (float(row["total"]), row["grade"], row["pitch_mode"], row["version"]) == (80, "A", "visible_pain", "s2.0")
     assert row["judge_note"] and row["reasons"]["basis"]
     lead = _lead(ids["business"])
     assert lead is not None
-    assert (lead["stage"], lead["grade"], lead["angle"], lead["channel"]) == ("new", "B", "frontdesk_load", "whatsapp")
+    assert (lead["stage"], lead["grade"], lead["angle"], lead["channel"]) == ("new", "A", "frontdesk_load", "whatsapp")
     assert lead["test_group"] == "education-ae:visible_pain:frontdesk_load" and lead["score_id"] == row["id"]
     created = db.fetch_all("select source, type from public.activities where lead_id = %s", [lead["id"]])
     assert created == [{"source": "engine", "type": "lead_created"}]
@@ -298,26 +299,29 @@ def _judgement(grade: str, note: str, cite: str = "hiring") -> Any:
     return answer
 
 
-def test_judge_moves_one_step_stores_the_note_and_updates_the_new_lead(pipeline_db: str) -> None:
+def test_judge_moves_the_number_stores_the_note_and_updates_the_new_lead(pipeline_db: str) -> None:
     ids = seed_academy(pipeline_db)
     verify.run(rc_for(), router=FakeRouter({}), deps=DEPS)
     score.run(rc_for())
     router = FakeRouter(
         {
             "judge_lead": _judgement(
-                "A", "Hiring an admissions counsellor 2 days ago, with 180 Google reviews behind it."
+                "B", "Hiring an admissions counsellor 2 days ago, with 180 Google reviews behind it."
             )
         }
     )
     stats = judge.run(rc_for(), router=router)
-    assert stats["judged"] == 1 and stats["grade.up"] == 1
+    assert stats["judged"] == 1 and stats["grade.down"] == 1
     assert router.calls[0].lead_id == str(_lead(ids["business"])["id"])  # type: ignore[index]
     assert all("+971" not in str(v) for v in router.calls[0].inputs["contacts_summary"])
     row = db.fetch_one("select * from public.scores where business_id = %s", [ids["business"]])
-    assert row is not None and (row["grade"], row["judge_grade"]) == ("A", "A")
+    # one grade lower takes 8 points: 80 becomes 72, a B, and the number and the grade agree
+    assert row is not None and (row["grade"], row["judge_grade"], float(row["total"])) == ("B", "B", 72)
+    assert row["reasons"]["rule_total"] == 80 and row["reasons"]["judge"]["adjust"] == -8
     assert row["judge_note"].startswith("Hiring an admissions counsellor")
     assert row["judge_model"] == "gemini:gemini-3-flash#judge_lead.v1"
-    assert _lead(ids["business"])["grade"] == "A"  # type: ignore[index]
+    assert _lead(ids["business"])["grade"] == "B"  # type: ignore[index]
+    assert score.run(rc_for())["scores.unchanged"] == 1  # the moved total does not make a new score row
     assert judge.run(rc_for(), router=FakeRouter({"judge_lead": []}))["selected"] == 0  # already judged
 
 
@@ -329,7 +333,7 @@ def test_judge_with_a_fake_citation_is_discarded(pipeline_db: str) -> None:
     stats = judge.run(rc_for(), router=FakeRouter({"judge_lead": _judgement("A", "Great lead.", cite="F-made-up")}))
     assert stats["judge_bad_citation"] == 1
     row = db.fetch_one("select * from public.scores where business_id = %s", [ids["business"]])
-    assert row is not None and row["grade"] == "B" and row["judge_grade"] is None and row["judge_note"] == rule_note
+    assert row is not None and row["grade"] == "A" and row["judge_grade"] is None and row["judge_note"] == rule_note
 
 
 # ---------------------------------------------------------------------------

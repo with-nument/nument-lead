@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from nument_engine.models import LeadJudgement
+from nument_engine.pipeline import judge
 from nument_engine.pipeline.judge import angle_fits, clamp, clean_note, review, select_for_judging, sentence_count
 from nument_engine.pipeline.lint import ClaimContext
 from nument_engine.segments import load_segments
@@ -116,3 +117,33 @@ def test_selection_takes_the_best_half_and_every_a() -> None:
     rows.append({"segment_id": "realestate-in", "business_id": "r1", "total": 30, "reasons": {"rule_grade": "C"}})
     picked = [r["business_id"] for r in select_for_judging(rows, {"clinics-in": 0.5, "realestate-in": 0.5})]
     assert picked == ["b5", "b4", "b3", "b0", "r1"]
+
+
+# ---------------------------------------------------------------------------
+# s2.0: the judge moves the number, the grade follows the number
+# ---------------------------------------------------------------------------
+
+
+def _j(grade: str, confidence: float = 0.8, risks: list[str] | None = None) -> LeadJudgement:
+    return LeadJudgement(
+        judge_grade=grade,  # type: ignore[arg-type]
+        cited_ids=["F1"],
+        judge_note="Fine.",
+        best_angle="frontdesk_load",
+        risks=risks or [],
+        confidence=confidence,
+    )
+
+
+def test_a_raise_is_small_and_needs_confidence_and_two_citations() -> None:
+    assert judge.adjustment("B", _j("A"), cited=2, total=70) == 5
+    assert judge.adjustment("B", _j("A"), cited=1, total=70) == 0  # one citation is not enough
+    assert judge.adjustment("B", _j("A", confidence=0.6), cited=3, total=70) == 0
+    assert judge.adjustment("B", _j("B"), cited=3, total=70) == 0
+
+
+def test_a_lower_grade_takes_points_and_a_disqualifier_makes_it_d() -> None:
+    assert judge.adjustment("A", _j("B"), cited=1, total=80) == -8
+    assert judge.adjustment("A", _j("C"), cited=1, total=80) == -15
+    assert judge.adjustment("A", _j("D", risks=["looks like a hospital chain"]), cited=1, total=80) == -41
+    assert judge.adjustment("B", _j("D", risks=["unclear"]), cited=1, total=60) == -15  # no disqualifier named

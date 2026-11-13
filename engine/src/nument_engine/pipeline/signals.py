@@ -188,6 +188,14 @@ class SignalSink:
         if rows and not self.ctx.dry_run:
             with db.tx() as conn, conn.cursor() as cur:
                 cur.executemany(UPSERT_SIGNAL_SQL, list(rows.values()))
+                # A new signal wakes a dormant business: it is scored again the next morning (13 Nov 2026).
+                woken = conn.execute(
+                    "update public.businesses set status = 'researched' "
+                    "where id = any(%s::uuid[]) and status = 'dormant' and researched_at is not null",
+                    [sorted({str(r["business_id"]) for r in rows.values() if r.get("business_id")})],
+                ).rowcount
+                if woken:
+                    self.ctx.add("signals.woke_dormant", int(woken))
         self.pending.clear()
         return {k: dict(v) for k, v in self.stats.items()}
 

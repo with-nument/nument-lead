@@ -137,6 +137,16 @@ class Fit(BaseModel):
     service_keywords: list[str] = Field(default_factory=list)
     min_reviews: int = Field(100, ge=0)
     min_staff: int = Field(2, ge=0)
+    # Words in a business name that mark a type the segment does not target, for example "spoken english" in
+    # education (low ticket). Matched as whole words, case-insensitive; such a business is rejected.
+    exclude_names: list[str] = Field(default_factory=list)
+
+    def excludes_name(self, name: str | None) -> str | None:
+        text = " ".join(re.findall(r"[a-z0-9]+", str(name or "").lower()))
+        return next(
+            (w for w in self.exclude_names if re.search(rf"(?<![a-z0-9]){re.escape(w.lower())}(?![a-z0-9])", text)),
+            None,
+        )
 
 
 class TicketClass(BaseModel):

@@ -1,8 +1,15 @@
-"""Scoring and grading (Step 11): fit gate, can-pay, intent and reach into one number from 0 to 100.
+"""Scoring and grading (Step 11): need, can-pay, fit and reach add up to one number from 0 to 100 (score s2.0).
 
-    raw   = fit_bonus (0, 5 or 10) + can_pay (0 to 30) + intent (0 to 40)        -> 0 to 80
-    total = round_half_up(raw / 80 * 100 * reach)                                 -> 0 to 100
-    grade = A at 70+, B 55 to 69, C 40 to 54, D under 40; D whenever the fit gate fails
+    need    = signal points x category multiplier, visible pain at most 24, growth at most 12   -> 0 to 35
+    can_pay = proxy points (capped at 30) scaled to 35                                         -> 0 to 35
+    fit     = 10 for fit 3, 6 for fit 2                                                        -> 0 to 10
+    reach   = share of 20 (decision maker mobile 1.0, business mobile 0.9, landline 0.6, ...) -> 0 to 20
+    total   = round_half_up(need + can_pay + fit + reach)                                      -> 0 to 100
+    grade   = A at 75+, B 55 to 74, C 40 to 54, D under 40; D whenever the fit gate fails or nobody is reachable
+
+s2.0 replaced s1.0 (raw / 80 x 100 x reach) on 13 Nov 2026: a strong business without a signal could not get
+above 50 there, so the judge lifted C to B and the lead showed "B, 40/100". The stored columns keep their
+meaning: `intent` is the need points, `can_pay` the proxy points before scaling, `reach` the share (0 to 1).
 
 Every weight comes from `scoring_config(segment)` (config/scoring.yaml plus segment overrides) with the
 learned `settings.score_weights` on top (A.13.5 rule 8, Step 16.3). Scoring is pure code and cheap, so the
@@ -15,7 +22,7 @@ from __future__ import annotations
 import math
 import re
 import uuid
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -37,8 +44,8 @@ from .verify import Exclusions, Suppression
 
 log = get_logger()
 
-SCORE_VERSION: Final = "s1.0"
-DEFAULT_GRADES: Final[dict[str, float]] = {"A": 70, "B": 55, "C": 40}  # A.12.9
+SCORE_VERSION: Final = "s2.0"
+DEFAULT_GRADES: Final[dict[str, float]] = {"A": 75, "B": 55, "C": 40}  # s2.0
 DECAY_STEPS: Final = ((0.30, 1.0), (0.60, 0.7), (1.00, 0.4))  # share of the window -> multiplier (11.4.1)
 # A.12.3 default points, used only when a stored signal carries none.
 DEFAULT_SIGNAL_POINTS: Final[dict[str, float]] = {
@@ -110,6 +117,7 @@ class ScoringConfig:
     fit_gate: int
     fit_bonus: Mapping[int, float]
     can_pay_cap: float
+    can_pay_points: float  # the can-pay part of the total: proxy points / can_pay_cap * can_pay_points
     branches: tuple[Tier, ...]
     staff: tuple[Tier, ...]
     reviews: tuple[Tier, ...]
@@ -121,10 +129,13 @@ class ScoringConfig:
     stack_bonus_per_type: float
     stack_bonus_max: float
     reach: Mapping[str, float]
-    raw_max: float
+    reach_points: float
     grades: Mapping[str, float]
     fit_only_max_pct: float
     judge_top_share: float
+    multiplier: Mapping[str, float] = field(default_factory=dict)  # signal category -> need multiplier
+    category_cap: Mapping[str, float] = field(default_factory=dict)  # signal category -> most need points
+    fit_only_min_per_day: int = 1
     signal_points: Mapping[str, float] = field(default_factory=dict)
 
     @classmethod
@@ -147,6 +158,7 @@ class ScoringConfig:
             fit_gate=int(raw["fit"]["gate"]),
             fit_bonus={int(k): float(v) for k, v in raw["fit"]["bonus"].items()},
             can_pay_cap=float(pay["cap"]),
+            can_pay_points=float(pay.get("points", pay["cap"])),
             branches=tiers("branches"),
             staff=tiers("staff"),
             reviews=tiers("reviews"),
@@ -158,10 +170,13 @@ class ScoringConfig:
             stack_bonus_per_type=float(raw["intent"]["stack_bonus_per_type"]),
             stack_bonus_max=float(raw["intent"]["stack_bonus_max"]),
             reach={k: float(v) for k, v in raw["reach"].items()},
-            raw_max=float(raw["total"]["raw_max"]),
+            reach_points=float(raw["total"]["reach_points"]),
             grades={k: float(v) for k, v in (raw.get("grades") or DEFAULT_GRADES).items()},
             fit_only_max_pct=float(share) * 100 if share is not None else float(raw.get("fit_only_max_pct", 10)),
             judge_top_share=float(raw.get("judge_top_share", 0.5)),
+            multiplier={str(k): float(v) for k, v in (raw["intent"].get("multiplier") or {}).items()},
+            category_cap={str(k): float(v) for k, v in (raw["intent"].get("category_cap") or {}).items()},
+            fit_only_min_per_day=int(raw.get("fit_only_min_per_day", 1)),
             signal_points={
                 str(k): float(v) for k, v in ((weights.get("signal_points") or {}).get(segment_id) or {}).items()
             },
@@ -212,11 +227,17 @@ def signal_points(signal: Mapping[str, Any], seg: Segment, cfg: ScoringConfig) -
 def intent_score(
     signals: Iterable[Mapping[str, Any]], now: datetime, cfg: ScoringConfig, seg: Segment | None = None
 ) -> tuple[float, list[dict[str, Any]]]:
-    """(intent 0 to 40, the signals kept). Best value per type, one per event, a small stacking bonus."""
+    """(need 0 to 35, the signals kept). Best value per type, one per event, a small stacking bonus.
+
+    A signal's value is its points times its category's multiplier (a stated need counts most), decayed by
+    age. Visible pain and growth each add at most their category cap, so without a stated need a lead cannot
+    reach the top of the scale.
+    """
     best_by_type: dict[str, dict[str, Any]] = {}
     for s in signals:
         points = signal_points(s, seg, cfg) if seg is not None else float(s.get("points") or 0)
-        value = points * decay(s["observed_at"], s["expires_at"], now)
+        category = str(s.get("category") or SIGNAL_CATEGORY.get(str(s["type"])) or "")
+        value = points * cfg.multiplier.get(category, 1.0) * decay(s["observed_at"], s["expires_at"], now)
         if value <= 0:
             continue
         cur = best_by_type.get(s["type"])
@@ -228,10 +249,17 @@ def intent_score(
         if key not in by_event or s["value"] > by_event[key]["value"]:
             by_event[key] = s
     kept = sorted(by_event.values(), key=lambda s: -s["value"])
-    base = sum(s["value"] for s in kept)
+    by_category: dict[str, float] = defaultdict(float)
+    for s in kept:
+        by_category[str(s.get("category") or SIGNAL_CATEGORY.get(str(s["type"])) or "")] += s["value"]
+    base = sum(min(v, cfg.category_cap.get(cat, v)) for cat, v in by_category.items())
     n = len(kept)
     bonus = min(cfg.stack_bonus_per_type * (n - 1), cfg.stack_bonus_max) if n >= 2 else 0.0
-    return min(base + bonus, cfg.intent_cap), kept
+    # Without a stated need the ceiling is the highest cap among the categories present (visible pain 24).
+    ceiling = cfg.intent_cap
+    if by_category and "stated_need" not in by_category:
+        ceiling = min(ceiling, max(cfg.category_cap.get(cat, cfg.intent_cap) for cat in by_category))
+    return min(base + bonus, ceiling), kept
 
 
 def _word_match(phrase: str, text: str) -> bool:
@@ -255,6 +283,9 @@ def fit_gate(b: Mapping[str, Any], facts: Sequence[Row], seg: Segment, excl: Exc
         for f in evidence.by_field(facts, "service")
         if any(_word_match(k, fact_text(f)) for k in seg.fit.service_keywords)
     ]
+    excluded = seg.fit.excludes_name(b.get("name"))
+    if excluded:  # a type the segment does not target: the fit gate fails, so the grade is D
+        return 0, [f"not a target type: '{excluded}' in the name"]
     if seg.is_type_match(b.get("category"), b.get("subcategory")):
         fit += 1
         why.append(f"type match: {b.get('subcategory') or b.get('category')}")
@@ -563,10 +594,10 @@ def score_business(
     )
     reach = reach_of(contacts, facts, cfg, now, suppressed)
     fit_bonus = cfg.fit_bonus.get(fit, 0.0)
-    raw = fit_bonus + can_pay + round(intent, 2)
-    total = min(100, round_half_up(raw / cfg.raw_max * 100 * reach.value))
+    pay_part = can_pay / cfg.can_pay_cap * cfg.can_pay_points if cfg.can_pay_cap else 0.0
+    total = min(100, round_half_up(round(intent, 2) + pay_part + fit_bonus + reach.value * cfg.reach_points))
     gate_failed = fit < cfg.fit_gate
-    grade = "D" if gate_failed else grade_of(total, cfg)
+    grade = "D" if gate_failed or reach.value <= 0 else grade_of(total, cfg)
     mode = pitch_mode_of(kept)
     angle = pick_angle(mode, kept, seg)
     fact_ids = [str(f["id"]) for f in facts]
@@ -583,6 +614,13 @@ def score_business(
         "rule_grade": grade,
         "angle": angle,
         "basis": basis,
+        # the four parts of the total as shown in the app and the email (s2.0)
+        "parts": {
+            "need": round(intent, 1),
+            "can_pay": round(pay_part, 1),
+            "fit": fit_bonus,
+            "reach": round(reach.value * cfg.reach_points, 1),
+        },
     }
     result = ScoreResult(
         fit=fit,
@@ -746,7 +784,8 @@ def same_result(row: Mapping[str, Any] | None, r: ScoreResult) -> bool:
         and math.isclose(float(row.get("can_pay") or 0), r.can_pay, abs_tol=0.005)
         and math.isclose(float(row.get("intent") or 0), r.intent, abs_tol=0.005)
         and math.isclose(float(row.get("reach") or 0), r.reach, abs_tol=0.005)
-        and math.isclose(float(row.get("total") or 0), r.total, abs_tol=0.005)
+        # the judge may have moved the stored total (s2.0); the rule total is kept in reasons
+        and math.isclose(float(reasons.get("rule_total", row.get("total")) or 0), r.total, abs_tol=0.005)
     )
 
 
@@ -935,7 +974,8 @@ def run(rc: RunContext, *, all_businesses: bool = False, fetch: leads.Fetcher | 
         scored += score_ids(ids[start : start + CHUNK], segments, configs, excl, suppressed, now, errors=stats)
     states = leads.load_states([str(s.business["id"]) for s in scored])
     pct = {sid: cfg.fit_only_max_pct for sid, cfg in configs.items()}
-    plans = leads.plan_all(candidates(scored), states, pct, now, fetch=fetch, stats=stats)
+    floor = {sid: cfg.fit_only_min_per_day for sid, cfg in configs.items()}
+    plans = leads.plan_all(candidates(scored), states, pct, now, fetch=fetch, stats=stats, fit_only_min=floor)
     for s in scored:
         s.capped = plans.capped(str(s.business["id"]))
         stats[f"grade.{s.final_grade}"] += 1

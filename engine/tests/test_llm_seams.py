@@ -48,7 +48,7 @@ def test_pipeline_seam_calls_the_router_and_reads_who_answered(
 
     judged = ai.call(router, "judge_lead", SMOKE_INPUTS["judge_lead"], LeadJudgement, run_id=run_ctx.run_id)
     assert judged.output == OUTPUTS["judge_lead"]
-    assert judged.tag == "gemini:gemini-4-argon#judge_lead.v1"
+    assert judged.tag == "gemini:gemini-4-argon#judge_lead.v2"
 
     draft = ai.call(router, "write_message", SMOKE_INPUTS["write_message"], MessageDraft, run_id=run_ctx.run_id)
     assert draft.model == "gemini-3.8-flash" and draft.fallback_from == "openai:gpt-6.1-terra"

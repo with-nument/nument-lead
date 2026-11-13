@@ -17,13 +17,11 @@ cities:
 
 overture:
   categories:                   # checked against the Overture taxonomy of release 2026-10-21.0
-    - educational_service       # includes test_preparation, tutoring_service and college_counseling
-    - tutoring_service
+    - educational_service       # includes test_preparation, tutoring_service and college_counseling;
+                                # tutoring and language classes are dropped by fit.exclude_names (13 Nov 2026)
     - test_preparation
     - college_counseling        # study-abroad and admissions consultants
-    - language_school
     - vocational_and_technical_school
-    - computer_coaching
     - academy                   # includes civil_examinations_academy (UPSC and state exam coaching)
 
 places:
@@ -59,26 +57,30 @@ news_queries:
 
 size_rules:
   any_of:
-    - {source: business, key: review_count, op: ">=", value: 50}
-    - {source: business, key: branches_count, op: ">=", value: 2}
+    - {source: business, key: review_count, op: ">=", value: 150}   # high-ticket only (13 Nov 2026)
+    - {source: business, key: branches_count, op: ">=", value: 3}
 
 signal_points: {hiring_frontdesk: 9, ads_running: 5}
 
 fit:
-  categories: [educational_service, tutoring_service, test_preparation, college_counseling, language_school,
-               vocational_and_technical_school, computer_coaching, academy, civil_examinations_academy]
+  categories: [educational_service, test_preparation, college_counseling, vocational_and_technical_school,
+               academy, civil_examinations_academy]
+  # Low-ticket classes rarely pay Rs 50K+ (founder, 13 Nov 2026): rejected by name before research.
+  exclude_names: [spoken english, english speaking, english classes, tuition, tuitions, tutorial, tutorials,
+                  home tutor, home tuition, abacus, phonics, handwriting, vedic math, play school, playschool,
+                  preschool, pre school, day care, daycare, kids, hobby, dance class, music class, drawing]
   service_keywords: [ielts, pte, toefl, sat, gmat, gre, university admissions, study abroad,
                      tutoring, test preparation, professional certification]
-  min_reviews: 50
+  min_reviews: 150
   min_staff: 2
 
 ticket_class:
   study_abroad:       {match: [college_counseling, education consultant, study abroad,
                                university admissions], points: 5}
-  coaching_institute: {match: [test_preparation, civil_examinations_academy, computer_coaching, ielts, sat,
+  coaching_institute: {match: [test_preparation, civil_examinations_academy, ielts, sat,
                                gmat, gre, pte, toefl], points: 4}
   academy:            {match: [vocational_and_technical_school, training institute, academy, institute], points: 3}
-  tutoring:           {match: [tutoring_service, language_school, tutoring, tuition, language institute], points: 2}
+  tutoring:           {match: [tutoring_service, language_school, tutoring, tuition, language institute], points: 0}  # dropped from targeting
 
 can_pay:
   premium_price: {other: 10000}        # AED, any course fee

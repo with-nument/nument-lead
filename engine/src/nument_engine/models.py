@@ -95,14 +95,14 @@ SIGNAL_CATEGORY: Final[dict[str, str]] = {
 # ---- Grades, pitch modes, test groups (A.12.4, A.12.9) ----------------------
 Grade = Literal["A", "B", "C", "D"]
 GRADES: Final[tuple[str, ...]] = get_args(Grade)
-GRADE_MIN_TOTAL: Final[dict[str, int]] = {"A": 70, "B": 55, "C": 40}  # below the C threshold is D
+GRADE_MIN_TOTAL: Final[dict[str, int]] = {"A": 75, "B": 55, "C": 40}  # score s2.0; below the C threshold is D
 
 PitchMode = Literal["stated_need", "visible_pain", "fit_only"]
 PITCH_MODES: Final[tuple[str, ...]] = get_args(PitchMode)
 
 
 def grade_for(total: float) -> Grade:
-    """Grade from a 0 to 100 score total: A at 70 or more, B 55 to 69, C 40 to 54, D under 40."""
+    """Grade from a 0 to 100 score total: A at 75 or more, B 55 to 74, C 40 to 54, D under 40."""
     if total >= GRADE_MIN_TOTAL["A"]:
         return "A"
     if total >= GRADE_MIN_TOTAL["B"]:

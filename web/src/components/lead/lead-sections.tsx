@@ -45,6 +45,21 @@ function reasonLines(reasons: Json): string[] {
   return [...new Set(out)].slice(0, 12)
 }
 
+/** The four parts of the total (score s2.0): need, can pay, fit and reach add up to the number shown.
+ * Older s1.0 rows carry no `parts`, so they are converted with the s2.0 weights for display. */
+export function scoreParts(score: Score): { label: string; value: number; max: number }[] {
+  const reasons = (score.reasons && typeof score.reasons === 'object' && !Array.isArray(score.reasons) ? score.reasons : {}) as Record<string, Json | undefined>
+  const parts = (reasons.parts && typeof reasons.parts === 'object' && !Array.isArray(reasons.parts) ? reasons.parts : {}) as Record<string, Json | undefined>
+  const num = (v: Json | undefined, fallback: number) => (typeof v === 'number' ? v : fallback)
+  const fitPoints = score.fit >= 3 ? 10 : score.fit === 2 ? 6 : 0
+  return [
+    { label: 'Need', value: Math.min(35, num(parts.need, Number(score.intent))), max: 35 },
+    { label: 'Can pay', value: num(parts.can_pay, (Number(score.can_pay) / 30) * 35), max: 35 },
+    { label: 'Fit', value: num(parts.fit, fitPoints), max: 10 },
+    { label: 'Reach', value: num(parts.reach, Number(score.reach) * 20), max: 20 },
+  ]
+}
+
 export function WhyCard({ score, pitchMode, testGroup, judgeNote }: { score: Score | null; pitchMode: string | null; testGroup: string | null; judgeNote: string | null }) {
   const lines = score ? reasonLines(score.reasons) : []
   const note = score?.judge_note ?? judgeNote
@@ -54,10 +69,9 @@ export function WhyCard({ score, pitchMode, testGroup, judgeNote }: { score: Sco
       <CardBody className="flex flex-col gap-5">
         {score ? (
           <div className="flex flex-col gap-2.5">
-            <Bar label="Fit" value={score.fit} max={3} display={`${score.fit} / 3`} />
-            <Bar label="Can pay" value={Number(score.can_pay)} max={30} display={`${Math.round(Number(score.can_pay))} / 30`} />
-            <Bar label="Intent" value={Number(score.intent)} max={40} display={`${Math.round(Number(score.intent))} / 40`} />
-            <Bar label="Reach" value={Number(score.reach)} max={1} display={`${Math.round(Number(score.reach) * 100)}%`} />
+            {scoreParts(score).map((p) => (
+              <Bar key={p.label} label={p.label} value={p.value} max={p.max} display={`${Math.round(p.value)} / ${p.max}`} />
+            ))}
           </div>
         ) : (
           <p className="text-base text-tx-3">No score yet.</p>

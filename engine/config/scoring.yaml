@@ -1,13 +1,20 @@
 # engine/config/scoring.yaml : default scoring numbers (Step 11 owns the formula)
 # A segment's `scoring:` block overrides any value here for that segment (lists are replaced).
-# Fixed in score.py, not here: grade cut-offs (A.12.9), signal decay steps, SCORE_VERSION.
+# Fixed in score.py, not here: signal decay steps, SCORE_VERSION.
+#
+# Score s2.0 (13 Nov 2026): four parts that add up to 100, so the number is the lead's quality and the grade
+# always follows it:
+#   need (0 to 35) + can pay (0 to 35) + fit (0 to 10) + reach (0 to 20)
+# A strong business with no buying signal lands at about 55 to 65 (B), fit plus a fresh visible pain at about
+# 70 to 85, a stated need with money and a direct mobile at 90 to 100.
 
 fit:
   gate: 2                       # fit below 2 = grade D (reason fit_gate)
-  bonus: {3: 10, 2: 5, 1: 0, 0: 0}
+  bonus: {3: 10, 2: 6, 1: 0, 0: 0}
 
 can_pay:
-  cap: 30
+  cap: 30                       # proxy points are capped here, then scaled to `points`
+  points: 35                    # the can-pay part of the total
   branches: [{min: 4, points: 8}, {min: 2, points: 6}]     # tiers: the first that matches counts
   staff:    [{min: 8, points: 6}, {min: 3, points: 4}]
   reviews:  [{min: 300, points: 6}, {min: 100, points: 4}]
@@ -17,21 +24,28 @@ can_pay:
   funding: 6                    # an active funding signal
   # ticket class points (0 to 6) come from the segment's ticket_class
 
-intent:
-  cap: 40
-  stack_bonus_per_type: 2       # for each signal type after the first
-  stack_bonus_max: 4
+intent:                         # shown as "Need" in the app and the email
+  cap: 35
+  # A signal's points (A.12.3, for example public_ask 10, review_pain 7) times its category's multiplier.
+  multiplier: {stated_need: 3.5, visible_pain: 2.2, growth: 2.0}
+  # Visible pain and growth alone can never look like a stated need.
+  category_cap: {visible_pain: 24, growth: 12}
+  stack_bonus_per_type: 3       # for each signal type after the first
+  stack_bonus_max: 6
 
-reach:
+reach:                          # share of the reach points: how directly we can reach the decision maker
   decision_maker_mobile: 1.00
-  business_mobile: 0.85
-  landline: 0.65
-  email: 0.45
-  form: 0.30
-  none: 0.00
+  business_mobile: 0.90
+  landline: 0.60
+  email: 0.40
+  form: 0.20
+  none: 0.00                    # no usable contact: grade D
 
 total:
-  raw_max: 80                   # total = round(raw / raw_max * 100 * reach)
+  reach_points: 20              # total = need + can_pay / cap * can_pay.points + fit bonus + reach * reach_points
 
-fit_only_max_pct: 10            # A.12.4
+grades: {A: 75, B: 55, C: 40}   # D under 40
+
+fit_only_max_pct: 50            # fit-only leads a day per segment: at most this share of the other new leads,
+fit_only_min_per_day: 5         # but always up to this many (strong fit-only businesses are real B leads)
 judge_top_share: 0.5            # the best half by total (and every A) goes to the top model

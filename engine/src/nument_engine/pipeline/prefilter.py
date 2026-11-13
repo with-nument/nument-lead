@@ -242,6 +242,8 @@ def apply_rules(b: dict[str, Any], seg: Segment | None, excl: Exclusions, world:
         return "skip", "R2_category_unknown"
     if any(p.search(name) for p in excl.non_target):  # the map category is wrong: "Home Centre - Furniture Store"
         return "reject", "R2_not_target"
+    if seg.fit.excludes_name(b.get("name")):  # a type the segment does not target ("spoken english" classes)
+        return "reject", "R2_not_target"
     # R3: big chains, hospitals, too many branches
     domain = (b.get("web_domain") or "").lower()
     if domain in excl.chain_domains or any(p.search(name) for p in excl.chain_names):

@@ -17,7 +17,7 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter, defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Final, cast
@@ -41,10 +41,46 @@ _DASHES: Final = re.compile(r"\s*[\u2013\u2014]\s*|\s+-\s+")
 _ABBREV: Final = re.compile(r"\b(?:Dr|Mr|Mrs|Ms|St|No|Pvt|Ltd|Co|Inc|vs)\.", re.I)
 
 
+# Score s2.0 (13 Nov 2026): the judge moves the number, and the grade follows the number. Raising is rare and
+# small; lowering is cheap, because a wrong lead costs the founder more than a missed one.
+RAISE: Final = 5
+LOWER_ONE: Final = 8
+LOWER_MAX: Final = 15
+RAISE_MIN_CONFIDENCE: Final = 0.7
+RAISE_MIN_CITED: Final = 2
+DISQUALIFY_MIN_CONFIDENCE: Final = 0.6
+DISQUALIFIERS: Final = re.compile(
+    r"\b(agency|agencies|software (?:vendor|company|house)|it services|chain|franchise|head office|hospital|"
+    r"in.house tech|tech team|corporate|listed company)\b",
+    re.I,
+)
+
+
 def clamp(rule_grade: str, proposed: str) -> str:
     """At most one step away from the rule grade: B may become A, B or C (11.10.4 rule 1)."""
     r, p = GRADE_ORDER.index(rule_grade), GRADE_ORDER.index(proposed)
     return GRADE_ORDER[max(r - 1, min(r + 1, p))]
+
+
+def adjustment(rule_grade: str, judgement: LeadJudgement, cited: int, total: float) -> int:
+    """Points the judge adds to or takes from the rule total (s2.0).
+
+    A higher grade adds RAISE points, only with confidence of at least 0.7 and two cited facts or signals.
+    A lower grade takes LOWER_ONE points, or LOWER_MAX for two grades or more. A D with a disqualifying risk
+    (agency, chain, hospital, in-house tech team) takes the lead below 40, so it becomes D.
+    """
+    r, p = GRADE_ORDER.index(rule_grade), GRADE_ORDER.index(judgement.judge_grade)
+    if (
+        judgement.judge_grade == "D"
+        and judgement.confidence >= DISQUALIFY_MIN_CONFIDENCE
+        and any(DISQUALIFIERS.search(risk) for risk in judgement.risks)
+    ):
+        return int(min(-LOWER_MAX, 39 - total))
+    if p < r:
+        return RAISE if judgement.confidence >= RAISE_MIN_CONFIDENCE and cited >= RAISE_MIN_CITED else 0
+    if p > r:
+        return -LOWER_ONE if p - r == 1 else -LOWER_MAX
+    return 0
 
 
 def sentence_count(text: str) -> int:
@@ -67,6 +103,8 @@ class Verdict:
     note_replaced: str | None = None
     angle_rejected: bool = False
     cited: list[str] = field(default_factory=list)
+    final_total: float | None = None  # rule total plus `adjust`, 0 to 100 (s2.0)
+    adjust: int = 0
 
 
 def angle_fits(seg: Segment, angle: str, mode: str, kept_types: set[str]) -> bool:
@@ -90,15 +128,29 @@ def review(
     kept_types: set[str],
     seg: Segment,
     ctx: ClaimContext,
+    total: float | None = None,
+    grade_for: Callable[[float], str] | None = None,
+    locked: bool = False,
 ) -> Verdict:
-    """Apply the five guardrails to one judgement."""
+    """Apply the guardrails to one judgement.
+
+    With `total` and `grade_for` (s2.0) the judge moves the number by `adjustment` and the grade is the grade of
+    the new number; `locked` (fit gate failed, nobody reachable) keeps a D whatever the judge says. Without them
+    the grade moves at most one step (s1.0).
+    """
     cited: list[str] = []
     for raw in judgement.cited_ids:
         known = evidence.resolve_cited_id(raw, ctx.known_ids)
         if known is None:
-            return Verdict(rule_grade, None, rule_note, rule_angle, discarded="bad_citation")
+            return Verdict(rule_grade, None, rule_note, rule_angle, discarded="bad_citation", final_total=total)
         cited.append(known)
-    final = clamp(rule_grade, judgement.judge_grade)
+    final_total, adjust = total, 0
+    if total is not None and grade_for is not None:
+        adjust = 0 if locked else adjustment(rule_grade, judgement, len(set(cited)), total)
+        final_total = max(0.0, min(100.0, total + adjust))
+        final = "D" if locked else grade_for(final_total)
+    else:
+        final = clamp(rule_grade, judgement.judge_grade)
     note = clean_note(judgement.judge_note)
     replaced = None
     if not note or sentence_count(note) > MAX_NOTE_SENTENCES or len(note) > 280:
@@ -115,6 +167,8 @@ def review(
         note_replaced=replaced,
         angle_rejected=not angle_ok,
         cited=cited,
+        final_total=final_total,
+        adjust=adjust,
     )
 
 
@@ -348,6 +402,8 @@ def run(rc: RunContext, router: ai.AIRouter | None = None) -> dict[str, Any]:
             trusted_words=trusted_words(seg, b, [str(b.get("subcategory") or ""), str(b.get("category") or "")]),
             trusted_numbers=trusted_numbers(seg) | business_numbers(b),
         )
+        cfg = configs[seg.id]
+        rule_total = float(reasons.get("rule_total") or row["total"])
         verdict = review(
             res.output,
             rule_grade=rule_grade,
@@ -357,7 +413,11 @@ def run(rc: RunContext, router: ai.AIRouter | None = None) -> dict[str, Any]:
             kept_types=kept_types,
             seg=seg,
             ctx=ctx,
+            total=rule_total,
+            grade_for=lambda t, cfg=cfg: score.grade_of(t, cfg),  # type: ignore[misc]
+            locked=bool(reasons.get("fit_gate_failed")) or reasons.get("reach_kind") == "none",
         )
+        final_total = float(verdict.final_total if verdict.final_total is not None else rule_total)
         record = {
             "angle": verdict.angle,
             "rule_angle": rule_angle,
@@ -367,17 +427,19 @@ def run(rc: RunContext, router: ai.AIRouter | None = None) -> dict[str, Any]:
             "proposed_grade": res.output.judge_grade,
             "discarded": verdict.discarded,
             "note_replaced": verdict.note_replaced,
+            "adjust": verdict.adjust,
         }
         with db.tx("engine", {"run_id": rc.run_id, "stage": "judge"}) as conn:
             conn.execute(
                 "update public.scores set judge_grade = %s, judge_note = %s, judge_model = %s, grade = %s, "
-                "reasons = reasons || %s where id = %s",
+                "total = %s, reasons = reasons || %s where id = %s",
                 [
                     verdict.judge_grade,
                     verdict.note,
                     res.tag,
                     verdict.final_grade,
-                    db.Jsonb({"judge": record}),
+                    final_total,
+                    db.Jsonb({"judge": record, "rule_total": rule_total}),
                     row["id"],
                 ],
             )
@@ -399,7 +461,7 @@ def run(rc: RunContext, router: ai.AIRouter | None = None) -> dict[str, Any]:
                 segment_id=seg.id,
                 score_id=row["id"],
                 grade=verdict.final_grade,
-                total=float(row["total"]),
+                total=final_total,
                 pitch_mode=str(row["pitch_mode"]),
                 angle=verdict.angle,
                 test_group=make_test_group(seg.id, cast(PitchMode, row["pitch_mode"]), verdict.angle),
@@ -411,7 +473,14 @@ def run(rc: RunContext, router: ai.AIRouter | None = None) -> dict[str, Any]:
             )
         )
     if judged:
-        plans = leads.plan_all(judged, states, {k: c.fit_only_max_pct for k, c in configs.items()}, now, stats=stats)
+        plans = leads.plan_all(
+            judged,
+            states,
+            {k: c.fit_only_max_pct for k, c in configs.items()},
+            now,
+            stats=stats,
+            fit_only_min={k: c.fit_only_min_per_day for k, c in configs.items()},
+        )
         with db.tx("engine", {"run_id": rc.run_id, "stage": "judge"}) as conn:
             leads.apply(conn, plans, now)
             conn.cursor().executemany(

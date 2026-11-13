@@ -21,7 +21,7 @@ from collections import Counter
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Final
 
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ValidationError
@@ -429,6 +429,69 @@ def no_booking_signal(business_id: str, facts: FactsExtraction) -> Signal | None
     )
 
 
+HIRING_TYPES: Final[dict[str, str]] = {"frontdesk": "hiring_frontdesk", "builder": "hiring_builder"}
+
+
+def hiring_signals(business_id: str, facts: FactsExtraction) -> list[Signal]:
+    """Roles the business's own careers page lists (13 Nov 2026: they were stored as facts only).
+
+    One signal per front-desk or builder role, quoting the page; the role title and month make the evidence key,
+    so a role still listed next month counts again but the same listing never counts twice.
+    """
+    domain = db.scalar("select web_domain from public.businesses where id = %s", [business_id]) or business_id
+    now = datetime.now(UTC)
+    out: list[Signal] = []
+    seen: set[str] = set()
+    for role in facts.careers_roles:
+        kind = HIRING_TYPES.get(role.category)
+        title = role.title.strip()
+        if kind is None or not title or title.lower() in seen:
+            continue
+        seen.add(title.lower())
+        out.append(
+            Signal(
+                type=kind,
+                source="research",
+                observed_at=now,
+                url=role.url,
+                quote=role.quote,
+                evidence_key=f"{domain}|{title.lower()}|{now:%Y-%m}",
+                business_id=business_id,
+                details={"role": title, "from": "careers_page"},
+            )
+        )
+    return out
+
+
+def ads_signal(business_id: str) -> Signal | None:
+    """An advertising tag (Meta or Google Ads) on the business's own pages: they pay for leads (visible pain)."""
+    row = db.fetch_one(
+        """select b.web_domain, f.value as tech, f.quote, f.url
+             from public.businesses b
+             join public.facts f on f.business_id = b.id and f.field = 'tech_stack' and f.model in ('rule', 'code')
+            where b.id = %s
+            order by f.created_at desc limit 1""",
+        [business_id],
+    )
+    tech = (row or {}).get("tech")
+    if not row or not isinstance(tech, dict) or not tech.get("runs_ads_tag"):
+        return None
+    tools = [t for t in tech.get("tools") or [] if isinstance(t, dict) and t.get("kind") == "ads"]
+    names = ", ".join(sorted({str(t.get("tool")) for t in tools if t.get("tool")})) or "an ads tag"
+    page = next((str(t["page_url"]) for t in tools if t.get("page_url")), None) or row.get("url")
+    now = datetime.now(UTC)
+    return Signal(
+        type="ads_running",
+        source="research",
+        observed_at=now,
+        url=page,
+        quote=f"Advertising tag on their website: {names}"[:300],
+        evidence_key=f"{row['web_domain'] or business_id}|ads|{now:%Y-%m}",
+        business_id=business_id,
+        details={"tools": names, "from": "site_tag"},
+    )
+
+
 def ingest(results: Iterable[Any], ctx: SourceContext, segments: dict[str, Segment]) -> Counter[str]:
     """Write facts for each finished item (`llm.batch.ItemResult`); a failed one stays queued for tomorrow."""
     stats: Counter[str] = Counter()
@@ -454,10 +517,13 @@ def ingest(results: Iterable[Any], ctx: SourceContext, segments: dict[str, Segme
         stats["businesses"] += 1
         stats["sync_answers"] += bool(field_of(result, "sync"))
         seg_id = db.scalar("select segment_id from public.businesses where id = %s", [bid])
-        sig = no_booking_signal(bid, facts)
-        if sig is not None and seg_id in segments:
-            sink.add(sig, segments[seg_id])
-            stats["no_booking"] += 1
+        if seg_id not in segments:
+            continue
+        found = [no_booking_signal(bid, facts), ads_signal(bid), *hiring_signals(bid, facts)]
+        for sig in found:
+            if sig is not None:
+                sink.add(sig, segments[seg_id])
+                stats[sig.type] += 1
     sink.flush()
     return stats
 

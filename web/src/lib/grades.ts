@@ -1,4 +1,4 @@
-// Lead grades (plan A.12.9): A 70+, B 55 to 69, C 40 to 54, D under 40.
+// Lead grades (score s2.0): A 75+, B 55 to 74, C 40 to 54, D under 40. The number always matches the grade.
 export const GRADES = ['A', 'B', 'C', 'D'] as const
 export type Grade = (typeof GRADES)[number]
 

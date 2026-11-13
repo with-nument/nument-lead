@@ -201,9 +201,9 @@ def test_run_returns_the_output_and_last_meta_names_who_answered(llm_db: str) ->
         "task": "judge_lead",
         "provider": "gemini",
         "model": "gemini-4-argon",
-        "prompt_version": 1,
+        "prompt_version": 2,
         "fallback_from": None,
-        "tag": "gemini:gemini-4-argon#judge_lead.v1",
+        "tag": "gemini:gemini-4-argon#judge_lead.v2",
         "cached": False,
         "inr": router.last_meta["inr"],
     }

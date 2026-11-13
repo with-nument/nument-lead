@@ -83,7 +83,7 @@ def test_stage_tables_are_consistent() -> None:
 
 
 @pytest.mark.parametrize(
-    ("total", "grade"), [(100, "A"), (70, "A"), (69.99, "B"), (55, "B"), (54, "C"), (40, "C"), (39.9, "D"), (0, "D")]
+    ("total", "grade"), [(100, "A"), (75, "A"), (74.99, "B"), (55, "B"), (54, "C"), (40, "C"), (39.9, "D"), (0, "D")]
 )
 def test_grade_thresholds(total: float, grade: str) -> None:
     assert grade_for(total) == grade

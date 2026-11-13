@@ -359,6 +359,7 @@ class Plan:
     expire_signals: list[str] = field(default_factory=list)
     branches_count: int | None = None
     staff_count: int | None = None
+    rename: str | None = None  # the site's own name, when the listing name belongs to someone else
     extra_patch: dict[str, Any] = field(default_factory=dict)
     stats: Counter[str] = field(default_factory=Counter)
 
@@ -1047,6 +1048,145 @@ class Suppression:
         )
 
 
+# Words every business in a field shares: they say nothing about which business a name means.
+GENERIC_NAME_WORDS: Final = frozenset(
+    [
+        "the",
+        "and",
+        "of",
+        "a",
+        "an",
+        "&",
+        "dr",
+        "doctor",
+        "doctors",
+        "pvt",
+        "private",
+        "ltd",
+        "limited",
+        "llp",
+        "inc",
+        "co",
+        "company",
+        "group",
+        "india",
+        "clinic",
+        "clinics",
+        "dental",
+        "dentist",
+        "dentists",
+        "dentistry",
+        "dent",
+        "skin",
+        "hair",
+        "derma",
+        "dermatology",
+        "dermatologist",
+        "cosmetic",
+        "aesthetic",
+        "aesthetics",
+        "laser",
+        "care",
+        "cure",
+        "centre",
+        "center",
+        "centres",
+        "centers",
+        "hospital",
+        "hospitals",
+        "health",
+        "healthcare",
+        "medical",
+        "multispeciality",
+        "multispecialty",
+        "speciality",
+        "specialty",
+        "super",
+        "ivf",
+        "fertility",
+        "test",
+        "tube",
+        "baby",
+        "physio",
+        "physiotherapy",
+        "therapy",
+        "wellness",
+        "academy",
+        "institute",
+        "institution",
+        "classes",
+        "class",
+        "coaching",
+        "tuition",
+        "tuitions",
+        "tutorial",
+        "tutorials",
+        "english",
+        "speaking",
+        "spoken",
+        "school",
+        "schools",
+        "education",
+        "educational",
+        "learning",
+        "studies",
+        "study",
+        "abroad",
+        "overseas",
+        "consultant",
+        "consultants",
+        "consultancy",
+        "training",
+    ]
+)
+
+
+def distinctive_words(name: str | None) -> list[str]:
+    words = re.findall(r"[a-z0-9]+", unicodedata.normalize("NFKD", str(name or "")).lower())
+    return [w for w in words if w not in GENERIC_NAME_WORDS and len(w) > 1]
+
+
+def names_match(
+    listing: str | None, site: str | None, web_domain: str | None = None, places: Iterable[str] = ()
+) -> bool:
+    """Do the listing's name and the site's own name mean the same business?
+
+    Only distinctive words count (not "clinic", "dental", "english speaking" or the city), so "Ipromise English
+    Speaking" and "BM English Speaking" do not match, while "Cosmodentindia" and "Cosmodent India" do. A name
+    with no distinctive word left cannot be judged and counts as a match.
+    """
+    skip = {w for p in places for w in distinctive_words(p)}
+    a = [w for w in distinctive_words(listing) if w not in skip]
+    b = [w for w in distinctive_words(site) if w not in skip]
+    if not a or not b:
+        return True
+    ja, jb = "".join(a), "".join(b)
+    if ja in jb or jb in ja or fuzz.token_set_ratio(" ".join(a), " ".join(b)) >= 80:
+        return True
+    domain = re.sub(r"[^a-z0-9]", "", str(web_domain or "").lower())
+    return any(len(w) >= 4 and w in domain for w in a)
+
+
+def name_check(bundle: Bundle, verified: Sequence[Row], seg: Segment) -> tuple[str, str | None]:
+    """('ok', None), ('rename', site name) or ('wrong_website', site name), from the verified `business_name`.
+
+    13 Nov 2026: an Overture listing carried another business's website, so the message greeted a different name.
+    The site's own name wins when the site is in the listing's city; otherwise the website is not theirs.
+    """
+    b = bundle.business
+    names = [str(vget(f.get("value"), "name") or "").strip() for f in evidence.by_field(verified, "business_name")]
+    site = next((n for n in names if n), None)
+    places = [str(b.get("city") or ""), str(b.get("locality") or "")]
+    places += [a for c in seg.cities if c.name == b.get("city") for a in c.aliases]
+    if site is None or names_match(b.get("name"), site, b.get("web_domain"), places):
+        return "ok", None
+    city_words = [p.lower() for p in places if p]
+    text = " ".join(str(pg.get("text") or "")[:20000].lower() for pg in bundle.pages)
+    if city_words and any(w in text for w in city_words):
+        return "rename", site
+    return "wrong_website", site
+
+
 def _roll_up(verified: Sequence[Row], name: str) -> int | None:
     counts = [c for c in (fact_count(f) for f in evidence.by_field(verified, name)) if c is not None]
     return max(counts) if counts else None
@@ -1181,6 +1321,18 @@ def plan_business(
     # Verified counts roll up into the business columns that scoring reads (A.13.2).
     plan.branches_count = _roll_up(verified, "branches")
     plan.staff_count = _roll_up(verified, "staff_or_doctors")
+
+    # 7b. The listing's name and the site's own name must mean the same business (13 Nov 2026)
+    outcome, site_name = name_check(bundle, verified, seg)
+    if outcome == "wrong_website":
+        plan.status, plan.reject_reason = "rejected", "wrong_website"
+        plan.extra_patch["site_name"] = site_name
+        st["status.rejected.wrong_website"] += 1
+        return plan
+    if outcome == "rename" and site_name:
+        plan.rename = site_name[:200]
+        plan.extra_patch["listing_name"] = b.get("name")
+        st["name.renamed"] += 1
 
     # 8. Final status (10.8)
     if not reachable:
@@ -1320,6 +1472,7 @@ def apply_plans(conn: Connection[Any], plans: Sequence[Plan], now: datetime) -> 
               branches_count = coalesce(%(branches)s, branches_count),
               staff_count = coalesce(%(staff)s, staff_count),
               queued_at = case when %(status)s = 'queued' then %(now)s else queued_at end,
+              name = coalesce(%(rename)s, name),
               extra = extra || %(extra)s
             where id = %(id)s
             """,
@@ -1332,6 +1485,7 @@ def apply_plans(conn: Connection[Any], plans: Sequence[Plan], now: datetime) -> 
                     "now": now,
                     "branches": p.branches_count,
                     "staff": p.staff_count,
+                    "rename": p.rename,
                     "extra": db.Jsonb(p.extra_patch),
                 }
                 for p in plans

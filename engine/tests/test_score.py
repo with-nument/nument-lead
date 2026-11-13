@@ -1,4 +1,7 @@
-"""Step 11 scoring: the four worked examples, decay, stacking, pitch mode, angle, reach (no database)."""
+"""Step 11 scoring: the four worked examples, decay, stacking, pitch mode, angle, reach (no database).
+
+Score s2.0: total = need (0 to 35) + can pay (proxy points / 30 x 35) + fit (10 or 6) + reach share x 20.
+"""
 
 from __future__ import annotations
 
@@ -105,8 +108,9 @@ def test_example_1_ivf_clinic_pune_is_b() -> None:
     ]
     signals = [sig("s1", "hiring_frontdesk", 8, 5, 30), sig("s2", "review_pain", 6, 40, 90)]
     r = score_business(b, facts, signals, [mobile()], SEGMENTS["clinics-in"], cfg("clinics-in"), EXCL, NOW)
-    assert (r.fit, r.can_pay, r.intent, r.reach) == (3, 30, 14.2, 0.85)
-    assert (r.total, r.grade) == (58, "B")
+    assert (r.fit, r.can_pay, r.intent, r.reach) == (3, 30, 24, 0.9)  # two visible pains: at the cap of 24
+    assert (r.total, r.grade) == (87, "A")
+    assert r.reasons["parts"] == {"need": 24.0, "can_pay": 35.0, "fit": 10.0, "reach": 18.0}
     # The learning loop reads the earned proxies as keys, not by parsing the reason text (16.2).
     assert {"branches_2plus", "reviews_300plus", "premium_price", "pays_for_software"} <= set(
         r.reasons["can_pay_proxies"]
@@ -140,8 +144,8 @@ def test_example_2_developer_with_a_public_ask_is_a() -> None:
         sig("s3", "ads_running", 4, 2, 30),
     ]
     r = score_business(b, facts, signals, [mobile(dm=True)], SEGMENTS["realestate-in"], cfg("realestate-in"), EXCL, NOW)
-    assert (r.fit, r.can_pay, r.intent, r.reach) == (3, 30, 23.6, 1.0)
-    assert (r.total, r.grade) == (80, "A")
+    assert (r.fit, r.can_pay, r.intent, r.reach) == (3, 30, 35, 1.0)  # a fresh public ask fills the need part
+    assert (r.total, r.grade) == (100, "A")
     assert (r.pitch_mode, r.angle) == ("stated_need", "build_what_they_asked")
 
 
@@ -159,8 +163,8 @@ def test_example_3_coaching_institute_fit_only_is_d() -> None:
         fact("f2", "in_house_tech", {"value": True}),
     ]
     r = score_business(b, facts, [], [LANDLINE], SEGMENTS["education-in"], cfg("education-in"), EXCL, NOW)
-    assert (r.fit, r.can_pay, r.intent, r.reach) == (2, 13, 0, 0.65)
-    assert (r.total, r.grade, r.pitch_mode) == (15, "D", "fit_only")
+    assert (r.fit, r.can_pay, r.intent, r.reach) == (2, 13, 0, 0.6)
+    assert (r.total, r.grade, r.pitch_mode) == (33, "D", "fit_only")
 
 
 DENTAL_DUBAI = {
@@ -183,9 +187,9 @@ DENTAL_FACTS = [
 @pytest.mark.parametrize(
     ("signals", "intent", "total", "grade"),
     [
-        ([], 0, 43, "C"),
-        ([sig("s1", "review_pain", 6, 5, 90)], 6, 49, "C"),
-        ([sig("s1", "review_pain", 6, 5, 90), sig("s2", "hiring_frontdesk", 8, 2, 30)], 16, 60, "B"),
+        ([], 0, 63, "B"),  # a strong business without a signal is a real B lead (s2.0)
+        ([sig("s1", "review_pain", 6, 5, 90)], 13.2, 76, "A"),
+        ([sig("s1", "review_pain", 6, 5, 90), sig("s2", "hiring_frontdesk", 8, 2, 30)], 24, 87, "A"),
     ],
 )
 def test_example_4_dubai_dental_chain_needs_a_reason_to_buy(
@@ -194,7 +198,7 @@ def test_example_4_dubai_dental_chain_needs_a_reason_to_buy(
     r = score_business(
         DENTAL_DUBAI, DENTAL_FACTS, signals, [mobile()], SEGMENTS["clinics-ae"], cfg("clinics-ae"), EXCL, NOW
     )
-    assert (r.fit, r.can_pay, r.intent, r.reach) == (3, 30, intent, 0.85)
+    assert (r.fit, r.can_pay, r.intent, r.reach) == (3, 30, intent, 0.9)
     assert (r.total, r.grade) == (total, grade)
 
 
@@ -219,26 +223,25 @@ def test_decay_handles_bad_windows() -> None:
     assert decay(NOW, NOW, NOW) == 0.0
 
 
-def test_stacking_bonus() -> None:
+def test_stacking_bonus_and_the_visible_pain_ceiling() -> None:
     c = cfg("clinics-in")
-    one, _ = intent_score([sig("a", "hiring_frontdesk", 8, 1, 30), sig("b", "hiring_frontdesk", 8, 2, 30)], NOW, c)
-    two, _ = intent_score([sig("a", "hiring_frontdesk", 8, 1, 30), sig("b", "review_pain", 6, 1, 90)], NOW, c)
+    same, _ = intent_score([sig("a", "no_booking", 3, 1, 60), sig("b", "no_booking", 3, 2, 60)], NOW, c)
+    two, _ = intent_score([sig("a", "no_booking", 3, 1, 60), sig("b", "slow_site", 2, 1, 60)], NOW, c)
     three, _ = intent_score(
-        [sig("a", "hiring_frontdesk", 8, 1, 30), sig("b", "review_pain", 6, 1, 90), sig("c", "slow_site", 2, 1, 60)],
-        NOW,
-        c,
+        [sig("a", "no_booking", 3, 1, 60), sig("b", "slow_site", 2, 1, 60), sig("c", "news", 3, 1, 30)], NOW, c
     )
-    four, _ = intent_score(
+    many, _ = intent_score(
         [
-            sig("a", "hiring_frontdesk", 8, 1, 30),
-            sig("b", "review_pain", 6, 1, 90),
-            sig("c", "slow_site", 2, 1, 60),
-            sig("d", "news", 3, 1, 30),
+            sig("a", "no_booking", 3, 1, 60),
+            sig("b", "slow_site", 2, 1, 60),
+            sig("c", "news", 3, 1, 30),
+            sig("d", "hiring_frontdesk", 8, 1, 30),
         ],
         NOW,
         c,
     )
-    assert (one, two, three, four) == (8, 16, 20, 23)
+    # 3 x 2.2; 6.6 + 4.4 + 3; + news 3 x 2 and a second bonus; visible pain and growth never pass 24
+    assert (same, two, three, many) == (pytest.approx(6.6), 14, 23, 24)
 
 
 def test_same_event_counts_once() -> None:
@@ -247,21 +250,21 @@ def test_same_event_counts_once() -> None:
         sig("b", "new_branch", 5, 1, 60, event_key="branch:baner"),
     ]
     value, kept = intent_score(signals, NOW, cfg("clinics-in"))
-    assert value == 5 and [s["id"] for s in kept] == ["b"]
+    assert value == 10 and [s["id"] for s in kept] == ["b"]  # new_branch 5 x 2 (growth)
 
 
-def test_intent_is_capped_at_40() -> None:
+def test_need_is_capped_at_35() -> None:
     signals = [
         sig(str(i), t, 10, 1, 30)
         for i, t in enumerate(["public_ask", "tender", "hiring_builder", "hiring_frontdesk", "review_pain"])
     ]
-    assert intent_score(signals, NOW, cfg("clinics-in"))[0] == 40
+    assert intent_score(signals, NOW, cfg("clinics-in"))[0] == 35
 
 
 def test_learned_signal_points_win() -> None:
     c = cfg("clinics-in", {"signal_points": {"clinics-in": {"hiring_frontdesk": 9.5}}})
     value, _ = intent_score([sig("a", "hiring_frontdesk", 8, 1, 30)], NOW, c, SEGMENTS["clinics-in"])
-    assert value == 9.5
+    assert value == pytest.approx(9.5 * 2.2)
 
 
 def test_learned_can_pay_points_and_fit_only_share() -> None:
@@ -282,10 +285,10 @@ def test_reach_ladder() -> None:
     email = {"id": "c3", "email": "hi@x.in", "source": "website", "verified": True, "do_not_contact": False}
     form = [fact("f9", "contact_form_url", {"url": "https://x.in/contact"})]
     assert reach_of([mobile(dm=True)], [], c, NOW).value == 1.0
-    assert reach_of([mobile(dm=True, source="google_listing")], [], c, NOW).value == 0.85
-    assert reach_of([LANDLINE], [], c, NOW).value == 0.65
-    assert reach_of([email], [], c, NOW).value == 0.45
-    assert reach_of([], form, c, NOW).value == 0.30
+    assert reach_of([mobile(dm=True, source="google_listing")], [], c, NOW).value == 0.9
+    assert reach_of([LANDLINE], [], c, NOW).value == 0.6
+    assert reach_of([email], [], c, NOW).value == 0.4
+    assert reach_of([], form, c, NOW).value == 0.2
     assert reach_of([{**mobile(), "do_not_contact": True}], [], c, NOW).value == 0.0
     old_listing = {**mobile(source="google_listing"), "verified_at": NOW - timedelta(days=31)}
     assert reach_of([old_listing], [], c, NOW).kind == "none"
@@ -337,7 +340,7 @@ def test_reasons_and_rule_note_are_readable_and_dash_free() -> None:
     )
     assert r.note == "Hiring front desk executives on Apna 5 days ago, and 420 Google reviews and 2 branches."
     assert "\u2013" not in r.note and "\u2014" not in r.note and len(r.note) <= 280
-    assert r.reasons["intent"] == [{"signal_id": "s1", "type": "hiring_frontdesk", "value": 8.0}]
+    assert r.reasons["intent"] == [{"signal_id": "s1", "type": "hiring_frontdesk", "value": 17.6}]
     assert any("ticket class ivf_fertility" in why for why in r.reasons["can_pay"])
     fit_only = score_business(b, [LIVE], [], [mobile()], SEGMENTS["clinics-in"], cfg("clinics-in"), EXCL, NOW)
     assert rule_note(fit_only, b, [LIVE], NOW).startswith("No buying signal yet, but a strong fit: 420 Google reviews")
@@ -381,3 +384,15 @@ def test_review_pain_lines_name_where_and_what() -> None:
     assert practo_line == "Recent Practo patient stories mention unanswered calls and long waits"
     places_line = _signal_line({**base, "source": "places", "details": {}}, NOW)
     assert places_line == "Recent Google reviews mention missed calls or slow replies"
+
+
+def test_nobody_reachable_is_grade_d() -> None:
+    r = score_business(DENTAL_DUBAI, DENTAL_FACTS, [], [], SEGMENTS["clinics-ae"], cfg("clinics-ae"), EXCL, NOW)
+    assert r.reach == 0 and r.total == 45 and r.grade == "D"
+
+
+def test_the_number_and_the_grade_agree_on_the_s2_scale() -> None:
+    c = cfg("clinics-in")
+    assert c.grades == {"A": 75, "B": 55, "C": 40}
+    assert (c.can_pay_points, c.reach_points, c.intent_cap) == (35, 20, 35)
+    assert c.fit_only_max_pct == 50 and c.fit_only_min_per_day == 5

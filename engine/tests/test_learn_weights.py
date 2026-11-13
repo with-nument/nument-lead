@@ -39,7 +39,7 @@ def test_proxy_keys_follow_the_scoring_tiers(segments: dict[str, Segment]) -> No
 
 def test_default_document_covers_every_segment(segments: dict[str, Segment]) -> None:
     doc = w.default_document(segments)
-    assert doc["version"] == 0 and doc["fit_only_share"] == pytest.approx(0.10)
+    assert doc["version"] == 0 and doc["fit_only_share"] == pytest.approx(0.50)  # scoring.yaml fit_only_max_pct
     assert set(doc["signal_points"]) == set(segments) == set(doc["can_pay_points"])
     for sid, seg in segments.items():
         for t, p in seg.signal_points.items():  # the segment file's overrides are the defaults there
