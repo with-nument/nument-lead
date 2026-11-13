@@ -3,6 +3,92 @@
 Changes to the plan made while building and running the system, newest first. Each entry says what changed,
 why, and how to undo it. The plan itself is [IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md).
 
+## 2026-11-13: lead quality toward 95 (founder: "not more than 50/100")
+
+The first live morning gave 4 leads shown as "A, 56/100" and "B, 40/100". Live data showed 29 buying signals
+across about 27,000 businesses, every researched business fit-only, and a formula that capped a business
+without a signal at 50.
+
+### Score s2.0: the number is the quality and the grade follows it
+
+- **Change:** total = need (0 to 35) + can pay (0 to 35) + fit (0 to 10) + reach (0 to 20).
+  - Need: signal points × category multiplier (stated need 3.5, visible pain 2.2, growth 2). Without a stated
+    need it is capped at 24 (visible pain) or 12 (growth).
+  - Can pay: the proxy points (capped at 30) scaled to 35.
+  - Grades: A 75+, B 55 to 74, C 40 to 54, D under 40. Nobody reachable is D.
+  - The judge moves the number, not the grade: +5 only with confidence 0.7 and two cited facts or signals,
+    −8 for one grade lower, −15 for two. A named disqualifier (agency, chain, hospital, in-house tech) takes
+    the lead below 40. The rule total stays in `reasons.rule_total`.
+  - Fit-only leads per segment per day: up to 50% of the other new leads, at least 5.
+- **Why:** a strong clinic without a signal scored 40 and the judge's lift showed "B, 40/100". Under s2.0 it
+  scores about 55 to 63 (B), fresh visible pain about 75 to 87, and a stated need with money and a direct
+  mobile 90 to 100. The founder approved strong fit-only clinics reaching B.
+- **Undo:** `config/scoring.yaml` back to s1.0 and `SCORE_VERSION`. Stored rows keep their version.
+
+### Pain that research finds becomes signals
+
+- **Change:**
+  - Roles on a business's own careers page (`careers_role` facts) become `hiring_frontdesk` or
+    `hiring_builder`.
+  - An ads tag on its pages becomes `ads_running`.
+  - A new signal wakes a dormant business.
+- **Why:** these were stored as facts and never scored, and a D business never came back.
+
+### The website must belong to the listing
+
+- **Change:** verify compares the listing's name with the site's own `business_name`, using distinctive
+  words only.
+  - When the site is in the listing's city, the business takes the site's name and keeps
+    `extra.listing_name`.
+  - Otherwise it is rejected as `wrong_website`.
+- **Why:** the Overture listing "Ipromise English Speaking" carried bmconsultantsindia.com, so the message
+  greeted "BM English Speaking".
+
+### Education is high-ticket only (founder)
+
+- **Change:**
+  - Tutoring, language and computer classes are out of the categories.
+  - Names with spoken English, tuition, abacus, play school and the like are rejected (`fit.exclude_names`).
+  - Size is 150+ reviews or 3+ branches.
+
+### The intent hunt rides on the review lookup
+
+- **Change:** the grounded review lookup also reports, from the last 60 days:
+  - a front-desk job post by the business;
+  - review complaints about calls, replies or booking;
+  - a new branch.
+
+  An item becomes a signal only when a sentence the search results back contains the answer line. Snippet
+  signals count less (hiring 6, review pain 5, new branch 4), and job boards are never fetched. Four lookups
+  run at once.
+- **Cost:** no extra calls. `grounded_search.per_day` is set to 250 at rollout, about ₹100 a day above the free
+  tier.
+
+### Need-first track: segment `firms-in` (founder)
+
+- **Change:** Indian SMEs and startups of any industry that post a builder job or ask in public for a
+  developer, agency or tech partner.
+  - `universe: signals_only`: no map; every business comes from a stated need.
+  - Grounded queries starting with "hiring:" make `hiring_builder` signals; the rest make `public_ask`. All
+    run daily.
+  - Agencies, IT services and staffing firms are excluded. A poster whose own industry has an enabled
+    segment is routed there.
+  - Job boards (Naukri, Indeed, Instahyre, Cutshort and others) are search snippets only, added to the
+    never-fetch hosts. Freelance marketplaces are never used.
+  - A new night stage `lookup` finds the official website of a signal-born business with one grounded
+    search. The domain must be cited and the home page must name the business. Prefilter R10 no longer waits
+    forever.
+- **Why:** leads of 90+ need a stated need, which is how the old engine's best leads were found (D-038,
+  D-042).
+- **Undo:** switch `firms-in` off in Settings, or set `enabled: false` in its YAML.
+
+### Sources
+
+- **GDELT:** reads 3 days of news and retries a timeout once.
+- **Apna:** fails from GitHub's network ("robots.txt unreachable"), though it works from a home connection.
+  The rules forbid working around a block, so it stays as it is and its health check reports it.
+- **Real estate:** its YAML now says `enabled: false`, matching the database.
+
 ## 2026-11-13: the morning email always goes out
 
 - **Change:** the `reviews` stage stops after `reviews.minutes_per_run` (default 8) minutes and always leaves
