@@ -307,6 +307,31 @@ def test_morning_phase_sends_once_a_day(
     assert emails.morning(dry)["skipped"] == "dry run"
 
 
+def test_midday_hot_email_sends_only_leads_made_since_the_last_email(
+    engine_db: str, morning_world: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """13 Nov 2026: the midday run emails the A and B leads made after the morning email, and only when there
+    is one; a second midday email waits for newer leads."""
+    rc = RunContext(run_id=str(uuid.uuid4()), kind="midday", opts=Options(), started_at=datetime.now(UTC))
+    configure(monkeypatch, RESEND_API_KEY="re_test_not_real")
+    db.set_setting(emails.HOT_SENT_KEY, {})
+    after_all = (datetime.now(UTC) + timedelta(minutes=5)).isoformat()
+    db.set_setting(emails.MORNING_SENT_KEY, {"day": "x", "at": after_all})
+    assert emails.hot(rc)["skipped"] == "no new A or B lead since the last email"
+    db.set_setting(emails.MORNING_SENT_KEY, {"day": "x", "at": (datetime.now(UTC) - timedelta(days=2)).isoformat()})
+    with psycopg.connect(engine_db, autocommit=True) as conn:
+        conn.execute("insert into public.notify_recipients (email, morning) values ('team@example.com', true)")
+    with respx.mock() as mock:
+        route = mock.post(notify.RESEND_URL).respond(200, json={"id": "1"})
+        first = emails.hot(rc)
+    assert first["sent"] == 1 and first["leads"] >= 2
+    payload = json.loads(route.calls[0].request.content)
+    assert payload["subject"].endswith("new leads since this morning") and f"Mail best {TAG}" in payload["html"]
+    assert emails.hot(rc)["skipped"] == "no new A or B lead since the last email"  # nothing newer than that email
+    db.set_setting(emails.HOT_SENT_KEY, {})
+    db.set_setting(emails.MORNING_SENT_KEY, {})
+
+
 # ---------------------------------------------------------------------------
 # Alerts from health checks
 # ---------------------------------------------------------------------------

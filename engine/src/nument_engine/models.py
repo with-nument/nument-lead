@@ -181,7 +181,7 @@ TRIGGER_ACTIVITY_TYPES: Final[frozenset[str]] = frozenset(
 )
 
 # ---- Operations -----------------------------------------------------------
-RunKind = Literal["night", "morning", "sheet_sync", "weekly", "monthly", "manual"]
+RunKind = Literal["night", "morning", "midday", "sheet_sync", "weekly", "monthly", "manual"]
 RUN_KINDS: Final[tuple[str, ...]] = get_args(RunKind)
 RunStatus = Literal["running", "ok", "partial", "failed"]
 RUN_STATUSES: Final[tuple[str, ...]] = get_args(RunStatus)

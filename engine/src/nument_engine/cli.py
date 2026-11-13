@@ -662,6 +662,14 @@ def run_morning(ctx: typer.Context) -> None:
     _execute(ctx, "morning", runs.morning)
 
 
+@run_app.command("midday")
+def run_midday(ctx: typer.Context) -> None:
+    """13:00 IST: the day's new signals, lead stages and the hot-lead email (13 Nov 2026)."""
+    from .pipeline import runs
+
+    _execute(ctx, "midday", runs.midday)
+
+
 @run_app.command("sheet")
 def run_sheet(ctx: typer.Context, light: Annotated[bool, typer.Option("--light", help=LIGHT_HELP)] = False) -> None:
     """Daytime: late batch items at 09:00, then the two-way sheet sync (Step 14)."""

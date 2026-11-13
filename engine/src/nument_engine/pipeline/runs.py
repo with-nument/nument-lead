@@ -36,11 +36,19 @@ IST: Final = timezone(timedelta(hours=5, minutes=30))
 DRY_RUN_LIMIT: Final = 5  # items per stage in a dry run when --limit is not given (14.4.3)
 # Minutes a run may take before non-essential phases are skipped: each workflow's timeout minus a margin, so
 # the run closes its row itself instead of being killed with the row left 'running'.
-DEADLINE_MIN: Final[dict[str, int]] = {"night": 80, "morning": 40, "sheet_sync": 8, "weekly": 26, "monthly": 55}
+DEADLINE_MIN: Final[dict[str, int]] = {
+    "night": 80,
+    "morning": 40,
+    "midday": 30,
+    "sheet_sync": 8,
+    "weekly": 26,
+    "monthly": 55,
+}
 # A 'running' row older than this was killed (timeout or cancel) and is closed as failed by the next run.
 STALE_MIN: Final[dict[str, int]] = {
     "night": 50,
     "morning": 50,
+    "midday": 40,
     "sheet_sync": 15,
     "weekly": 35,
     "monthly": 65,
@@ -352,6 +360,23 @@ def morning_phases() -> list[Phase]:
     ]
 
 
+def midday_phases() -> list[Phase]:
+    """13:00 IST (13 Nov 2026): a job post or a public ask is worth most on its first day. The day's new signals
+    (businesses already researched are scored now, new ones are researched tonight), late batch items, then
+    the lead stages and an email with the A and B leads made since the morning email."""
+    return [
+        Phase("health", stage("ops.health", "check_all", fail_fast=True), essential=True),
+        Phase("signals", stage("pipeline.signals"), budget="grounded_search"),
+        Phase("lookup", stage("pipeline.lookup"), budget="grounded_search"),
+        Phase("extract_collect", stage("pipeline.extract", "collect")),
+        Phase("verify", stage("pipeline.verify"), essential=True),
+        Phase("score", stage("pipeline.score"), essential=True),
+        Phase("judge", stage("pipeline.judge"), budget="judge"),
+        Phase("message", stage("pipeline.message"), budget="message"),
+        Phase("hot_email", stage("ops.emails", "hot"), after_deadline=True),
+    ]
+
+
 def sheet_phases(light: bool) -> list[Phase]:
     return [
         Phase("catch_up", catch_up, budget="message"),
@@ -383,6 +408,11 @@ def night(rc: RunContext) -> None:
 def morning(rc: RunContext) -> None:
     """06:00 IST pipeline part 2: extract collect, verify, score, judge, message, sheet sync, prune, summary, email."""
     execute(rc, morning_phases())
+
+
+def midday(rc: RunContext) -> None:
+    """13:00 IST: the day's new signals, late batch items, lead stages and the hot-lead email."""
+    execute(rc, midday_phases())
 
 
 def sheet(rc: RunContext, *, light: bool = False) -> None:

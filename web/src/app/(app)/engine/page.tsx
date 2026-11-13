@@ -19,7 +19,7 @@ export const metadata: Metadata = { title: 'Engine' }
 const HEALTH_TONE: Record<string, Tone> = { ok: 'ok', stale: 'warn', error: 'bad', blocked: 'bad', disabled: 'neutral' }
 const RUN_TONE: Record<string, Tone> = { ok: 'ok', running: 'indigo', partial: 'warn', failed: 'bad' }
 const QUERY_TONE: Record<string, Tone> = { new: 'neutral', running: 'indigo', done: 'ok', failed: 'bad' }
-const RUN_LABEL: Record<string, string> = { night: 'Night', morning: 'Morning', sheet_sync: 'Sheet sync', weekly: 'Weekly', monthly: 'Monthly', manual: 'Manual' }
+const RUN_LABEL: Record<string, string> = { night: 'Night', morning: 'Morning', midday: 'Midday', sheet_sync: 'Sheet sync', weekly: 'Weekly', monthly: 'Monthly', manual: 'Manual' }
 
 const th = 'label-mono h-10 border-b border-line-2 px-3 font-normal whitespace-nowrap first:pl-4 last:pr-4 sm:first:pl-5 sm:last:pr-5'
 const td = 'h-11 px-3 align-middle first:pl-4 last:pr-4 sm:first:pl-5 sm:last:pr-5'

@@ -44,6 +44,7 @@ TEMPLATES: Final = Path(__file__).resolve().parent / "templates" / "email"
 TOP_LEADS: Final = 5
 FOLLOWUPS_MAX: Final = 8
 MORNING_SENT_KEY: Final = "morning_email_sent"
+HOT_SENT_KEY: Final = "hot_email_sent"  # the midday email (13 Nov 2026)
 GRADE_STYLE: Final[dict[str, tuple[str, str]]] = {  # the app's grade badges (web/src/lib/grades.ts)
     "A": ("#E3F1D8", "#496D21"),
     "B": ("#E8EFFC", "#3333CC"),
@@ -673,8 +674,55 @@ def morning(rc: RunContext) -> dict[str, Any]:
         return {**stats, "skipped": "already sent today"}
     sent = deliver("morning", lambda admin: render_morning(data, admin=admin))
     if sent:
-        db.set_setting(MORNING_SENT_KEY, {"day": today, "sent": sent})
+        db.set_setting(MORNING_SENT_KEY, {"day": today, "sent": sent, "at": datetime.now(UTC).isoformat()})
     log.info("emails.morning", sent=sent, **stats)
+    return {**stats, "sent": sent}
+
+
+def hot_since(now: datetime) -> datetime:
+    """Leads made after the later of today's morning email and the last hot email (else the start of today)."""
+    today = now.astimezone(fmt.IST).date()
+    times = [ist_day_start(today)]
+    for key in (MORNING_SENT_KEY, HOT_SENT_KEY):
+        value = db.get_setting(key, {}) or {}
+        try:
+            at = datetime.fromisoformat(str(value.get("at"))) if value.get("at") else None
+        except ValueError:
+            at = None
+        if at is not None:
+            times.append(at)
+    return max(times)
+
+
+def render_hot(m: Morning, *, admin: bool) -> Email:
+    """The morning list's layout with a midday subject: only leads made since the last email, no follow-ups."""
+    email = render_morning(m, admin=admin)
+    n = len(m.leads)
+    return replace(email, subject=f"{plural(n, 'new lead')} since this morning")
+
+
+def hot(rc: RunContext) -> dict[str, Any]:
+    """The midday run's email: A and B leads made since the morning email, sent only when there is one."""
+    now = datetime.now(UTC)
+    rows = db.fetch_all(MORNING_LEADS_SQL, {"day": hot_since(now)})
+    data = Morning(
+        day=now.astimezone(fmt.IST).date(),
+        leads=[lead_card(r, now) for r in rows],
+        spend_inr=float((db.fetch_one("select inr::float as inr from public.v_spend_today") or {}).get("inr") or 0),
+        cap_inr=float(db.get_setting("daily_cap_inr", 750)),
+    )
+    stats: dict[str, Any] = {"leads": len(data.leads)}
+    if not data.leads:
+        return {**stats, "skipped": "no new A or B lead since the last email"}
+    render_hot(data, admin=True)
+    if rc.opts.dry_run:
+        return {**stats, "skipped": "dry run"}
+    if not notify.email_configured():
+        return {**stats, "skipped": "RESEND_API_KEY is not set"}
+    sent = deliver("morning", lambda admin: render_hot(data, admin=admin))
+    if sent:
+        db.set_setting(HOT_SENT_KEY, {"at": now.isoformat(), "sent": sent})
+    log.info("emails.hot", sent=sent, **stats)
     return {**stats, "sent": sent}
 
 

@@ -1,0 +1,97 @@
+# Midday run (13 Nov 2026): the day's new signals, late AI batch items, verify, score, judge, messages, hot-lead email.
+# Supabase pg_cron starts this run at 13:00 IST (migration 0017). The GitHub schedule below is only a fallback: it runs when the repository variable SCHEDULES_ENABLED is "true" (off since 13 Nov 2026, it fired hours late).
+name: Midday run
+
+on:
+  schedule:
+    - cron: "30 7 * * *" # 13:00 IST
+  workflow_dispatch:
+    inputs:
+      env:
+        description: Environment
+        type: choice
+        options: [prod, dev]
+        default: prod
+      segment:
+        description: Segment id (empty = every enabled segment)
+        required: false
+        default: ""
+      limit:
+        description: Most items per stage (empty = no limit; 5 in a dry run)
+        required: false
+        default: ""
+      dry_run:
+        description: Dry run (no paid calls, no sheet writes)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nument-pipeline-${{ inputs.env || 'prod' }}
+  cancel-in-progress: false
+
+jobs:
+  midday:
+    if: github.event_name == 'workflow_dispatch' || vars.SCHEDULES_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Repository-level secrets and variables: GitHub environments need a paid plan on a private personal
+    # repository. Live sheet ids reach prod runs only; dev runs see only the staging sheet.
+    permissions:
+      contents: read
+      issues: write
+    env:
+      APP_ENV: ${{ inputs.env || 'prod' }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      ET_GATEWAY_KEY: ${{ secrets.ET_GATEWAY_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_API_KEY_BACKUP: ${{ secrets.GEMINI_API_KEY_BACKUP }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+      SHEET_MASTER_ID: ${{ (inputs.env || 'prod') == 'prod' && vars.SHEET_MASTER_ID || '' }}
+      SHEET_CALLER_ID: ${{ (inputs.env || 'prod') == 'prod' && vars.SHEET_CALLER_ID || '' }}
+      SHEET_STAGING_ID: ${{ (inputs.env || 'prod') == 'dev' && vars.SHEET_STAGING_ID || '' }}
+      ASSOCIATE_NAME: ${{ vars.ASSOCIATE_NAME }}
+      USER_AGENT: ${{ vars.USER_AGENT }}
+      ALERT_EMAIL: ${{ vars.ALERT_EMAIL }}
+      ALERT_EMAIL_FROM: ${{ vars.ALERT_EMAIL_FROM }} # empty = Nument Leads <leads@nument.in>
+      ALERT_REPLY_TO: ${{ vars.ALERT_REPLY_TO }} # empty = the founder's address
+      APP_URL: ${{ vars.APP_URL }} # links in emails; empty = the Render URL
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }} # morning list, alerts and weekly report by email
+      IN_SEGMENT: ${{ inputs.segment }}
+      IN_LIMIT: ${{ inputs.limit }}
+      IN_DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: ./.github/actions/setup-engine # no Chromium: the morning run never crawls
+
+      - name: Midday run
+        working-directory: engine
+        run: |
+          args=(--env "$APP_ENV")
+          if [ -n "$IN_SEGMENT" ]; then args+=(--segment "$IN_SEGMENT"); fi
+          if [ -n "$IN_LIMIT" ]; then args+=(--limit "$IN_LIMIT"); fi
+          if [ "$IN_DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          uv run nlead run midday "${args[@]}"
+
+      - name: Run summary
+        if: always()
+        working-directory: engine
+        run: uv run nlead health --summary --env "$APP_ENV" >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Email new alerts
+        if: always()
+        working-directory: engine
+        run: uv run nlead health --notify --env "$APP_ENV" || true # quiet without RESEND_API_KEY; recipients: Settings > Email recipients
+
+      - name: Report the failure
+        if: failure() && github.event_name == 'schedule'
+        uses: ./.github/actions/notify-failure
+        with:
+          workflow: Midday run
