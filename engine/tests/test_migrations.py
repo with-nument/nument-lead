@@ -28,6 +28,7 @@ EXPECTED_FILES = [
     "0013_scheduler.sql",
     "0014_need_first_global.sql",
     "0015_partners_professional.sql",
+    "0016_outcomes.sql",
 ]
 
 

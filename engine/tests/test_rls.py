@@ -119,11 +119,54 @@ def test_admin_reads_money_only_through_v_leads_admin(db_conn: Conn, rls_world: 
 
 
 def test_money_column_is_never_granted_to_app_roles(db_conn: Conn) -> None:
-    for role in ("anon", "authenticated"):
-        for priv in ("SELECT", "INSERT", "UPDATE"):
-            assert not _flag(
-                db_conn, "select has_column_privilege(%s, 'public.leads', 'deal_value_inr', %s)", [role, priv]
-            )
+    for column in ("deal_value_inr", "retainer_monthly_value", "deal_currency"):  # the last two from 0016
+        for role in ("anon", "authenticated"):
+            for priv in ("SELECT", "INSERT", "UPDATE"):
+                assert not _flag(
+                    db_conn, "select has_column_privilege(%s, 'public.leads', %s, %s)", [role, column, priv]
+                ), (column, role, priv)
+
+
+def test_admin_reads_the_retainer_through_v_leads_admin_and_callers_get_nothing(
+    db_conn: Conn, rls_world: RlsWorld
+) -> None:
+    db_conn.execute(
+        "update public.leads set retainer_monthly_value = 1500, deal_currency = 'USD' where id = %s",
+        [rls_world.lead_id],
+    )
+    act_as(db_conn, "authenticated", rls_world.admin)
+    row = db_conn.execute(
+        "select deal_value_inr, retainer_monthly_value, deal_currency from public.v_leads_admin where id = %s",
+        [rls_world.lead_id],
+    ).fetchone()
+    assert row is not None and (float(row["retainer_monthly_value"]), row["deal_currency"]) == (1500.0, "USD")
+    _denied(db_conn, "select retainer_monthly_value from public.leads")
+    db_conn.execute("reset role")
+    act_as(db_conn, "authenticated", rls_world.caller)
+    assert _count(db_conn, "select count(*) from public.v_leads_admin") == 0
+    _denied(db_conn, "select * from public.v_pipeline")
+    _denied(db_conn, "update public.leads set retainer_monthly_value = 1 where id = %s", [rls_world.lead_id])
+
+
+def test_caller_sets_the_lost_reason_and_the_database_checks_it(db_conn: Conn, rls_world: RlsWorld) -> None:
+    act_as(db_conn, "authenticated", rls_world.caller)
+    assert (
+        db_conn.execute(
+            "update public.leads set stage = 'lost', lost_reason = 'price' where id = %s", [rls_world.lead_id]
+        ).rowcount
+        == 1
+    )
+    row = db_conn.execute("select lost_reason from public.leads where id = %s", [rls_world.lead_id]).fetchone()
+    assert row == {"lost_reason": "price"}
+    with pytest.raises(errors.CheckViolation), db_conn.transaction():
+        db_conn.execute("update public.leads set lost_reason = 'too_busy' where id = %s", [rls_world.lead_id])
+    db_conn.execute("reset role")
+    with pytest.raises(errors.CheckViolation), db_conn.transaction():
+        db_conn.execute("update public.leads set deal_currency = 'EUR' where id = %s", [rls_world.lead_id])
+    stages = db_conn.execute(
+        "select payload from public.activities where lead_id = %s and type = 'stage_change'", [rls_world.lead_id]
+    ).fetchall()
+    assert stages == [{"payload": {"from": "new", "to": "lost"}}]  # still logged by the trigger, once
 
 
 def test_caller_view_has_no_money_column(db_conn: Conn) -> None:

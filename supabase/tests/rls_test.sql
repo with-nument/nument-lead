@@ -51,6 +51,11 @@ begin
   exception when insufficient_privilege then null;
   end;
   begin
+    perform retainer_monthly_value from public.leads limit 1;
+    raise exception 'FAIL: caller can read leads.retainer_monthly_value';
+  exception when insufficient_privilege then null;
+  end;
+  begin
     perform 1 from public.v_pipeline limit 1;
     raise exception 'FAIL: caller can read v_pipeline';
   exception when insufficient_privilege then null;
