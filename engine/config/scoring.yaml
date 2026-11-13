@@ -22,6 +22,8 @@ can_pay:
   pays_for_software: 3          # booking system, CRM, live chat, WhatsApp API provider, claimed Practo
   custom_website: 2             # live site on its own domain, not a free builder sub-domain
   funding: 6                    # an active funding signal
+  retainer_fit: 3               # ongoing work likely: a partner agency, a full-time builder hire, an online store
+  too_big: -4                   # 200+ staff: rarely buys from a young studio (winnability, 13 Nov 2026)
   # ticket class points (0 to 6) come from the segment's ticket_class
 
 intent:                         # shown as "Need" in the app and the email

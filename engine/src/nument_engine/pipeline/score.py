@@ -138,6 +138,8 @@ class ScoringConfig:
     fit_only_min_per_day: int = 1
     signal_points: Mapping[str, float] = field(default_factory=dict)
     reach_email_first: Mapping[str, float] = field(default_factory=dict)  # outreach_channel: email segments
+    retainer_fit: float = 3.0  # ongoing work likely (13 Nov 2026)
+    too_big: float = -4.0  # 200+ staff
 
     @classmethod
     def build(cls, raw: Mapping[str, Any], segment_id: str, weights: Mapping[str, Any] | None = None) -> ScoringConfig:
@@ -172,6 +174,8 @@ class ScoringConfig:
             stack_bonus_max=float(raw["intent"]["stack_bonus_max"]),
             reach={k: float(v) for k, v in raw["reach"].items()},
             reach_email_first={k: float(v) for k, v in (raw.get("reach_email_first") or {}).items()},
+            retainer_fit=float(raw["can_pay"].get("retainer_fit", 3)),
+            too_big=float(raw["can_pay"].get("too_big", -4)),
             reach_points=float(raw["total"]["reach_points"]),
             grades={k: float(v) for k, v in (raw.get("grades") or DEFAULT_GRADES).items()},
             fit_only_max_pct=float(share) * 100 if share is not None else float(raw.get("fit_only_max_pct", 10)),
@@ -463,7 +467,41 @@ def can_pay_breakdown(
         total += cfg.funding
         proxies.append("funding")
         why.append(f"funding signal {evidence.short_id(funding[0]['id'])} (+{cfg.funding:g})")
-    return min(total, cfg.can_pay_cap), why, proxies
+    retainer = retainer_reason(b, facts, active, seg)
+    if retainer and cfg.retainer_fit:
+        total += cfg.retainer_fit
+        proxies.append("retainer_fit")
+        why.append(f"retainer fit: {retainer} (+{cfg.retainer_fit:g})")
+    staff = business_count(b, facts, "staff_count", "staff_or_doctors")
+    if staff is not None and staff >= TOO_BIG_STAFF and cfg.too_big:
+        total += cfg.too_big
+        proxies.append("too_big")
+        why.append(f"staff_count={staff}: rarely buys from a young studio ({cfg.too_big:g})")
+    return max(0.0, min(total, cfg.can_pay_cap)), why, proxies
+
+
+TOO_BIG_STAFF: Final = 200
+STORE_TOOLS: Final = frozenset({"Shopify", "WooCommerce", "Magento", "BigCommerce"})
+
+
+def retainer_reason(
+    b: Mapping[str, Any], facts: Sequence[Row], active: Sequence[Mapping[str, Any]], seg: Segment
+) -> str | None:
+    """Why this business would likely keep paying monthly (13 Nov 2026: the founder wants retainers)."""
+    if seg.domain == "partners":
+        return "a partner agency brings client work every month"
+    for s in active:
+        details = s.get("details") or {}
+        if s["type"] == "hiring_builder" and not details.get("contract"):
+            return "hiring a full-time builder: the salary budget can become a monthly retainer"
+    for f in evidence.by_field(facts, "tech_stack"):
+        value = f.get("value")
+        listed = value.get("tools") if isinstance(value, dict) else value  # older facts hold the list itself
+        tools = {str(t.get("tool")) for t in listed or [] if isinstance(t, dict)}
+        store = sorted(tools & STORE_TOOLS)
+        if store:
+            return f"runs an online store on {store[0]}: ongoing changes and automation"
+    return None
 
 
 @dataclass(frozen=True)

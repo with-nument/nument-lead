@@ -415,3 +415,23 @@ def test_the_number_and_the_grade_agree_on_the_s2_scale() -> None:
     assert c.grades == {"A": 75, "B": 55, "C": 40}
     assert (c.can_pay_points, c.reach_points, c.intent_cap) == (35, 20, 35)
     assert c.fit_only_max_pct == 50 and c.fit_only_min_per_day == 5
+
+
+def test_retainer_fit_and_too_big() -> None:
+    """13 Nov 2026: the founder wants retainers; a partner agency, a full-time builder hire or an online store
+    adds can-pay, and 200+ staff (rarely buys from a young studio) takes some away."""
+    from nument_engine.pipeline.score import can_pay_breakdown, retainer_reason
+
+    segs = load_segments()
+    assert retainer_reason({}, [], [], segs["partners-gb"]) == "a partner agency brings client work every month"
+    hire = {"type": "hiring_builder", "details": {"contract": False}}
+    assert "full-time builder" in str(retainer_reason({}, [], [hire], segs["firms-us"]))
+    gig = {"type": "hiring_builder", "details": {"contract": True}}
+    assert retainer_reason({}, [], [gig], segs["firms-us"]) is None
+    store = fact("f1", "tech_stack", {"tools": [{"tool": "Shopify", "kind": "cms"}]})
+    assert "Shopify" in str(retainer_reason({}, [store], [], segs["clinics-us"]))
+    c = cfg("partners-gb")
+    pay, why, proxies = can_pay_breakdown({"name": "Bloom"}, [], [], segs["partners-gb"], c)
+    assert "retainer_fit" in proxies and any(w.startswith("retainer fit") for w in why)
+    big, _, big_proxies = can_pay_breakdown({"name": "Bloom", "staff_count": 450}, [], [], segs["partners-gb"], c)
+    assert "too_big" in big_proxies and big <= pay + max((t.points for t in c.staff), default=0) + c.too_big
