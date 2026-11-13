@@ -323,3 +323,32 @@ async def test_the_routers_ai_result_shape_is_understood(monkeypatch: pytest.Mon
         gs.pages.min_gap = 0.0
         sigs = await gs.signals_for(segment(), budget=1)
     assert [s.url for s in sigs] == [forum] and sigs[0].details["snippet_only"] is False
+
+
+def test_a_mangled_job_link_falls_back_to_the_cited_page_of_that_business() -> None:
+    """13 Nov 2026: the model copied job-board links with wrong ids, so 13 of 13 posts were dropped."""
+    import asyncio
+
+    from nument_engine.sources.base import SourceContext
+    from nument_engine.sources.grounded_search import Citation, GroundedSearchAdapter, name_words
+
+    cited = "https://www.naukri.com/job-listings-full-stack-developer-bitespeed-bengaluru-2-to-6-years-121126917196"
+    citations = [
+        Citation(uri="https://www.naukri.com/full-stack-developer-jobs-in-bangalore", title="naukri.com"),
+        Citation(uri=cited, title="naukri.com"),
+    ]
+    mangled = "https://www.naukri.com/job-listings-full-stack-developer-bitespeed-bengaluru-2-to-6-years-121126008688"
+    adapter = GroundedSearchAdapter(SourceContext())
+
+    async def check() -> tuple[str | None, str | None, str | None]:
+        try:
+            return (
+                await adapter.cited_url(mangled, citations, "Bitespeed"),
+                await adapter.cited_url("https://www.naukri.com/job-listings-galaxeye-1", citations, "Galaxeye Space"),
+                await adapter.cited_url(mangled, citations, None),
+            )
+        finally:
+            await adapter.aclose()
+
+    assert asyncio.run(check()) == (cited, None, None)
+    assert name_words("Orient Exchange & Financial Services Pvt Ltd") == ["orient", "exchange", "financial"]

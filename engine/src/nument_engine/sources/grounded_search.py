@@ -17,6 +17,7 @@ citation can be compared with the item's URL without ever opening a LinkedIn or 
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -81,6 +82,18 @@ def answer_from(result: Any) -> GroundedAnswer:
     cited = (grounding or {}).get("sources") or (grounding or {}).get("chunks") or []
     citations = [Citation(uri=str(c.get("uri") or ""), title=str(c.get("title") or "")) for c in cited if c]
     return GroundedAnswer(items=list(items or []), citations=[c for c in citations if c.uri])
+
+
+_NAME_STOP = frozenset(
+    ["the", "and", "private", "limited", "pvt", "ltd", "llp", "india", "company", "services", "solutions",
+     "technologies", "technology", "tech", "group", "global", "ventures", "enterprises", "industries"]
+)  # fmt: skip
+
+
+def name_words(name: str | None) -> list[str]:
+    """Distinctive words of a business name, as they appear in a job-board link ("bitespeed", "orient")."""
+    words = re.findall(r"[a-z0-9]+", str(name or "").lower())
+    return [w for w in words if len(w) >= 4 and w not in _NAME_STOP]
 
 
 def _same_url(a: str, b: str) -> bool:
@@ -165,11 +178,25 @@ class GroundedSearchAdapter(SourceAdapter):
         cite.resolved = target
         return target
 
-    async def cited_url(self, url: str, citations: Sequence[Citation]) -> str | None:
-        """The citation that matches the item URL, or None when the search never cited it."""
+    async def cited_url(self, url: str, citations: Sequence[Citation], name: str | None = None) -> str | None:
+        """The citation that matches the item URL, or None when the search never cited it.
+
+        The model often copies a long job-board link with a wrong id (13 Nov 2026: 13 of 13 job posts were
+        dropped that way). When no citation matches exactly, a cited page on the same site whose link carries
+        the business's distinctive name words is that business's post, so the cited page is used instead."""
         for cite in citations:
             if _same_url(url, await self.resolve_citation(cite)):
                 return cite.resolved
+        words = name_words(name)
+        if not words:
+            return None
+        host = host_of(url)
+        for cite in citations:
+            resolved = await self.resolve_citation(cite)
+            path = resolved.lower()
+            if host_of(resolved) == host and all(w in path for w in words[:2]):
+                self.ctx.add("grounded_search.cited_by_name")
+                return resolved
         return None
 
     # ---- evidence -----------------------------------------------------------------------------------
@@ -239,7 +266,7 @@ class GroundedSearchAdapter(SourceAdapter):
         url, quote = str(field_of(item, "url") or ""), str(field_of(item, "quote") or "").strip()
         if not url or len(quote) < 5:
             return None
-        cited = await self.cited_url(url, citations)
+        cited = await self.cited_url(url, citations, str(field_of(item, "poster_business") or ""))
         if cited is None:
             self.ctx.add("grounded_search.uncited_dropped")
             return None
