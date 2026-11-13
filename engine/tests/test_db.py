@@ -134,3 +134,14 @@ def test_execute_returns_rowcount(engine_db: str) -> None:
 def test_errors_surface(engine_db: str) -> None:
     with pytest.raises(psycopg.errors.UndefinedTable):
         db.fetch_all("select * from public.no_such_table")
+
+
+def test_nul_characters_never_reach_the_database(engine_db: str) -> None:
+    """Live, 13 Nov 2026: a NUL (0x00) in a website or in Overture data made PostgreSQL refuse the whole write."""
+    from nument_engine import db
+
+    assert db.scalar("select %s::text", ["Acme\x00 Clinic"]) == "Acme Clinic"
+    assert db.scalar("select %s::jsonb ->> 'name'", [db.Jsonb({"name": "Acme\x00 Clinic", "k\x00": ["x\x00"]})]) == (
+        "Acme Clinic"
+    )
+    assert db.without_nul({"a\x00": ("b\x00", 1)}) == {"a": ["b", 1]}

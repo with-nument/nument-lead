@@ -14,13 +14,44 @@ from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from typing import Any, Literal
 
+import psycopg
 from psycopg import Connection, sql
 from psycopg.abc import QueryNoTemplate as Query
 from psycopg.rows import dict_row
-from psycopg.types.json import Jsonb
+from psycopg.types.json import Jsonb, set_json_dumps
+from psycopg.types.string import StrBinaryDumper, StrDumperUnknown
 from psycopg_pool import ConnectionPool
 
 from .settings import get_settings
+
+
+# PostgreSQL text and jsonb refuse NUL (0x00) characters. Live, 13 Nov 2026: a stray NUL in one website failed
+# the morning batch of 60 businesses, and one in Overture data stopped a universe load. Every text value and
+# every JSON value is cleaned on its way to the database, for every connection this process opens.
+def without_nul(value: Any) -> Any:
+    """The value with NUL characters removed from every string in it (dict keys too)."""
+    if isinstance(value, str):
+        return value.replace("\x00", "") if "\x00" in value else value
+    if isinstance(value, dict):
+        return {without_nul(k): without_nul(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [without_nul(v) for v in value]
+    return value
+
+
+class _TextNoNul(StrDumperUnknown):
+    def dump(self, obj: str) -> Any:
+        return super().dump(obj.replace("\x00", "") if "\x00" in obj else obj)
+
+
+class _BinaryNoNul(StrBinaryDumper):
+    def dump(self, obj: str) -> Any:
+        return super().dump(obj.replace("\x00", "") if "\x00" in obj else obj)
+
+
+psycopg.adapters.register_dumper(str, _BinaryNoNul)
+psycopg.adapters.register_dumper(str, _TextNoNul)  # registered last, so it stays the default (AUTO) as before
+set_json_dumps(lambda obj: json.dumps(without_nul(obj)))
 
 __all__ = [
     "Jsonb",
