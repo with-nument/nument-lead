@@ -6,25 +6,26 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { logActivity } from '@/lib/activity'
 import { fail, fieldErrorsOf, ok, SAVE_FAILED, type ActionResult } from '@/lib/action-result'
-import { istDate } from '@/lib/dates'
 import { FEEDBACK_REASONS } from '@/lib/feedback'
 import { lintMessage } from '@/lib/lint'
-import { nextStepAndDue } from '@/lib/next-step'
+import { DealInput, dealPatch, LostReasonInput, LOST_REASON_REQUIRED, needsLostReason, stageChange, StageInput, type LostReason } from '@/lib/outcomes'
 import { revalidateLead } from '@/lib/revalidate'
-import { STAGE_VALUES } from '@/lib/stages'
+import type { Stage } from '@/lib/stages'
 
 // Lead page actions (plan 15.5.4): role check, zod, write as the user (RLS checks again),
 // timeline entry, refresh. Stage changes and message edits are logged by the database trigger.
 
 const LeadId = z.uuid()
 
-const StageInput = z.object({ leadId: LeadId, stage: z.enum(STAGE_VALUES) })
-
-export async function updateStage(input: z.infer<typeof StageInput>): Promise<ActionResult> {
-  await requireRole(['admin', 'caller'])
+/**
+ * One stage change (the stage menu and the board). Lost and Not now need a reason; the rest of what a
+ * stage change writes (first-message date, meeting time, next step) is in lib/outcomes `stageChange`.
+ */
+export async function updateStage(input: { leadId: string; stage: Stage; lostReason?: LostReason | null }): Promise<ActionResult> {
+  const user = await requireRole(['admin', 'caller'])
   const parsed = StageInput.safeParse(input)
-  if (!parsed.success) return fail('Choose a stage.')
-  const { leadId, stage } = parsed.data
+  if (!parsed.success) return fail(parsed.error.issues[0]?.path[0] === 'lostReason' ? LOST_REASON_REQUIRED : 'Choose a stage.')
+  const { leadId, stage, lostReason } = parsed.data
   const sb = await createClient()
   const { data: before } = await sb
     .from('v_leads_caller')
@@ -33,20 +34,34 @@ export async function updateStage(input: z.infer<typeof StageInput>): Promise<Ac
     .maybeSingle()
   if (!before?.stage) return fail('Lead not found.')
   if (before.stage === stage) return ok()
-  const today = istDate()
-  // Same rule as the sheet (D-043): Contacted without a first-message date means sent today.
-  const wa_at = stage === 'contacted' && !before.wa_at ? today : before.wa_at
-  const step = nextStepAndDue({ ...before, stage, wa_at }, today)
-  const { error } = await sb
-    .from('leads')
-    .update({ stage, wa_at, ...(step ?? {}) })
-    .eq('id', leadId)
+  const change = stageChange({ ...before, stage: before.stage }, stage, { lostReason })
+  if (!change.ok) return fail(change.message)
+  const { error } = await sb.from('leads').update(change.patch).eq('id', leadId)
   if (error) {
     console.error('updateStage failed', error.code, error.message)
     return fail(SAVE_FAILED)
   }
+  // The trigger logs the stage change; the reason goes on the timeline here.
+  if (change.patch.lost_reason) await logActivity(sb, leadId, user.id, 'edit', { field: 'lost_reason', reason: change.patch.lost_reason })
   revalidateLead(leadId)
   return ok('Stage updated')
+}
+
+/** Sets or corrects the reason on a lead that is already Lost or Not now (for example one closed in the sheet). */
+export async function setLostReason(input: { leadId: string; reason: LostReason }): Promise<ActionResult> {
+  const user = await requireRole(['admin', 'caller'])
+  const parsed = LostReasonInput.safeParse(input)
+  if (!parsed.success) return fail(LOST_REASON_REQUIRED)
+  const { leadId, reason } = parsed.data
+  const sb = await createClient()
+  const { data } = await sb.from('v_leads_caller').select('stage').eq('id', leadId).maybeSingle()
+  if (!data?.stage) return fail('Lead not found.')
+  if (!needsLostReason(data.stage)) return fail('Only a Lost or Not now lead has a reason.')
+  const { error } = await sb.from('leads').update({ lost_reason: reason }).eq('id', leadId)
+  if (error) return fail(SAVE_FAILED)
+  await logActivity(sb, leadId, user.id, 'edit', { field: 'lost_reason', reason })
+  revalidateLead(leadId)
+  return ok('Reason saved')
 }
 
 const NextStepInput = z.object({
@@ -154,23 +169,18 @@ export async function addNote(input: z.infer<typeof NoteInput>): Promise<ActionR
   return ok('Note added')
 }
 
-const DealInput = z.object({
-  leadId: LeadId,
-  value: z.union([z.literal(''), z.coerce.number().min(0, 'Use a positive amount.').max(1_000_000_000, 'That amount looks too large.')]),
-})
-
 /**
- * Admin only. Deal value has no column grant for app users, so it is written with the service role
- * after the role check (plan 2.8.3). The timeline records that it changed, never the amount, because
- * callers can read the timeline.
+ * Admin only. Deal value (rupees), monthly retainer and its currency have no column grant for app users,
+ * so they are written with the service role after the role check (plan 2.8.3, migration 0016). Fields
+ * the form did not send stay as they are. The timeline records that money changed, never the amount,
+ * because callers can read the timeline.
  */
-export async function setDealValue(input: { leadId: string; value: string }): Promise<ActionResult> {
+export async function setDealValue(input: { leadId: string; value: string; retainer?: string; currency?: string }): Promise<ActionResult> {
   const user = await requireRole(['admin'])
   const parsed = DealInput.safeParse(input)
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? 'Check the amount.')
-  const value = parsed.data.value === '' ? null : Math.round(parsed.data.value * 100) / 100
   const admin = createAdminClient()
-  const { error } = await admin.from('leads').update({ deal_value_inr: value }).eq('id', parsed.data.leadId)
+  const { error } = await admin.from('leads').update(dealPatch(parsed.data)).eq('id', parsed.data.leadId)
   if (error) return fail(SAVE_FAILED)
   const sb = await createClient()
   await logActivity(sb, parsed.data.leadId, user.id, 'edit', { field: 'deal_value' })

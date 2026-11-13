@@ -2,7 +2,7 @@
 
 import { useTransition } from 'react'
 import { toast } from 'sonner'
-import { markContacted, markWrongContact, skipLead, undoLeadChange, type PreviousState } from '@/app/(app)/actions'
+import { markContacted, markReplied, markWrongContact, skipLead, undoLeadChange, type PreviousState, type UndoKind } from '@/app/(app)/actions'
 
 type Channel = 'web' | 'app' | 'manual' | 'call' | 'email'
 
@@ -13,7 +13,7 @@ type Channel = 'web' | 'app' | 'manual' | 'call' | 'email'
 export function useLeadActions(onOptimistic?: (leadId: string) => void) {
   const [pending, startTransition] = useTransition()
 
-  const withUndo = (leadId: string, previous: PreviousState | undefined, kind: 'sent' | 'skip' | 'wrong_contact', text: string) => {
+  const withUndo = (leadId: string, previous: PreviousState | undefined, kind: UndoKind, text: string) => {
     toast(text, {
       duration: 8000,
       action: previous
@@ -30,7 +30,7 @@ export function useLeadActions(onOptimistic?: (leadId: string) => void) {
     })
   }
 
-  const run = (leadId: string, fn: () => Promise<{ ok: boolean; message?: string; data?: PreviousState }>, kind: 'sent' | 'skip' | 'wrong_contact', text: string) => {
+  const run = (leadId: string, fn: () => Promise<{ ok: boolean; message?: string; data?: PreviousState }>, kind: UndoKind, text: string) => {
     startTransition(async () => {
       onOptimistic?.(leadId)
       const r = await fn()
@@ -46,6 +46,8 @@ export function useLeadActions(onOptimistic?: (leadId: string) => void) {
     pending,
     /** Call from the click handler of the link that opens WhatsApp, so the popup is never blocked. */
     markSent: (leadId: string, channel: Channel) => run(leadId, () => markContacted(leadId, channel), 'sent', 'Marked as contacted'),
+    /** They answered: Contacted to Talking. */
+    replied: (leadId: string) => run(leadId, () => markReplied(leadId), 'replied', 'Marked as replied'),
     skip: (leadId: string) => run(leadId, () => skipLead(leadId), 'skip', 'Skipped for 7 days'),
     wrongContact: (leadId: string) => run(leadId, () => markWrongContact(leadId), 'wrong_contact', 'Marked as wrong contact. The number is now on Do not contact.'),
   }

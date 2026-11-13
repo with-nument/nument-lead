@@ -6,10 +6,13 @@ import { toast } from 'sonner'
 import { addNote, proposalLink, sendFeedback, setDealValue, uploadProposal } from '@/app/(app)/leads/[id]/actions'
 import { Button } from '@/components/ui/button'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
+import { Field } from '@/components/ui/field'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { cn } from '@/lib/cn'
 import { FEEDBACK_REASONS, type FeedbackReason } from '@/lib/feedback'
 import { formatInr } from '@/lib/format'
+import { formatMoney, type DealCurrency, type LeadMoney } from '@/lib/outcomes'
+import { RetainerFields } from './outcome-dialogs'
 
 function useRun() {
   const [pending, start] = useTransition()
@@ -56,19 +59,28 @@ export function NotesCard({ leadId, summary, canEdit }: { leadId: string; summar
   )
 }
 
+const asText = (v: number | null | undefined) => (v === null || v === undefined ? '' : String(v))
+
 export function DealCard({
   leadId,
-  value,
+  money,
   country,
   proposals,
 }: {
   leadId: string
-  value: number | null
+  money: LeadMoney | null
   country: string | null
   proposals: { path: string; name: string; size: number }[]
 }) {
   const { pending, run } = useRun()
-  const [amount, setAmount] = useState(value === null ? '' : String(value))
+  const saved = { deal: asText(money?.deal), retainer: asText(money?.retainer), currency: money?.currency ?? 'INR' }
+  const [amount, setAmount] = useState(saved.deal)
+  const [retainer, setRetainer] = useState(saved.retainer)
+  const [currency, setCurrency] = useState<DealCurrency>(saved.currency)
+  const dirty = amount !== saved.deal || retainer !== saved.retainer || currency !== saved.currency
+  const summary = [money?.deal != null ? formatInr(money.deal) : '', money?.retainer != null ? `${formatMoney(money.retainer, money.currency)} a month` : '']
+    .filter(Boolean)
+    .join(' · ')
   const fileRef = useRef<HTMLInputElement>(null)
   const [uploading, startUpload] = useTransition()
   const foreign = country && country.trim().toLowerCase() !== 'in'
@@ -77,24 +89,25 @@ export function DealCard({
       <CardHeader id="deal-title" title="Deal" description="Admins only. Callers never see this card." />
       <CardBody className="flex flex-col gap-4">
         <form
-          className="flex items-end gap-2"
+          className="flex flex-col gap-3"
           onSubmit={(e) => {
             e.preventDefault()
-            run(() => setDealValue({ leadId, value: amount }))
+            run(() => setDealValue({ leadId, value: amount, retainer, currency }))
           }}
         >
-          <div className="min-w-0 flex-1">
-            <label htmlFor="deal-value" className="mb-1 block text-sm font-medium text-tx-2">
-              Deal value (₹)
-            </label>
-            <Input id="deal-value" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.currentTarget.value.replace(/[^\d.]/g, ''))} placeholder="150000" />
+          <Field label="Deal value (₹)" hint={foreign ? "Foreign client: record the amount in rupees at the day's rate." : undefined}>
+            {({ id, describedBy }) => (
+              <Input id={id} aria-describedby={describedBy} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.currentTarget.value.replace(/[^\d.]/g, ''))} placeholder="150000" />
+            )}
+          </Field>
+          <RetainerFields retainer={retainer} currency={currency} onRetainer={setRetainer} onCurrency={setCurrency} />
+          <div className="flex items-center justify-between gap-2">
+            <p className="min-w-0 text-sm text-green-800">{summary}</p>
+            <Button type="submit" variant="primary" loading={pending} disabled={!dirty}>
+              Save
+            </Button>
           </div>
-          <Button type="submit" variant="primary" loading={pending} disabled={amount === (value === null ? '' : String(value))}>
-            Save
-          </Button>
         </form>
-        {value !== null ? <p className="-mt-2 text-sm text-green-800">{formatInr(value)}</p> : null}
-        {foreign ? <p className="-mt-2 text-xs text-tx-3">Foreign client: record the amount in rupees at the day&apos;s rate.</p> : null}
 
         <div className="border-t border-line-2 pt-4">
           <div className="mb-2 flex items-center justify-between">

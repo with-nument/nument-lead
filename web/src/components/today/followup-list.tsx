@@ -2,12 +2,13 @@
 
 import Link from 'next/link'
 import { useOptimistic, useState, useTransition } from 'react'
-import { Check } from 'lucide-react'
+import { Check, MessageCircleReply } from 'lucide-react'
 import { toast } from 'sonner'
 import { GradeBadge, Tag } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ContactButtons } from '@/components/lead/contact-actions'
+import { useLeadActions } from '@/components/lead/use-lead-actions'
 import { markFollowupSent } from '@/app/(app)/actions'
 
 export type FollowupItem = {
@@ -27,8 +28,10 @@ export type FollowupItem = {
 const LABEL = { d3: 'Day 3 follow-up', d7: 'Day 7 follow-up' } as const
 
 export function FollowupList({ items, canEdit }: { items: FollowupItem[]; canEdit: boolean }) {
-  const [visible, hide] = useOptimistic(items, (state, key: string) => state.filter((i) => `${i.id}:${i.which}` !== key))
+  // A key hides one follow-up; a lead id (Replied) hides every follow-up of that lead.
+  const [visible, hide] = useOptimistic(items, (state, key: string) => state.filter((i) => `${i.id}:${i.which}` !== key && i.id !== key))
   const [, startTransition] = useTransition()
+  const actions = useLeadActions(hide)
 
   const send = (f: FollowupItem, channel: 'web' | 'app' | 'call' | 'email' | 'manual') => {
     startTransition(async () => {
@@ -43,13 +46,23 @@ export function FollowupList({ items, canEdit }: { items: FollowupItem[]; canEdi
   return (
     <ul className="divide-y divide-line-2">
       {visible.map((f) => (
-        <FollowupRow key={`${f.id}:${f.which}`} f={f} canEdit={canEdit} onSend={(channel) => send(f, channel)} />
+        <FollowupRow key={`${f.id}:${f.which}`} f={f} canEdit={canEdit} onSend={(channel) => send(f, channel)} onReplied={() => actions.replied(f.id)} />
       ))}
     </ul>
   )
 }
 
-function FollowupRow({ f, canEdit, onSend }: { f: FollowupItem; canEdit: boolean; onSend: (c: 'web' | 'app' | 'call' | 'email' | 'manual') => void }) {
+function FollowupRow({
+  f,
+  canEdit,
+  onSend,
+  onReplied,
+}: {
+  f: FollowupItem
+  canEdit: boolean
+  onSend: (c: 'web' | 'app' | 'call' | 'email' | 'manual') => void
+  onReplied: () => void
+}) {
   const [open, setOpen] = useState(false)
   return (
     <li className="grid gap-x-6 gap-y-3 px-4 py-4 sm:px-5 lg:grid-cols-[minmax(0,1fr)_auto]">
@@ -95,6 +108,10 @@ function FollowupRow({ f, canEdit, onSend }: { f: FollowupItem; canEdit: boolean
           <Button size="sm" variant="ghost" onClick={() => onSend('manual')}>
             <Check aria-hidden />
             Mark sent
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onReplied} title="They answered: move to Talking, no follow-up needed">
+            <MessageCircleReply aria-hidden />
+            Replied
           </Button>
         </div>
       ) : null}

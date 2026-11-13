@@ -1,6 +1,6 @@
 import 'server-only'
 import { createClient, type ServerClient } from '@/lib/supabase/server'
-import { getDealValues } from './leads'
+import { getMoney } from './leads'
 
 const LEAD_COLUMNS =
   'id, business_id, segment_id, score_id, grade, pitch_mode, test_group, angle, channel, message, message_alt, email_subject, email_body, followup_d3, followup_d7, message_model, message_check_score, stage, owner_id, wa_at, call_at, d3_at, d7_at, meeting_at, next_step, due_at, skipped_until, regen_requested_at, notes, created_at, updated_at, last_activity_at, name, city, locality, country, website, web_domain, category, subcategory, total, judge_note, top_signal_type, top_signal_quote, top_signal_url, top_signal_at, contact_name, contact_role, phone_e164, phone_type, phone_source, email' as const
@@ -23,7 +23,7 @@ function businessEvidence(sb: ServerClient, leadId: string, includeUnverified: b
   let q = sb
     .from('leads')
     .select(
-      `business_id, business:businesses!leads_business_id_fkey!inner(${BUSINESS_COLUMNS},
+      `business_id, lost_reason, business:businesses!leads_business_id_fkey!inner(${BUSINESS_COLUMNS},
         contacts:contacts!contacts_business_id_fkey(${CONTACT_COLUMNS}),
         signals:signals!signals_business_id_fkey(${SIGNAL_COLUMNS}),
         facts:facts!facts_business_id_fkey(${FACT_COLUMNS}),
@@ -50,7 +50,7 @@ function businessEvidence(sb: ServerClient, leadId: string, includeUnverified: b
  * Everything the lead page shows, in two rounds: the lead, its business evidence, activities and
  * feedback together, then the Do not contact check for the contacts' phones. Returns null when the
  * lead is not visible to this user. Runs as the user and never reads money: admins get the deal value
- * with `getLeadDealValue` after the role check.
+ * and retainer with `getLeadMoney` after the role check.
  */
 export async function getLeadDetail(leadId: string, opts: { includeUnverified: boolean }) {
   const sb = await createClient()
@@ -99,7 +99,8 @@ export async function getLeadDetail(leadId: string, opts: { includeUnverified: b
       business_id: businessId,
       name: row.name ?? 'Unnamed business',
       stage: row.stage ?? 'new',
-      deal_value_inr: undefined as number | null | undefined,
+      // Only meaningful while the stage is Lost or Not now (lib/outcomes).
+      lost_reason: evidence.data?.business_id === businessId ? evidence.data.lost_reason : null,
     },
     business,
     contacts,
@@ -113,9 +114,9 @@ export async function getLeadDetail(leadId: string, opts: { includeUnverified: b
   }
 }
 
-/** The deal value for one lead. Admins only: the admin view returns nothing for anyone else. */
-export async function getLeadDealValue(leadId: string) {
-  const money = await getDealValues(await createClient(), [leadId])
+/** Deal value, monthly retainer and currency for one lead. Admins only: the admin view returns nothing for anyone else. */
+export async function getLeadMoney(leadId: string) {
+  const money = await getMoney(await createClient(), [leadId])
   return money.get(leadId) ?? null
 }
 

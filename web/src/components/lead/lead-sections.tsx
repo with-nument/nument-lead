@@ -5,6 +5,7 @@ import { cn } from '@/lib/cn'
 import type { Json } from '@/lib/database.types'
 import { formatDate, formatDateTime, relativeAge } from '@/lib/dates'
 import { hostOf } from '@/lib/format'
+import { lostReasonLabel } from '@/lib/outcomes'
 import { pitchLabel, signalLabel } from '@/lib/signals'
 import { stageOf } from '@/lib/stages'
 
@@ -353,6 +354,7 @@ function sentence(a: Activity, who: string): string {
       return `${who} added a note`
     case 'edit': {
       const field = str('field')
+      if (field === 'lost_reason') return `${who} gave the reason: ${(lostReasonLabel(str('reason')) ?? 'other').toLowerCase()}`
       const label = field === 'next_step' ? 'the next step' : field === 'owner' ? 'the owner' : field === 'deal_value' ? 'the deal value' : field.startsWith('followup') ? 'a follow-up message' : 'the lead'
       return `${who} changed ${label}`
     }

@@ -6,36 +6,35 @@ import { requireRole } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { logActivity } from '@/lib/activity'
 import { fail, ok, SAVE_FAILED, type ActionResult } from '@/lib/action-result'
-import { istDate } from '@/lib/dates'
-import { nextStepAndDue } from '@/lib/next-step'
+import { BulkStageInput, LeadIds as Ids, stageChange } from '@/lib/outcomes'
 import { revalidateLead } from '@/lib/revalidate'
-import { STAGE_VALUES } from '@/lib/stages'
 
-const Ids = z.array(z.uuid()).min(1, 'Select at least one lead.').max(200, 'Select at most 200 leads at a time.')
-
-/** Bulk stage change: the same rule as one change (next step recomputed), one activity per lead via the trigger. */
-export async function bulkUpdateStage(input: { ids: string[]; stage: string }): Promise<ActionResult> {
-  await requireRole(['admin', 'caller'])
-  const parsed = z.object({ ids: Ids, stage: z.enum(STAGE_VALUES) }).safeParse(input)
+/**
+ * Bulk stage change: the same rules as one change (lib/outcomes `stageChange`), one stage activity per lead
+ * via the trigger. Lost and Not now take one reason for every selected lead.
+ */
+export async function bulkUpdateStage(input: { ids: string[]; stage: string; lostReason?: string | null }): Promise<ActionResult> {
+  const user = await requireRole(['admin', 'caller'])
+  const parsed = BulkStageInput.safeParse(input)
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? 'Check the selection.')
-  const { ids, stage } = parsed.data
+  const { ids, stage, lostReason } = parsed.data
   const sb = await createClient()
   const { data: rows, error } = await sb
     .from('v_leads_caller')
     .select('id, stage, wa_at, call_at, d3_at, d7_at, meeting_at')
     .in('id', ids)
   if (error) return fail(SAVE_FAILED)
-  const today = istDate()
+  const now = new Date()
   let failed = 0
   for (let i = 0; i < (rows ?? []).length; i += 10) {
     const chunk = (rows ?? []).slice(i, i + 10)
     const results = await Promise.all(
-      chunk.map((r) => {
-        const step = nextStepAndDue({ ...r, stage }, today)
-        return sb
-          .from('leads')
-          .update({ stage, ...(step ?? {}) })
-          .eq('id', r.id!)
+      chunk.map(async (r) => {
+        const change = stageChange({ ...r, stage: r.stage ?? 'new' }, stage, { lostReason, now })
+        if (!change.ok) return { error: change.message }
+        const res = await sb.from('leads').update(change.patch).eq('id', r.id!)
+        if (!res.error && change.patch.lost_reason) await logActivity(sb, r.id!, user.id, 'edit', { field: 'lost_reason', reason: change.patch.lost_reason })
+        return res
       }),
     )
     failed += results.filter((res) => res.error).length

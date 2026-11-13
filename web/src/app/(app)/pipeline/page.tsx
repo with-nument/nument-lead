@@ -56,7 +56,7 @@ async function Pipeline({ searchParams }: Pick<PageProps<'/pipeline'>, 'searchPa
       due: c.dueAt ? (state === 'today' ? 'Today' : formatDate(c.dueAt, now)) : '',
       overdue: state === 'overdue',
       owner: c.ownerId ? (names.get(c.ownerId) ?? '') : '',
-      ...(isAdmin ? { dealValue: c.dealValue ?? null } : {}),
+      ...(isAdmin ? { dealValue: c.dealValue ?? null, retainer: c.retainer ?? null, currency: c.currency ?? 'INR' } : {}),
     }
   })
   return (

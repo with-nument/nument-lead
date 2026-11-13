@@ -730,6 +730,7 @@ export type Database = {
           created_at: string
           d3_at: string | null
           d7_at: string | null
+          deal_currency: string
           deal_value_inr: number | null
           due_at: string | null
           email_body: string | null
@@ -739,6 +740,7 @@ export type Database = {
           grade: string
           id: string
           last_activity_at: string
+          lost_reason: string | null
           meeting_at: string | null
           message: string | null
           message_alt: string | null
@@ -749,6 +751,7 @@ export type Database = {
           owner_id: string | null
           pitch_mode: string
           regen_requested_at: string | null
+          retainer_monthly_value: number | null
           score_id: string | null
           segment_id: string
           skipped_until: string | null
@@ -765,6 +768,7 @@ export type Database = {
           created_at?: string
           d3_at?: string | null
           d7_at?: string | null
+          deal_currency?: string
           deal_value_inr?: number | null
           due_at?: string | null
           email_body?: string | null
@@ -774,6 +778,7 @@ export type Database = {
           grade: string
           id?: string
           last_activity_at?: string
+          lost_reason?: string | null
           meeting_at?: string | null
           message?: string | null
           message_alt?: string | null
@@ -784,6 +789,7 @@ export type Database = {
           owner_id?: string | null
           pitch_mode: string
           regen_requested_at?: string | null
+          retainer_monthly_value?: number | null
           score_id?: string | null
           segment_id: string
           skipped_until?: string | null
@@ -800,6 +806,7 @@ export type Database = {
           created_at?: string
           d3_at?: string | null
           d7_at?: string | null
+          deal_currency?: string
           deal_value_inr?: number | null
           due_at?: string | null
           email_body?: string | null
@@ -809,6 +816,7 @@ export type Database = {
           grade?: string
           id?: string
           last_activity_at?: string
+          lost_reason?: string | null
           meeting_at?: string | null
           message?: string | null
           message_alt?: string | null
@@ -819,6 +827,7 @@ export type Database = {
           owner_id?: string | null
           pitch_mode?: string
           regen_requested_at?: string | null
+          retainer_monthly_value?: number | null
           score_id?: string | null
           segment_id?: string
           skipped_until?: string | null
@@ -1711,6 +1720,7 @@ export type Database = {
           created_at: string | null
           d3_at: string | null
           d7_at: string | null
+          deal_currency: string | null
           deal_value_inr: number | null
           due_at: string | null
           email: string | null
@@ -1737,6 +1747,7 @@ export type Database = {
           phone_type: string | null
           pitch_mode: string | null
           regen_requested_at: string | null
+          retainer_monthly_value: number | null
           score_id: string | null
           segment_id: string | null
           skipped_until: string | null
@@ -1898,6 +1909,7 @@ export type Database = {
           created_at: string | null
           d3_at: string | null
           d7_at: string | null
+          deal_currency: string | null
           deal_value_inr: number | null
           due_at: string | null
           email: string | null
@@ -1924,6 +1936,7 @@ export type Database = {
           phone_type: string | null
           pitch_mode: string | null
           regen_requested_at: string | null
+          retainer_monthly_value: number | null
           score_id: string | null
           segment_id: string | null
           skipped_until: string | null

@@ -1,6 +1,7 @@
 import 'server-only'
 import { createClient, type ServerClient } from '@/lib/supabase/server'
 import { applyLeadFilters, PAGE_SIZE, SORTS, type FilterContext, type LeadFilters } from '@/lib/leads-filters'
+import { isDealCurrency, type LeadMoney } from '@/lib/outcomes'
 
 const LIST_COLUMNS =
   'id, business_id, name, segment_id, country, city, website, web_domain, grade, total, stage, pitch_mode, angle, test_group, top_signal_type, top_signal_quote, top_signal_url, top_signal_at, phone_e164, phone_type, contact_name, owner_id, next_step, due_at, wa_at, last_activity_at, created_at' as const
@@ -37,15 +38,26 @@ export type LeadListRow = Awaited<ReturnType<typeof getLeadsPage>>['rows'][numbe
 
 /** Deal values for admins. The admin view returns no rows for anyone else. */
 export async function getDealValues(sb: ServerClient, leadIds: string[]) {
-  const out = new Map<string, number | null>()
+  const money = await getMoney(sb, leadIds)
+  return new Map([...money].map(([id, m]) => [id, m.deal]))
+}
+
+/** Deal value, monthly retainer and its currency, for admins. The admin view returns no rows for anyone else. */
+export async function getMoney(sb: ServerClient, leadIds: string[]) {
+  const out = new Map<string, LeadMoney>()
   const ids = [...new Set(leadIds)]
   const chunks: string[][] = []
   for (let i = 0; i < ids.length; i += 150) chunks.push(ids.slice(i, i + 150))
+  const amount = (v: number | null) => (v === null ? null : Number(v))
   // Chunks keep the URL short; they run side by side, not one after another.
-  const parts = await Promise.all(chunks.map((chunk) => sb.from('v_leads_admin').select('id, deal_value_inr').in('id', chunk)))
+  const parts = await Promise.all(
+    chunks.map((chunk) => sb.from('v_leads_admin').select('id, deal_value_inr, retainer_monthly_value, deal_currency').in('id', chunk)),
+  )
   for (const { data, error } of parts) {
     if (error) throw error
-    for (const r of data ?? []) if (r.id) out.set(r.id, r.deal_value_inr === null ? null : Number(r.deal_value_inr))
+    for (const r of data ?? []) {
+      if (r.id) out.set(r.id, { deal: amount(r.deal_value_inr), retainer: amount(r.retainer_monthly_value), currency: isDealCurrency(r.deal_currency) ? r.deal_currency : 'INR' })
+    }
   }
   return out
 }

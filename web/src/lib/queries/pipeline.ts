@@ -1,7 +1,8 @@
 import 'server-only'
 import { createClient } from '@/lib/supabase/server'
 import { CLOSED_STAGE_LIST } from '@/lib/stages'
-import { getDealValues } from './leads'
+import type { DealCurrency } from '@/lib/outcomes'
+import { getMoney } from './leads'
 
 export type BoardFilters = { seg: string; country: string; owner: string; overdue: boolean }
 
@@ -15,6 +16,8 @@ export type BoardCard = {
   dueAt: string | null
   ownerId: string | null
   dealValue?: number | null
+  retainer?: number | null
+  currency?: DealCurrency
 }
 
 /**
@@ -48,8 +51,11 @@ export async function getBoard(f: BoardFilters, ctx: { userId: string; today: st
   }))
 }
 
-/** Deal values on the cards. Admins only: call it after the role check. */
+/** Deal values, retainers and currencies on the cards. Admins only: call it after the role check. */
 export async function withBoardDealValues(cards: BoardCard[]): Promise<BoardCard[]> {
-  const money = await getDealValues(await createClient(), cards.map((c) => c.id))
-  return cards.map((c) => ({ ...c, dealValue: money.get(c.id) ?? null }))
+  const money = await getMoney(await createClient(), cards.map((c) => c.id))
+  return cards.map((c) => {
+    const m = money.get(c.id)
+    return { ...c, dealValue: m?.deal ?? null, retainer: m?.retainer ?? null, currency: m?.currency ?? 'INR' }
+  })
 }

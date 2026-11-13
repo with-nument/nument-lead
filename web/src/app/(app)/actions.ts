@@ -8,7 +8,8 @@ import { logActivity } from '@/lib/activity'
 import { fail, ok, SAVE_FAILED, type ActionResult } from '@/lib/action-result'
 import { istDate } from '@/lib/dates'
 import { nextStepAndDue } from '@/lib/next-step'
-import { STAGE_VALUES } from '@/lib/stages'
+import { canMarkReplied, stageChange } from '@/lib/outcomes'
+import { STAGE_VALUES, stageOf } from '@/lib/stages'
 import { revalidateLead } from '@/lib/revalidate'
 
 // Today's one-tap actions (plan 15.6.3). Each one: check the role, validate, write as the user
@@ -67,6 +68,30 @@ export async function markContacted(leadId: string, channel: z.infer<typeof Chan
   return ok('Marked as contacted', state.previous)
 }
 
+/**
+ * They answered: Contacted to Talking in one tap, a `reply` on the timeline (the trigger logs the stage
+ * change), next step "Book discovery call". Only from Contacted, so a later stage is never moved back.
+ */
+export async function markReplied(leadId: string): Promise<ActionResult<PreviousState>> {
+  const user = await requireRole(['admin', 'caller'])
+  const id = LeadId.safeParse(leadId)
+  if (!id.success) return fail('Lead not found.')
+  const sb = await createClient()
+  const state = await readState(sb, id.data)
+  if (!state) return fail('Lead not found.')
+  if (!canMarkReplied(state.row.stage)) return fail(`This lead is at ${stageOf(state.row.stage).label}, so there is no reply to mark.`)
+  const change = stageChange(state.row, 'talking')
+  if (!change.ok) return fail(change.message)
+  const { error } = await sb.from('leads').update(change.patch).eq('id', id.data)
+  if (error) {
+    console.error('markReplied failed', error.code, error.message)
+    return fail(SAVE_FAILED)
+  }
+  await logActivity(sb, id.data, user.id, 'reply')
+  revalidateLead(id.data)
+  return ok('Marked as replied', state.previous)
+}
+
 /** Hide a lead from Today for 7 days. */
 export async function skipLead(leadId: string): Promise<ActionResult<PreviousState>> {
   const user = await requireRole(['admin', 'caller'])
@@ -118,20 +143,23 @@ export async function markWrongContact(leadId: string): Promise<ActionResult<Pre
 
 const UNDO_WINDOW_MS = 15 * 60_000
 
+export type UndoKind = 'sent' | 'replied' | 'skip' | 'wrong_contact'
+const UndoKinds = z.enum(['sent', 'replied', 'skip', 'wrong_contact'])
+
 /**
- * Undo for Mark sent, Skip and Wrong contact (toast button). Restores the earlier stage, dates and
+ * Undo for Mark sent, Replied, Skip and Wrong contact (toast button). Restores the earlier stage, dates and
  * next step. For a wrong contact it also lifts the do-not-contact mark, but only when this user made
  * that mark on this lead in the last 15 minutes (read from the timeline, never from the browser).
  */
 export async function undoLeadChange(
   leadId: string,
   previousInput: PreviousState,
-  kind: 'sent' | 'skip' | 'wrong_contact',
+  kind: UndoKind,
 ): Promise<ActionResult> {
   const user = await requireRole(['admin', 'caller'])
   const id = LeadId.safeParse(leadId)
   const previous = Previous.safeParse(previousInput)
-  if (!id.success || !previous.success) return fail('Nothing to undo.')
+  if (!id.success || !previous.success || !UndoKinds.safeParse(kind).success) return fail('Nothing to undo.')
   const sb = await createClient()
 
   if (kind === 'wrong_contact') {

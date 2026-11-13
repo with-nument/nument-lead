@@ -8,6 +8,7 @@ import type { ServerClient } from '@/lib/supabase/server'
  */
 export type AppActivityType =
   | 'sent'
+  | 'reply'
   | 'followup_sent'
   | 'edit'
   | 'note'

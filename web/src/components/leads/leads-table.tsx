@@ -20,6 +20,7 @@ import { Checkbox } from '@/components/ui/input'
 import { cn } from '@/lib/cn'
 import { formatInr } from '@/lib/format'
 import { filtersToQuery, type LeadFilters, type SortKey } from '@/lib/leads-filters'
+import { LOST_REASONS, needsLostReason } from '@/lib/outcomes'
 import { STAGES } from '@/lib/stages'
 import { useFilterNav } from './use-filter-nav'
 
@@ -315,7 +316,9 @@ function BulkBar({
   onDone: () => void
 }) {
   const [stage, setStage] = useState('')
+  const [reason, setReason] = useState('')
   const [owner, setOwner] = useState('')
+  const askReason = needsLostReason(stage)
   const [pending, startTransition] = useTransition()
 
   const run = (fn: () => Promise<{ ok: boolean; message?: string }>) =>
@@ -344,7 +347,27 @@ function BulkBar({
           </option>
         ))}
       </select>
-      <Button size="sm" variant="primary" disabled={!stage || pending} onClick={() => run(() => bulkUpdateStage({ ids, stage }))}>
+      {askReason ? (
+        <>
+          <label className="sr-only" htmlFor="bulk-reason">
+            Why they closed
+          </label>
+          <select id="bulk-reason" value={reason} onChange={(e) => setReason(e.currentTarget.value)} className={select}>
+            <option value="">Reason…</option>
+            {LOST_REASONS.map((r) => (
+              <option key={r.value} value={r.value}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+        </>
+      ) : null}
+      <Button
+        size="sm"
+        variant="primary"
+        disabled={!stage || (askReason && !reason) || pending}
+        onClick={() => run(() => bulkUpdateStage({ ids, stage, lostReason: askReason ? reason : null }))}
+      >
         Apply
       </Button>
       {isAdmin ? (

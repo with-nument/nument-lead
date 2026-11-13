@@ -21,14 +21,12 @@ import {
 } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import { toast } from 'sonner'
-import { setDealValue, updateStage } from '@/app/(app)/leads/[id]/actions'
+import { updateStage } from '@/app/(app)/leads/[id]/actions'
+import { DealDialog, LostReasonDialog } from '@/components/lead/outcome-dialogs'
 import { GradeBadge, Tag } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
-import { Field } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/cn'
 import { formatInr, initials } from '@/lib/format'
+import { formatMoney, needsLostReason, type DealCurrency, type LeadMoney, type LostReason } from '@/lib/outcomes'
 import { BOARD_STAGES, WON_STAGES, stageOf, type Stage } from '@/lib/stages'
 
 export type CardView = {
@@ -42,7 +40,11 @@ export type CardView = {
   overdue: boolean
   owner: string
   dealValue?: number | null
+  retainer?: number | null
+  currency?: DealCurrency
 }
+
+const moneyOf = (c: CardView): LeadMoney => ({ deal: c.dealValue ?? null, retainer: c.retainer ?? null, currency: c.currency ?? 'INR' })
 
 const collision: CollisionDetection = (args) => {
   const hits = pointerWithin(args)
@@ -69,9 +71,10 @@ const columnKeys: KeyboardCoordinateGetter = (event, { context }) => {
 
 export function Board({ cards, canEdit, isAdmin }: { cards: CardView[]; canEdit: boolean; isAdmin: boolean }) {
   const [items, move] = useOptimistic(cards, (state, m: { id: string; stage: string }) => state.map((c) => (c.id === m.id ? { ...c, stage: m.stage } : c)))
-  const [, startTransition] = useTransition()
+  const [pending, startTransition] = useTransition()
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [dealFor, setDealFor] = useState<{ id: string; name: string } | null>(null)
+  const [dealFor, setDealFor] = useState<{ id: string; name: string; money: LeadMoney } | null>(null)
+  const [reasonFor, setReasonFor] = useState<{ card: CardView; stage: Stage } | null>(null)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } }),
@@ -91,17 +94,23 @@ export function Board({ cards, canEdit, isAdmin }: { cards: CardView[]; canEdit:
     const id = String(e.active.id)
     const card = items.find((c) => c.id === id)
     if (!stage || !card || card.stage === stage) return
+    // Lost and Not now ask why first; the card stays where it was until a reason is saved.
+    if (needsLostReason(stage)) setReasonFor({ card, stage: stage as Stage })
+    else moveCard(card, stage as Stage)
+  }
+
+  const moveCard = (card: CardView, stage: Stage, lostReason?: LostReason) =>
     startTransition(async () => {
-      move({ id, stage })
-      const r = await updateStage({ leadId: id, stage: stage as Stage })
+      move({ id: card.id, stage })
+      const r = await updateStage({ leadId: card.id, stage, lostReason })
       if (!r.ok) {
         toast.error(r.message)
         return
       }
+      setReasonFor(null)
       toast(`${card.name} moved to ${stageOf(stage).label}`)
-      if (isAdmin && WON_STAGES.includes(stage as Stage)) setDealFor({ id, name: card.name })
+      if (isAdmin && WON_STAGES.includes(stage)) setDealFor({ id: card.id, name: card.name, money: moneyOf(card) })
     })
-  }
 
   const columns = (
     <div className="relative flex gap-3 overflow-x-auto pb-4" role="list" aria-label="Pipeline stages" data-tour="pipeline-board">
@@ -139,6 +148,12 @@ export function Board({ cards, canEdit, isAdmin }: { cards: CardView[]; canEdit:
       ) : (
         columns
       )}
+      <LostReasonDialog
+        target={reasonFor ? { stage: reasonFor.stage, name: reasonFor.card.name } : null}
+        pending={pending}
+        onSave={(reason) => reasonFor && moveCard(reasonFor.card, reasonFor.stage, reason)}
+        onCancel={() => setReasonFor(null)}
+      />
       <DealDialog lead={dealFor} onClose={() => setDealFor(null)} />
     </>
   )
@@ -212,46 +227,11 @@ function CardBody({ card, isAdmin, compact, dragging, draggable }: { card: CardV
           {card.due ? card.overdue ? <Tag tone="bad" className="h-5 px-1.5">Overdue, {card.due}</Tag> : <span className="text-tx-3">{card.due}</span> : null}
         </div>
       ) : null}
-      {isAdmin && card.dealValue ? <div className="mt-1.5 text-xs text-green-800 tabular">{formatInr(card.dealValue)}</div> : null}
-    </div>
-  )
-}
-
-function DealDialog({ lead, onClose }: { lead: { id: string; name: string } | null; onClose: () => void }) {
-  const [amount, setAmount] = useState('')
-  const [pending, start] = useTransition()
-  return (
-    <Dialog open={Boolean(lead)} onOpenChange={(o) => !o && onClose()}>
-      {lead ? (
-        <DialogContent title={`Deal value for ${lead.name}`} description="Only admins see this. You can change it later on the lead page.">
-          <form
-            className="flex flex-col gap-4"
-            onSubmit={(e) => {
-              e.preventDefault()
-              start(async () => {
-                const r = await setDealValue({ leadId: lead.id, value: amount })
-                if (r.ok) {
-                  toast(r.message ?? 'Saved')
-                  setAmount('')
-                  onClose()
-                } else toast.error(r.message)
-              })
-            }}
-          >
-            <Field label="Amount (₹)">
-              {({ id }) => <Input id={id} inputMode="decimal" autoFocus value={amount} onChange={(e) => setAmount(e.currentTarget.value.replace(/[^\d.]/g, ''))} placeholder="150000" />}
-            </Field>
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={onClose}>
-                Later
-              </Button>
-              <Button type="submit" variant="primary" loading={pending} disabled={!amount}>
-                Save
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
+      {isAdmin && (card.dealValue || card.retainer) ? (
+        <div className="mt-1.5 text-xs text-green-800 tabular">
+          {[card.dealValue ? formatInr(card.dealValue) : '', card.retainer ? `${formatMoney(card.retainer, card.currency)} a month` : ''].filter(Boolean).join(' · ')}
+        </div>
       ) : null}
-    </Dialog>
+    </div>
   )
 }

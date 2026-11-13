@@ -1,13 +1,15 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { MessageCircleReply } from 'lucide-react'
 import { toast } from 'sonner'
-import { setDealValue, updateNextStep, updateOwner, updateStage } from '@/app/(app)/leads/[id]/actions'
+import { setLostReason, updateNextStep, updateOwner, updateStage } from '@/app/(app)/leads/[id]/actions'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
-import { Field } from '@/components/ui/field'
 import { Input, Select } from '@/components/ui/input'
+import { canMarkReplied, needsLostReason, type LeadMoney, type LostReason } from '@/lib/outcomes'
 import { STAGES, WON_STAGES, type Stage } from '@/lib/stages'
+import { DealDialog, LostReasonDialog, LostReasonSelect } from './outcome-dialogs'
+import { useLeadActions } from './use-lead-actions'
 
 function useAction() {
   const [pending, start] = useTransition()
@@ -22,12 +24,54 @@ function useAction() {
   return { pending, run }
 }
 
-/** Stage dropdown. An admin moving a lead to Won or Retainer is asked for the deal value. */
-export function StageSelect({ leadId, stage, isAdmin }: { leadId: string; stage: string; isAdmin: boolean }) {
+/**
+ * Stage menu and what each stage asks for:
+ * - Contacted: a Replied button beside it, one tap to Talking.
+ * - Lost or Not now: the reason first (nothing changes until it is saved), then a Reason menu beside the
+ *   stage to correct it or fill it in for a lead closed in the sheet.
+ * - Won or Retainer, for admins: the deal value and the monthly retainer.
+ */
+export function StageSelect({
+  leadId,
+  stage,
+  lostReason,
+  isAdmin,
+  money,
+}: {
+  leadId: string
+  stage: string
+  lostReason: string | null
+  isAdmin: boolean
+  money?: LeadMoney | null
+}) {
   const { pending, run } = useAction()
+  const leadActions = useLeadActions()
   const [value, setValue] = useState(stage)
+  const [synced, setSynced] = useState(stage)
+  if (synced !== stage) {
+    // The server moved the lead (Replied, Undo, another tab): show its stage.
+    setSynced(stage)
+    setValue(stage)
+  }
+  const [askReason, setAskReason] = useState<Stage | null>(null)
   const [askDeal, setAskDeal] = useState(false)
-  const [deal, setDeal] = useState('')
+
+  const move = (next: Stage, reason?: LostReason) => {
+    const prev = value
+    setValue(next)
+    run(
+      async () => {
+        const r = await updateStage({ leadId, stage: next, lostReason: reason })
+        if (!r.ok) setValue(prev)
+        return r
+      },
+      () => {
+        setAskReason(null)
+        if (isAdmin && WON_STAGES.includes(next)) setAskDeal(true)
+      },
+    )
+  }
+
   return (
     <>
       <div className="w-full sm:w-52">
@@ -40,18 +84,8 @@ export function StageSelect({ leadId, stage, isAdmin }: { leadId: string; stage:
           disabled={pending}
           onChange={(e) => {
             const next = e.currentTarget.value as Stage
-            const prev = value
-            setValue(next)
-            run(
-              async () => {
-                const r = await updateStage({ leadId, stage: next })
-                if (!r.ok) setValue(prev)
-                return r
-              },
-              () => {
-                if (isAdmin && WON_STAGES.includes(next)) setAskDeal(true)
-              },
-            )
+            if (needsLostReason(next)) setAskReason(next)
+            else move(next)
           }}
         >
           {STAGES.map((s) => (
@@ -61,30 +95,44 @@ export function StageSelect({ leadId, stage, isAdmin }: { leadId: string; stage:
           ))}
         </Select>
       </div>
-      <Dialog open={askDeal} onOpenChange={setAskDeal}>
-        <DialogContent title="Deal value" description="Record what this client is worth, in rupees. Only admins see this.">
-          <form
-            className="flex flex-col gap-4"
-            onSubmit={(e) => {
-              e.preventDefault()
-              run(() => setDealValue({ leadId, value: deal }), () => setAskDeal(false))
-            }}
-          >
-            <Field label="Amount (₹)">
-              {({ id }) => <Input id={id} inputMode="decimal" value={deal} onChange={(e) => setDeal(e.currentTarget.value.replace(/[^\d.]/g, ''))} placeholder="150000" autoFocus />}
-            </Field>
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setAskDeal(false)}>
-                Later
-              </Button>
-              <Button type="submit" variant="primary" loading={pending}>
-                Save
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {canMarkReplied(stage) ? (
+        <Button variant="secondary" loading={leadActions.pending} disabled={pending} onClick={() => leadActions.replied(leadId)} title="They answered: move to Talking">
+          <MessageCircleReply aria-hidden />
+          Replied
+        </Button>
+      ) : null}
+      {needsLostReason(stage) ? <ReasonSelect key={lostReason ?? ''} leadId={leadId} reason={lostReason} /> : null}
+      <LostReasonDialog target={askReason ? { stage: askReason } : null} pending={pending} onSave={(reason) => askReason && move(askReason, reason)} onCancel={() => setAskReason(null)} />
+      <DealDialog lead={askDeal ? { id: leadId, money } : null} onClose={() => setAskDeal(false)} />
     </>
+  )
+}
+
+/** Why a Lost or Not now lead closed, changeable in place. */
+function ReasonSelect({ leadId, reason }: { leadId: string; reason: string | null }) {
+  const { pending, run } = useAction()
+  const [value, setValue] = useState(reason ?? '')
+  return (
+    <div className="w-full sm:w-52">
+      <label htmlFor="lead-lost-reason" className="label-mono mb-1 block">
+        Reason
+      </label>
+      <LostReasonSelect
+        id="lead-lost-reason"
+        value={value}
+        disabled={pending}
+        onChange={(next) => {
+          if (!next) return
+          const prev = value
+          setValue(next)
+          run(async () => {
+            const r = await setLostReason({ leadId, reason: next })
+            if (!r.ok) setValue(prev)
+            return r
+          })
+        }}
+      />
+    </div>
   )
 }
 

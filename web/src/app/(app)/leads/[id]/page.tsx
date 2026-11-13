@@ -13,10 +13,11 @@ import { LeadSkeleton } from '@/components/skeletons'
 import { early, requireUser } from '@/lib/auth'
 import { formatDate } from '@/lib/dates'
 import { hostOf, safeUrl } from '@/lib/format'
+import { lostReasonLabel, needsLostReason } from '@/lib/outcomes'
 import { formatPhone } from '@/lib/phone'
 import { canEdit, canSeeMoney } from '@/lib/roles'
 import { countryLabel } from '@/lib/signals'
-import { getLeadDealValue, getLeadDetail, getProposals } from '@/lib/queries/lead'
+import { getLeadDetail, getLeadMoney, getProposals } from '@/lib/queries/lead'
 import { getSegments, getTeam, segmentLabeler } from '@/lib/queries/shared'
 
 export const metadata: Metadata = { title: 'Lead' }
@@ -43,16 +44,16 @@ async function Lead({ params, searchParams }: Pick<PageProps<'/leads/[id]'>, 'pa
   const isAdmin = canSeeMoney(user.role)
   const editable = canEdit(user.role)
   const includeUnverified = isAdmin && wantsUnverified
-  const [detail, team, segments, proposals, dealValue] = await Promise.all([
+  const [detail, team, segments, proposals, money] = await Promise.all([
     includeUnverified ? detailP : verifiedOnlyP,
     getTeam(),
     getSegments(),
     isAdmin ? getProposals(id) : Promise.resolve([]),
-    isAdmin ? getLeadDealValue(id) : Promise.resolve(undefined),
+    isAdmin ? getLeadMoney(id) : Promise.resolve(null),
   ])
   if (!detail) notFound()
   const { business, contacts, signals, facts, score, activities, feedback, pages } = detail
-  const lead = { ...detail.lead, deal_value_inr: dealValue }
+  const lead = detail.lead
   const now = new Date()
   const names = new Map(team.map((m) => [m.id, m.name]))
   const segmentOf = segmentLabeler(segments)
@@ -122,13 +123,14 @@ async function Lead({ params, searchParams }: Pick<PageProps<'/leads/[id]'>, 'pa
         <div data-tour="lead-controls" className="mt-5 flex flex-wrap items-end gap-3 rounded-2xl border border-line-2 bg-surface p-4">
           {editable ? (
             <>
-              <StageSelect leadId={lead.id} stage={lead.stage} isAdmin={isAdmin} />
+              <StageSelect leadId={lead.id} stage={lead.stage} lostReason={lead.lost_reason} isAdmin={isAdmin} money={money} />
               {isAdmin ? <OwnerSelect leadId={lead.id} ownerId={lead.owner_id} team={team.map((m) => ({ id: m.id, name: m.name }))} /> : null}
               <NextStepEditor key={`${lead.next_step}-${lead.due_at}`} leadId={lead.id} nextStep={lead.next_step} dueAt={lead.due_at} />
             </>
           ) : (
             <div className="flex flex-wrap items-center gap-4 text-base">
               <StageBadge stage={lead.stage} />
+              {needsLostReason(lead.stage) && lead.lost_reason ? <span className="text-tx-2">{lostReasonLabel(lead.lost_reason)}</span> : null}
               {lead.next_step ? <span className="text-tx-2">Next: {lead.next_step}</span> : null}
               {lead.due_at ? <span className="text-tx-3">Due {formatDate(lead.due_at, now)}</span> : null}
             </div>
@@ -154,7 +156,7 @@ async function Lead({ params, searchParams }: Pick<PageProps<'/leads/[id]'>, 'pa
         <div className="flex flex-col gap-6 lg:order-2">
           <ContactCard leadId={lead.id} contacts={contactViews} message={lead.message} website={website} mapsUrl={mapsUrl} canEdit={editable} />
           {isAdmin ? (
-            <DealCard leadId={lead.id} value={lead.deal_value_inr ?? null} country={lead.country} proposals={proposals.map((p) => ({ path: p.path, name: p.name, size: p.size }))} />
+            <DealCard leadId={lead.id} money={money} country={lead.country} proposals={proposals.map((p) => ({ path: p.path, name: p.name, size: p.size }))} />
           ) : null}
           <FeedbackCard leadId={lead.id} mine={myFeedback ? { rating: myFeedback.rating, reason: myFeedback.reason } : null} />
           <NotesCard leadId={lead.id} summary={lead.notes} canEdit={editable} />
