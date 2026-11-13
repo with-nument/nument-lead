@@ -1,6 +1,6 @@
 # Keeps the Render web app warm: the free plan sleeps after 15 idle minutes and the first visit then waits
 # about a minute. Public repository, so these runs cost no Actions minutes. GitHub may delay scheduled
-# runs under load, so the app can still sleep now and then.
+# runs under load, so Supabase pg_cron also pings every 10 minutes (migration 0013); this one is a backup.
 name: Keep web app awake
 
 on:

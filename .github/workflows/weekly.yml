@@ -1,6 +1,6 @@
 # Weekly run (Step 14.5.4): learning, then the audit, then the weekly report. The report step stores the
 # report, emails it when email is configured, and writes it into this job's summary.
-# Schedules are off until go-live: set the repository variable SCHEDULES_ENABLED to "true" (Step 21).
+# Supabase pg_cron starts this run on time (migration 0013). The GitHub schedule below is only a fallback: it runs when the repository variable SCHEDULES_ENABLED is "true" (off since 13 Nov 2026, it fired hours late).
 name: Weekly learning and report
 
 on:

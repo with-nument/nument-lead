@@ -3,6 +3,27 @@
 Changes to the plan made while building and running the system, newest first. Each entry says what changed,
 why, and how to undo it. The plan itself is [IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md).
 
+## 2026-11-13: runs start from Supabase, not from GitHub's scheduler
+
+- **Change:** migration 0013 adds pg_cron and pg_net jobs in Supabase. Every 10 minutes they ping the web
+  app's `/api/health`. At the planned IST times (night 02:00, morning 06:00, weekly Monday 07:00, monthly 1st
+  22:30, backup Sunday 23:00) they start each GitHub workflow through `workflow_dispatch`. The GitHub token
+  is fine-grained, Actions read and write on this repository only, and expires 13 Nov 2027. It is kept in
+  Supabase Vault as `github_dispatch_token` and in Render as `GH_DISPATCH_TOKEN` (the Engine page Run
+  buttons). The repository variable `SCHEDULES_ENABLED` is now `false`, so GitHub's own schedules do
+  nothing and runs never double up; manual and database-dispatched runs always run.
+- **Why:** on the first night GitHub started the 02:00 run at 06:46 IST, dropped the 06:00 morning run and
+  pinged the web app only twice in eight hours, so no morning email went out and the app went to sleep.
+  pg_cron fires on the minute.
+- **Check:** `select * from cron.job_run_details order by start_time desc limit 10;` and
+  `select id, status_code, created from net._http_response order by id desc limit 10;` (204 means GitHub
+  accepted the dispatch). A missing token only logs a notice.
+- **Renew:** before 13 Nov 2027, make a new token with the same permission and run
+  `select vault.update_secret(id, '<token>') from vault.secrets where name = 'github_dispatch_token';`,
+  then update `GH_DISPATCH_TOKEN` on Render.
+- **Undo:** `select cron.unschedule(jobname) from cron.job where jobname like 'nlead-%';` and set
+  `SCHEDULES_ENABLED` back to `true`.
+
 ## 2026-11-12: review numbers and review pain without a Places key
 
 ### Practo is on, and code reads the profile, not only the AI

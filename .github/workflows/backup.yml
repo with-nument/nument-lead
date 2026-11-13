@@ -1,7 +1,7 @@
 # Weekly encrypted backup of the data (Step 2.14, 14.5.6): pg_dump of the public schema, gzip, gpg
 # (BACKUP_PASSPHRASE), uploaded to the private Supabase bucket `backups` (8 weeks kept) and kept 30 days
 # as a workflow artifact. Restore steps are in engine/src/nument_engine/ops/backup.py.
-# Schedules are off until go-live: set the repository variable SCHEDULES_ENABLED to "true" (Step 21).
+# Supabase pg_cron starts this run on time (migration 0013). The GitHub schedule below is only a fallback: it runs when the repository variable SCHEDULES_ENABLED is "true" (off since 13 Nov 2026, it fired hours late).
 name: Weekly database backup
 
 on:

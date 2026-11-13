@@ -1,5 +1,5 @@
 # Morning run (Step 14.5.2): collect the AI batch, verify, score, judge, write messages, full sheet sync.
-# Schedules are off until go-live: set the repository variable SCHEDULES_ENABLED to "true" (Step 21).
+# Supabase pg_cron starts this run on time (migration 0013). The GitHub schedule below is only a fallback: it runs when the repository variable SCHEDULES_ENABLED is "true" (off since 13 Nov 2026, it fired hours late).
 name: Morning run
 
 on:

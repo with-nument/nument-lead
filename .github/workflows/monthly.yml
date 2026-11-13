@@ -1,6 +1,6 @@
 # Monthly run (Step 14.5.5): universe refresh from the new map release, then page-text retention.
 # 22:30 IST on the 1st, so it ends well before the 02:00 night run.
-# Schedules are off until go-live: set the repository variable SCHEDULES_ENABLED to "true" (Step 21).
+# Supabase pg_cron starts this run on time (migration 0013). The GitHub schedule below is only a fallback: it runs when the repository variable SCHEDULES_ENABLED is "true" (off since 13 Nov 2026, it fired hours late).
 name: Monthly universe refresh
 
 on:
