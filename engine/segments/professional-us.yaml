@@ -1,0 +1,141 @@
+# Law and accounting firms, US (founder, 13 Nov 2026: 50 to 60 A and B leads a day across seven countries).
+# Small and mid-size law firms and accounting practices: every new client starts as an enquiry, and a missed call is lost revenue. Big firms (200+ staff) and legal-aid bodies stay excluded.
+id: professional-us
+domain: professional
+country: us
+display_name: Law and accounting firms, US
+enabled: true
+timezone: America/New_York
+currency: USD
+outreach_channel: email
+
+quota:
+  daily_research: 40
+
+cities:
+  - name: New York
+    aliases: [New York City, NYC, Manhattan, Brooklyn]
+    bbox: [-74.26, 40.49, -73.70, 40.92]
+    localities: [Manhattan, Brooklyn, Queens]
+  - name: San Francisco Bay Area
+    aliases: [San Francisco, Bay Area, Palo Alto, Mountain View, San Jose, Oakland, Menlo Park]
+    bbox: [-122.55, 37.20, -121.75, 37.90]
+    localities: [SoMa, Palo Alto, San Jose]
+  - name: Los Angeles
+    aliases: [LA, Santa Monica]
+    bbox: [-118.67, 33.70, -118.15, 34.34]
+    localities: [Santa Monica, Downtown LA]
+  - name: Austin
+    aliases: []
+    bbox: [-97.95, 30.10, -97.55, 30.52]
+    localities: [Downtown Austin]
+  - name: Seattle
+    aliases: [Bellevue, Redmond]
+    bbox: [-122.45, 47.48, -122.05, 47.74]
+    localities: [Downtown Seattle, Bellevue]
+  - name: Boston
+    aliases: [Cambridge MA]
+    bbox: [-71.20, 42.23, -70.99, 42.40]
+    localities: [Back Bay, Kendall Square]
+  - name: Chicago
+    aliases: []
+    bbox: [-87.94, 41.64, -87.52, 42.03]
+    localities: [The Loop, River North]
+  - name: Miami
+    aliases: []
+    bbox: [-80.45, 25.55, -80.12, 25.98]
+    localities: [Brickell, Wynwood]
+  - name: Denver
+    aliases: [Boulder]
+    bbox: [-105.30, 39.61, -104.80, 40.10]
+    localities: [Downtown Denver, Boulder]
+  - name: Dallas
+    aliases: [Fort Worth, Plano]
+    bbox: [-97.40, 32.62, -96.55, 33.10]
+    localities: [Uptown Dallas, Plano]
+  - name: Atlanta
+    aliases: []
+    bbox: [-84.55, 33.65, -84.29, 33.89]
+    localities: [Midtown Atlanta]
+
+overture:
+  categories:                   # checked against Overture release 2026-10-21.0 (Pune, London, Austin)
+    - attorney_or_law_firm
+    - personal_injury_law
+    - immigration_law
+    - divorce_and_family_law
+    - business_law
+    - criminal_defense_law
+    - accountant
+    - tax_service
+
+places:                         # used only when a Google Maps key exists
+  queries:
+    - "law firm in {locality}, {city}"
+    - "personal injury lawyer in {locality}, {city}"
+    - "accountant in {locality}, {city}"
+    - "tax accountant in {locality}, {city}"
+  details_per_day: 0
+  reviews_per_day: 0
+
+registries: []
+osm: {enabled: false}
+apna: {pages_per_day: 0}
+adzuna_enabled: false
+
+job_keywords:
+  frontdesk: [receptionist, legal receptionist, intake specialist, client intake, intake coordinator, legal secretary, office administrator, client services coordinator]
+  builder: [web developer, app developer, full stack developer, automation, n8n, zapier, ai engineer, chatbot, software developer, legal technologist]
+  exclude: [attorney, lawyer, solicitor, paralegal, accountant, bookkeeper, auditor, partner]
+
+public_ask_queries:
+  - "law firm in the US looking for someone to build client intake automation or an AI assistant, recent post"
+  - "accounting practice in the US looking for a developer to automate client onboarding or documents, recent post"
+  - "small law firm in the US looking for a website or app developer, recent post"
+news_queries:
+  - '("law firm" OR "accounting firm") ("opens" OR "launches" OR "new office") sourcecountry:US'
+  - '("law firm" OR "accounting firm") ("merger" OR "expands" OR "hires") sourcecountry:US'
+
+size_rules:                     # an active stated need also passes
+  any_of:
+    - {source: business, key: review_count, op: ">=", value: 40}
+    - {source: business, key: branches_count, op: ">=", value: 2}
+    - {source: fact, key: staff_or_doctors, field: count, op: ">=", value: 3}
+
+signal_points: {review_pain: 7, no_booking: 4}
+
+fit:
+  categories: [attorney_or_law_firm, personal_injury_law, immigration_law, divorce_and_family_law, business_law, criminal_defense_law, accountant, tax_service, lawyer, accounting, law firm]
+  service_keywords: [personal injury, immigration, family law, divorce, estate planning, business law, criminal defense, conveyancing, tax, bookkeeping, audit, payroll, accounting]
+  min_reviews: 40
+  min_staff: 3
+
+ticket_class:                   # match order matters: the first class that matches wins
+  injury_immigration: {match: [personal_injury_law, immigration_law, personal injury, immigration], points: 6}
+  law: {match: [attorney_or_law_firm, divorce_and_family_law, business_law, criminal_defense_law, law firm, lawyer], points: 5}
+  accounting: {match: [accountant, tax_service, accounting, tax, bookkeeping], points: 4}
+
+can_pay:
+  premium_price: {consultation: 200, other: 2000}    # USD
+
+scoring: {}
+
+packaged_outcome: AI client intake
+
+angles:
+  - {key: build_what_they_asked, label: Their own stated need, signals: [public_ask, tender, hiring_builder],
+     idea: "Build exactly what they asked for, in their words, and mention one detail from their post."}
+  - {key: frontdesk_load, label: Intake overloaded, signals: [hiring_frontdesk],
+     idea: "An AI intake assistant answers new-client enquiries, qualifies them and books consultations, so staff handle only real cases."}
+  - {key: missed_calls, label: Enquiries missed, signals: [review_pain],
+     idea: "Every calls, texts and web chat answered in seconds, with qualified enquiries booked straight into the calendar."}
+  - {key: ad_leads_cold, label: Ad enquiries going cold, signals: [ads_running],
+     idea: "Every ad enquiry answered and followed up until it books a consultation."}
+  - {key: no_online_booking, label: No online consultation booking, signals: [no_booking],
+     idea: "Clients book a consultation online in under a minute, with document checklists sent automatically."}
+  - {key: slow_site, label: Slow website, signals: [slow_site],
+     idea: "A fast site that turns visitors into consultation requests."}
+  - {key: new_branch_setup, label: New office or growth, signals: [new_branch, new_place, news],
+     idea: "One AI intake for every office from day one."}
+  - {key: client_intake, label: AI client intake (no signal), signals: [fit_only],
+     idea: "AI client intake and follow-up that answers every enquiry after hours and books consultations."}

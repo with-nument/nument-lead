@@ -36,7 +36,7 @@ def test_happy_path_validates_logs_one_cost_row_and_tags(llm_db: str) -> None:
 
     assert isinstance(res.output, SignalClassification) and res.output.role_category == "frontdesk"
     assert (res.provider, res.model, res.fallback_from, res.cached) == ("gemini", "gemini-3.5-flash-lite", None, False)
-    assert res.tag == "gemini:gemini-3.5-flash-lite#classify_signal.v1"
+    assert res.tag == "gemini:gemini-3.5-flash-lite#classify_signal.v2"
     usd = llm_cost_usd("gemini-3.5-flash-lite", 1200, 150, on=router.budget.clock().date())
     rows = _costs(clock)
     assert len(rows) == 1
@@ -201,9 +201,9 @@ def test_run_returns_the_output_and_last_meta_names_who_answered(llm_db: str) ->
         "task": "judge_lead",
         "provider": "gemini",
         "model": "gemini-4-argon",
-        "prompt_version": 2,
+        "prompt_version": 3,
         "fallback_from": None,
-        "tag": "gemini:gemini-4-argon#judge_lead.v2",
+        "tag": "gemini:gemini-4-argon#judge_lead.v3",
         "cached": False,
         "inr": router.last_meta["inr"],
     }

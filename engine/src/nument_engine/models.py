@@ -20,7 +20,19 @@ from pydantic import BaseModel, Field
 # Part 1: contract names (A.12)
 # =========================================================================
 
-Domain = Literal["clinics", "realestate", "education", "d2c", "hospitality", "auto", "finance", "wellness", "firms"]
+Domain = Literal[
+    "clinics",
+    "realestate",
+    "education",
+    "d2c",
+    "hospitality",
+    "auto",
+    "finance",
+    "wellness",
+    "firms",
+    "partners",
+    "professional",
+]
 DOMAINS: Final[tuple[str, ...]] = get_args(Domain)
 
 UserRole = Literal["admin", "caller", "viewer"]
@@ -249,6 +261,8 @@ class SignalClassification(BaseModel):
         "insurance_loans",
         "fitness_salon",
         "firms_startups",
+        "marketing_or_design_agency",
+        "law_or_accounting",
         "agency_or_staffing",
         "other",
     ]

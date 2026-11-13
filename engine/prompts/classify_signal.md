@@ -1,6 +1,6 @@
 ---
 task: classify_signal
-version: 1
+version: 2
 output: SignalClassification
 inputs: [segment_id, domain, country, source, url, text]
 description: Decide whether one job post or public text is a hiring or buying signal from a business we target.
@@ -18,7 +18,7 @@ How to fill each field:
   - "other": anything else.
 - employer_name: the business that will employ the person, or that posted the ask, as written. Null if no business is named.
 - employer_website: only a website or domain of that business that is written in the text. Null otherwise.
-- employer_domain: the business's own field. Use "agency_or_staffing" when the poster is a placement agency, staffing firm, BPO, recruiter, IT company, software vendor or marketing agency, because they hire for others or sell what Nument sells. Use "other" when no listed field fits.
+- employer_domain: the business's own field. Use "marketing_or_design_agency" when the poster is a marketing, advertising, branding, SEO, social media, content or design agency or studio. Use "law_or_accounting" for a law firm, solicitor, attorney, accountant, CPA, tax or bookkeeping practice. Use "agency_or_staffing" when the poster is a placement agency, staffing firm, BPO, recruiter, IT company, software agency or software vendor, because they hire for others or sell what Nument sells. Use "other" when no listed field fits.
 - city: the city of the job or of the business, if written.
 - evidence_quote: one exact sentence or phrase copied from the text that proves the role or the ask.
 - confidence: from 0 to 1, how sure you are about role_category and employer_domain together.

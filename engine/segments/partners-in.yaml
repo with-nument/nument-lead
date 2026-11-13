@@ -1,0 +1,160 @@
+# Marketing and design agencies (white-label partners), India (founder, 13 Nov 2026: 50 to 60 A and B leads a day across seven countries).
+# Marketing, advertising, branding and design agencies as white-label partners: they sell, Nument builds under their brand. Software, app and IT shops are competitors and stay excluded.
+id: partners-in
+domain: partners
+country: in
+display_name: Marketing and design agencies (white-label partners), India
+enabled: true
+timezone: Asia/Kolkata
+currency: INR
+outreach_channel: whatsapp
+
+quota:
+  daily_research: 30
+
+cities:
+  - name: Delhi
+    aliases: [New Delhi, NCT of Delhi]
+    bbox: [76.84, 28.40, 77.35, 28.88]
+    localities: [Connaught Place, Saket, Okhla, Nehru Place, Jasola, Dwarka, Rohini, Karol Bagh]
+  - name: Gurugram
+    aliases: [Gurgaon]
+    bbox: [76.95, 28.38, 77.12, 28.53]
+    localities: [Cyber City, Golf Course Road, Sohna Road, Udyog Vihar, Sector 44, MG Road]
+  - name: Noida
+    aliases: [Greater Noida, Gautam Buddh Nagar]
+    bbox: [77.29, 28.45, 77.50, 28.64]
+    localities: [Sector 62, Sector 63, Sector 16, Sector 132, Sector 135, Greater Noida West]
+  - name: Mumbai
+    aliases: [Bombay, Mumbai Suburban]
+    bbox: [72.77, 18.89, 72.99, 19.30]
+    localities: [Andheri East, Lower Parel, Bandra Kurla Complex, Powai, Goregaon, Malad, Worli, Fort]
+  - name: Thane and Navi Mumbai
+    aliases: [Thane, Navi Mumbai, New Bombay]
+    bbox: [72.95, 18.98, 73.10, 19.30]
+    localities: [Thane West, Vashi, Belapur, Airoli, Ghansoli]
+  - name: Bengaluru
+    aliases: [Bangalore, Bengaluru Urban]
+    bbox: [77.46, 12.83, 77.78, 13.14]
+    localities: [Koramangala, HSR Layout, Indiranagar, Whitefield, Electronic City, Bellandur, JP Nagar, Marathahalli]
+  - name: Pune
+    aliases: [Pimpri Chinchwad, PCMC]
+    bbox: [73.70, 18.40, 74.05, 18.70]
+    localities: [Baner, Hinjewadi, Kharadi, Viman Nagar, Kalyani Nagar, Magarpatta, Wakad]
+  - name: Hyderabad
+    aliases: [Secunderabad, Cyberabad]
+    bbox: [78.30, 17.28, 78.62, 17.56]
+    localities: [HITEC City, Madhapur, Gachibowli, Kondapur, Banjara Hills, Jubilee Hills, Begumpet]
+  - name: Chennai
+    aliases: [Madras]
+    bbox: [80.12, 12.85, 80.33, 13.20]
+    localities: [T Nagar, Anna Nagar, Adyar, Velachery, Guindy, Nungambakkam, OMR]
+  - name: Kolkata
+    aliases: [Calcutta]
+    bbox: [88.24, 22.45, 88.48, 22.70]
+    localities: [Salt Lake, Sector V, New Town, Park Street, Ballygunge, Rajarhat]
+  - name: Ahmedabad
+    aliases: [Amdavad, Gandhinagar]
+    bbox: [72.47, 22.95, 72.70, 23.13]
+    localities: [SG Highway, Prahlad Nagar, Navrangpura, Satellite, Bodakdev, Thaltej]
+  - name: Jaipur
+    aliases: []
+    bbox: [75.70, 26.80, 75.92, 27.02]
+    localities: [Malviya Nagar, C Scheme, Vaishali Nagar, Mansarovar, Sitapura]
+  - name: Chandigarh
+    aliases: [Mohali, Panchkula, SAS Nagar, Chandigarh Tricity]
+    bbox: [76.65, 30.62, 76.88, 30.80]
+    localities: [Sector 17, Sector 35, IT Park, Phase 8 Mohali, Industrial Area]
+  - name: Kochi
+    aliases: [Cochin, Ernakulam]
+    bbox: [76.20, 9.90, 76.40, 10.10]
+    localities: [Kakkanad, Infopark, Edappally, MG Road, Kadavanthra]
+  - name: Indore
+    aliases: []
+    bbox: [75.78, 22.65, 75.95, 22.80]
+    localities: [Vijay Nagar, Palasia, AB Road, Bhawarkua]
+
+overture:
+  categories:                   # checked against Overture release 2026-10-21.0 (Pune, London, Austin)
+    - marketing_agency
+    - advertising_agency
+    - social_media_agency
+    - internet_marketing_service
+    - b2b_advertising_and_marketing_service
+    - b2b_marketing_consultant
+    - web_designer
+    - graphic_designer
+    - public_relations
+    - media_agency
+
+places:                         # used only when a Google Maps key exists
+  queries:
+    - "marketing agency in {locality}, {city}"
+    - "digital marketing agency in {locality}, {city}"
+    - "branding agency in {locality}, {city}"
+    - "design studio in {locality}, {city}"
+  details_per_day: 0
+  reviews_per_day: 0
+
+registries: []
+osm: {enabled: false}
+apna: {pages_per_day: 0}
+adzuna_enabled: false
+
+job_keywords:
+  frontdesk: [client servicing executive, account manager, client success manager]
+  builder: [web developer, wordpress developer, shopify developer, webflow developer, full stack developer, front end developer, app developer, ai automation, automation specialist, n8n, zapier, chatbot developer, developer]
+  exclude: [intern, sales, seo executive, content writer, graphic designer, video editor]
+
+public_ask_queries:
+  - "marketing agency in India looking for a white-label development partner or outsourced dev team, recent post"
+  - "hiring: digital marketing or design agency in India hiring a web, Shopify or app developer, posted this week"
+  - "hiring: marketing agency in India hiring an AI automation or chatbot specialist, posted recently"
+  - "agency owner in India looking for a developer to build a client's app or AI chatbot, recent post"
+news_queries:
+  - '("agency" OR "studio") ("wins" OR "appointed" OR "bags") ("account" OR "mandate" OR "brief") sourcecountry:IN'
+  - '("marketing agency" OR "creative agency" OR "design agency") ("expands" OR "launches" OR "opens") sourcecountry:IN'
+
+size_rules:                     # an active stated need also passes
+  any_of:
+    - {source: business, key: staff_count, op: ">=", value: 3}
+    - {source: fact, key: staff_or_doctors, field: count, op: ">=", value: 3}
+    - {source: business, key: review_count, op: ">=", value: 15}
+
+signal_points: {hiring_builder: 9, public_ask: 10, funding: 5}
+
+fit:
+  categories: [marketing_agency, advertising_agency, social_media_agency, internet_marketing_service, b2b_advertising_and_marketing_service, b2b_marketing_consultant, web_designer, graphic_designer, public_relations, media_agency, marketing agency, advertising agency, design agency]
+  service_keywords: [digital marketing, performance marketing, social media, seo, branding, brand identity, web design, ui ux, content marketing, advertising, paid ads, google ads, meta ads, shopify, webflow, wordpress]
+  min_reviews: 15
+  min_staff: 3
+
+ticket_class:                   # match order matters: the first class that matches wins
+  performance: {match: [performance marketing, paid ads, google ads, meta ads, ecommerce, e-commerce], points: 5}
+  brand_web: {match: [branding, web design, webflow, shopify, ui ux, design agency, web_designer], points: 5}
+  general: {match: [marketing_agency, advertising_agency, digital marketing, social media, seo], points: 4}
+
+can_pay:
+  premium_price: {other: 128000}    # INR
+
+scoring: {}
+
+packaged_outcome: White-label dev and AI team
+
+angles:
+  - {key: build_what_they_asked, label: Their own stated need, signals: [public_ask, tender, hiring_builder],
+     idea: "We become their white-label dev and AI team for exactly this, so they take the project without a new hire."}
+  - {key: frontdesk_load, label: Client service overloaded, signals: [hiring_frontdesk],
+     idea: "An AI assistant answers routine client and lead questions, and they can resell the same assistant to clients."}
+  - {key: missed_calls, label: Leads waiting for replies, signals: [review_pain],
+     idea: "Instant replies to every enquiry, theirs and their clients', built under their brand."}
+  - {key: ad_leads_cold, label: Ad leads going cold, signals: [ads_running],
+     idea: "AI lead follow-up they can bundle with their ad management, so clients' leads convert."}
+  - {key: no_online_booking, label: Clients' sites without booking, signals: [no_booking],
+     idea: "Booking, quote and checkout flows for their clients' sites, delivered under their brand."}
+  - {key: slow_site, label: Slow website, signals: [slow_site],
+     idea: "Fast rebuilds of slow sites for them and their clients, under their brand."}
+  - {key: growth_capacity, label: Growing or new accounts, signals: [new_branch, news, new_place, funding],
+     idea: "New accounts mean more builds: a senior dev and AI team on call, no hiring."}
+  - {key: white_label_team, label: White-label dev and AI team (no signal), signals: [fit_only],
+     idea: "A senior dev and AI team under their brand for client apps, sites and AI work they'd otherwise turn down."}

@@ -1,0 +1,145 @@
+# Clinics, US (founder, 13 Nov 2026: 50 to 60 A and B leads a day across seven countries).
+# Private clinics abroad (dental, dermatology, med spa, chiropractic, physio, fertility): high-ticket, enquiry-driven practices. Hospitals, chains and big groups stay excluded.
+id: clinics-us
+domain: clinics
+country: us
+display_name: Clinics, US
+enabled: true
+timezone: America/New_York
+currency: USD
+outreach_channel: email
+
+quota:
+  daily_research: 40
+
+cities:
+  - name: New York
+    aliases: [New York City, NYC, Manhattan, Brooklyn]
+    bbox: [-74.26, 40.49, -73.70, 40.92]
+    localities: [Manhattan, Brooklyn, Queens]
+  - name: San Francisco Bay Area
+    aliases: [San Francisco, Bay Area, Palo Alto, Mountain View, San Jose, Oakland, Menlo Park]
+    bbox: [-122.55, 37.20, -121.75, 37.90]
+    localities: [SoMa, Palo Alto, San Jose]
+  - name: Los Angeles
+    aliases: [LA, Santa Monica]
+    bbox: [-118.67, 33.70, -118.15, 34.34]
+    localities: [Santa Monica, Downtown LA]
+  - name: Austin
+    aliases: []
+    bbox: [-97.95, 30.10, -97.55, 30.52]
+    localities: [Downtown Austin]
+  - name: Seattle
+    aliases: [Bellevue, Redmond]
+    bbox: [-122.45, 47.48, -122.05, 47.74]
+    localities: [Downtown Seattle, Bellevue]
+  - name: Boston
+    aliases: [Cambridge MA]
+    bbox: [-71.20, 42.23, -70.99, 42.40]
+    localities: [Back Bay, Kendall Square]
+  - name: Chicago
+    aliases: []
+    bbox: [-87.94, 41.64, -87.52, 42.03]
+    localities: [The Loop, River North]
+  - name: Miami
+    aliases: []
+    bbox: [-80.45, 25.55, -80.12, 25.98]
+    localities: [Brickell, Wynwood]
+  - name: Denver
+    aliases: [Boulder]
+    bbox: [-105.30, 39.61, -104.80, 40.10]
+    localities: [Downtown Denver, Boulder]
+  - name: Dallas
+    aliases: [Fort Worth, Plano]
+    bbox: [-97.40, 32.62, -96.55, 33.10]
+    localities: [Uptown Dallas, Plano]
+  - name: Atlanta
+    aliases: []
+    bbox: [-84.55, 33.65, -84.29, 33.89]
+    localities: [Midtown Atlanta]
+
+overture:
+  categories:                   # checked against Overture release 2026-10-21.0 (Pune, London, Austin)
+    - dental_clinic
+    - general_dentistry
+    - cosmetic_dentistry
+    - dermatology
+    - medical_spa
+    - aesthetic_medicine
+    - chiropractic
+    - physical_therapy
+    - fertility_clinic
+    - hair_loss_center
+
+places:                         # used only when a Google Maps key exists
+  queries:
+    - "dental clinic in {locality}, {city}"
+    - "dermatology clinic in {locality}, {city}"
+    - "med spa in {locality}, {city}"
+    - "chiropractor in {locality}, {city}"
+  details_per_day: 0
+  reviews_per_day: 0
+
+registries: []
+osm: {enabled: false}
+apna: {pages_per_day: 0}
+adzuna_enabled: false
+
+job_keywords:
+  frontdesk: [receptionist, front desk, front office, dental receptionist, patient coordinator, patient care coordinator, treatment coordinator, scheduling coordinator, intake coordinator, practice coordinator, call center]
+  builder: [web developer, app developer, full stack developer, wordpress developer, automation, n8n, zapier, ai engineer, chatbot, software developer]
+  exclude: [nurse, doctor, dentist, hygienist, physiotherapist, physical therapist, assistant, technician, esthetician]
+
+public_ask_queries:
+  - "clinic in the US looking for someone to build an AI receptionist or booking automation, recent post"
+  - "dental practice in the US looking for a developer for online booking or patient reminders, recent post"
+  - "med spa or dermatology clinic in the US looking for an app or website developer, recent post"
+news_queries:
+  - '("new clinic" OR "opens" OR "launches") (dental OR dermatology OR "med spa" OR chiropractic) sourcecountry:US'
+  - '("second location" OR "new location" OR "expands") (clinic OR dental OR "med spa") sourcecountry:US'
+
+size_rules:                     # an active stated need also passes
+  any_of:
+    - {source: business, key: review_count, op: ">=", value: 80}
+    - {source: business, key: branches_count, op: ">=", value: 2}
+    - {source: fact, key: staff_or_doctors, field: count, op: ">=", value: 2}
+
+signal_points: {review_pain: 7, no_booking: 4}
+
+fit:
+  categories: [dental_clinic, general_dentistry, cosmetic_dentistry, dermatology, medical_spa, aesthetic_medicine, chiropractic, physical_therapy, fertility_clinic, hair_loss_center, dentist, doctor, physiotherapist, skin_care_clinic]
+  service_keywords: [implants, invisalign, aligners, veneers, whitening, botox, fillers, laser, dermatology, skin, ivf, fertility, chiropractic, physical therapy, physiotherapy, hair transplant, coolsculpting]
+  min_reviews: 80
+  min_staff: 2
+
+ticket_class:                   # match order matters: the first class that matches wins
+  fertility: {match: [fertility_clinic, ivf, fertility], points: 6}
+  aesthetic: {match: [medical_spa, aesthetic_medicine, cosmetic_dentistry, botox, laser, veneers, invisalign], points: 5}
+  dermatology: {match: [dermatology, skin], points: 4}
+  dental: {match: [dental_clinic, general_dentistry, dentist, dental, implants], points: 4}
+  chiro_physio: {match: [chiropractic, physical_therapy, physiotherapist, physio], points: 3}
+
+can_pay:
+  premium_price: {consultation: 150, other: 1500}    # USD
+
+scoring: {}
+
+packaged_outcome: AI front desk
+
+angles:
+  - {key: build_what_they_asked, label: Their own stated need, signals: [public_ask, tender, hiring_builder],
+     idea: "Build exactly what they asked for, in their words, and mention one detail from their post."}
+  - {key: frontdesk_load, label: Front desk overloaded, signals: [hiring_frontdesk],
+     idea: "An AI receptionist answers routine patient questions on text and web chat and books slots, so the front desk handles only real work."}
+  - {key: missed_calls, label: Calls and messages missed, signals: [review_pain],
+     idea: "Every calls, texts and web chat answered in seconds, day and night, with a booking link."}
+  - {key: ad_leads_cold, label: Ad enquiries going cold, signals: [ads_running],
+     idea: "Every ad enquiry answered in seconds and followed up until it books a consultation."}
+  - {key: no_online_booking, label: No easy online booking, signals: [no_booking],
+     idea: "Patients book online in under a minute, with reminders that cut no-shows."}
+  - {key: slow_site, label: Slow mobile site, signals: [slow_site],
+     idea: "A fast booking page, so mobile visitors book instead of leaving."}
+  - {key: new_branch_setup, label: New location, signals: [new_branch, new_place, news],
+     idea: "One AI front desk for every location from day one."}
+  - {key: after_hours_enquiries, label: After-hours enquiries (no signal), signals: [fit_only],
+     idea: "Answer patient questions and book appointments after hours, automatically."}

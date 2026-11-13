@@ -41,6 +41,8 @@ PACKAGED_OUTCOME: dict[str, str] = {  # A.2.2; must match
     "finance": "AI renewals and document chasing",
     "wellness": "AI bookings and renewals",
     "firms": "Custom AI workflows",
+    "partners": "White-label dev and AI team",
+    "professional": "AI client intake",
 }
 # Angle codes Step 11 picks by signal type (11.8.2). Every segment must define all of them.
 REQUIRED_ANGLES = frozenset(

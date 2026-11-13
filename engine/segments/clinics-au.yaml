@@ -1,0 +1,121 @@
+# Clinics, Australia (founder, 13 Nov 2026: 50 to 60 A and B leads a day across seven countries).
+# Private clinics abroad (dental, dermatology, med spa, chiropractic, physio, fertility): high-ticket, enquiry-driven practices. Hospitals, chains and big groups stay excluded.
+id: clinics-au
+domain: clinics
+country: au
+display_name: Clinics, Australia
+enabled: true
+timezone: Australia/Sydney
+currency: AUD
+outreach_channel: email
+
+quota:
+  daily_research: 25
+
+cities:
+  - name: Sydney
+    aliases: []
+    bbox: [150.90, -34.10, 151.35, -33.70]
+    localities: [Sydney CBD, Surry Hills, North Sydney]
+  - name: Melbourne
+    aliases: []
+    bbox: [144.75, -38.00, 145.20, -37.65]
+    localities: [Melbourne CBD, Richmond, Cremorne]
+  - name: Brisbane
+    aliases: []
+    bbox: [152.85, -27.65, 153.20, -27.30]
+    localities: [Fortitude Valley, Brisbane CBD]
+  - name: Perth
+    aliases: []
+    bbox: [115.70, -32.10, 116.05, -31.75]
+    localities: [Perth CBD]
+  - name: Adelaide
+    aliases: []
+    bbox: [138.45, -35.05, 138.75, -34.75]
+    localities: [Adelaide CBD]
+
+overture:
+  categories:                   # checked against Overture release 2026-10-21.0 (Pune, London, Austin)
+    - dental_clinic
+    - general_dentistry
+    - cosmetic_dentistry
+    - dermatology
+    - medical_spa
+    - aesthetic_medicine
+    - chiropractic
+    - physical_therapy
+    - fertility_clinic
+    - hair_loss_center
+
+places:                         # used only when a Google Maps key exists
+  queries:
+    - "dental clinic in {locality}, {city}"
+    - "dermatology clinic in {locality}, {city}"
+    - "med spa in {locality}, {city}"
+    - "chiropractor in {locality}, {city}"
+  details_per_day: 0
+  reviews_per_day: 0
+
+registries: []
+osm: {enabled: false}
+apna: {pages_per_day: 0}
+adzuna_enabled: false
+
+job_keywords:
+  frontdesk: [receptionist, front desk, front office, dental receptionist, patient coordinator, patient care coordinator, treatment coordinator, scheduling coordinator, intake coordinator, practice coordinator, call center]
+  builder: [web developer, app developer, full stack developer, wordpress developer, automation, n8n, zapier, ai engineer, chatbot, software developer]
+  exclude: [nurse, doctor, dentist, hygienist, physiotherapist, physical therapist, assistant, technician, esthetician]
+
+public_ask_queries:
+  - "clinic in Australia looking for someone to build an AI receptionist or booking automation, recent post"
+  - "dental practice in Australia looking for a developer for online booking or patient reminders, recent post"
+  - "med spa or dermatology clinic in Australia looking for an app or website developer, recent post"
+news_queries:
+  - '("new clinic" OR "opens" OR "launches") (dental OR dermatology OR "med spa" OR chiropractic) sourcecountry:AS'
+  - '("second location" OR "new location" OR "expands") (clinic OR dental OR "med spa") sourcecountry:AS'
+
+size_rules:                     # an active stated need also passes
+  any_of:
+    - {source: business, key: review_count, op: ">=", value: 80}
+    - {source: business, key: branches_count, op: ">=", value: 2}
+    - {source: fact, key: staff_or_doctors, field: count, op: ">=", value: 2}
+
+signal_points: {review_pain: 7, no_booking: 4}
+
+fit:
+  categories: [dental_clinic, general_dentistry, cosmetic_dentistry, dermatology, medical_spa, aesthetic_medicine, chiropractic, physical_therapy, fertility_clinic, hair_loss_center, dentist, doctor, physiotherapist, skin_care_clinic]
+  service_keywords: [implants, invisalign, aligners, veneers, whitening, botox, fillers, laser, dermatology, skin, ivf, fertility, chiropractic, physical therapy, physiotherapy, hair transplant, coolsculpting]
+  min_reviews: 80
+  min_staff: 2
+
+ticket_class:                   # match order matters: the first class that matches wins
+  fertility: {match: [fertility_clinic, ivf, fertility], points: 6}
+  aesthetic: {match: [medical_spa, aesthetic_medicine, cosmetic_dentistry, botox, laser, veneers, invisalign], points: 5}
+  dermatology: {match: [dermatology, skin], points: 4}
+  dental: {match: [dental_clinic, general_dentistry, dentist, dental, implants], points: 4}
+  chiro_physio: {match: [chiropractic, physical_therapy, physiotherapist, physio], points: 3}
+
+can_pay:
+  premium_price: {consultation: 200, other: 2250}    # AUD
+
+scoring: {}
+
+packaged_outcome: AI front desk
+
+angles:
+  - {key: build_what_they_asked, label: Their own stated need, signals: [public_ask, tender, hiring_builder],
+     idea: "Build exactly what they asked for, in their words, and mention one detail from their post."}
+  - {key: frontdesk_load, label: Front desk overloaded, signals: [hiring_frontdesk],
+     idea: "An AI receptionist answers routine patient questions on text and web chat and books slots, so the front desk handles only real work."}
+  - {key: missed_calls, label: Calls and messages missed, signals: [review_pain],
+     idea: "Every calls, texts and web chat answered in seconds, day and night, with a booking link."}
+  - {key: ad_leads_cold, label: Ad enquiries going cold, signals: [ads_running],
+     idea: "Every ad enquiry answered in seconds and followed up until it books a consultation."}
+  - {key: no_online_booking, label: No easy online booking, signals: [no_booking],
+     idea: "Patients book online in under a minute, with reminders that cut no-shows."}
+  - {key: slow_site, label: Slow mobile site, signals: [slow_site],
+     idea: "A fast booking page, so mobile visitors book instead of leaving."}
+  - {key: new_branch_setup, label: New location, signals: [new_branch, new_place, news],
+     idea: "One AI front desk for every location from day one."}
+  - {key: after_hours_enquiries, label: After-hours enquiries (no signal), signals: [fit_only],
+     idea: "Answer patient questions and book appointments after hours, automatically."}

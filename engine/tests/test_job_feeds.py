@@ -140,7 +140,6 @@ def test_a_us_product_company_hiring_a_contract_developer_is_a_strong_us_lead() 
         ({"hq_country": None}, "country_not_enabled"),
         ({"is_relevant": False}, "not_relevant"),
         ({"confidence": 0.3}, "low_confidence"),
-        ({"company_kind": "marketing_or_design_agency"}, "partners_off"),
     ],
 )
 def test_posts_that_are_not_our_clients_are_dropped(changes: dict[str, Any], why: str) -> None:
@@ -211,3 +210,9 @@ async def test_signals_for_reads_hn_once_and_links_a_remote_company_by_name(
 
     async with JobFeedsAdapter(ctx(FakeRouter({"classify_feed_job": []})), transport=transport) as again:
         assert await again.signals_for(segments) == []  # every post was read already
+
+
+def test_a_marketing_agency_hiring_a_developer_is_a_partner_lead() -> None:
+    sig, why = classify(answer(company_kind="marketing_or_design_agency", company_name="Bloom Creative"))
+    assert why == "signal" and sig is not None and sig.segment_id == "partners-us"
+    assert sig.details.get("fallback_segment") is None  # never a firms lead

@@ -159,6 +159,16 @@ agency_keywords:              # in name, category or site title: they sell what 
   - staffing
   - recruitment agency
 
+# The partner track (13 Nov 2026): marketing and design agencies are white-label partners, not competitors.
+# These agency keywords do not exclude a business in a partners segment; software, app and IT shops, staffing
+# and recruitment firms still do.
+partner_ok_keywords:
+  - digital marketing
+  - marketing agency
+  - seo agency
+  - seo services
+  - web design
+
 competitors:                  # software vendors and platforms in our space: never leads (names or domains)
   - aisensy
   - interakt

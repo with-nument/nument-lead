@@ -32,6 +32,8 @@ DOMAIN_MAP: dict[str, str] = {
     "insurance_loans": "finance",
     "fitness_salon": "wellness",
     "firms_startups": "firms",
+    "marketing_or_design_agency": "partners",  # white-label partners (13 Nov 2026), builder roles only
+    "law_or_accounting": "professional",
 }
 MIN_CONFIDENCE = 0.6
 DESCRIPTION_CHARS = 1500  # Step 7.5.1: the first 1,500 characters of the description
@@ -91,6 +93,51 @@ DOMAIN_HINTS: dict[str, tuple[str, ...]] = {
         "university",
         "students",
         "counsell",
+    ),
+    # 13 Nov 2026: the need-first, partner and professional tracks.
+    "firms": (
+        "developer",
+        "engineer",
+        "full stack",
+        "app developer",
+        "mobile app",
+        "software",
+        "automation",
+        "ai ",
+        "machine learning",
+        "chatbot",
+        "cto",
+        "tech lead",
+        "programmer",
+        "shopify",
+        "wordpress",
+    ),
+    "partners": (
+        "marketing agency",
+        "digital marketing",
+        "advertising",
+        "branding",
+        "creative agency",
+        "design studio",
+        "design agency",
+        "seo",
+        "social media agency",
+        "performance marketing",
+    ),
+    "professional": (
+        "law firm",
+        "lawyer",
+        "attorney",
+        "solicitor",
+        "advocate",
+        "legal",
+        "accountant",
+        "accounting",
+        "chartered accountant",
+        "cpa",
+        "tax",
+        "bookkeeping",
+        "paralegal",
     ),
 }
 
@@ -286,8 +333,11 @@ def classify_job(
     if float(field_of(result, "confidence") or 0) < MIN_CONFIDENCE:
         ctx.add("jobs.low_confidence")
         return None
+    if DOMAIN_MAP.get(domain) == "partners" and role != "builder":
+        ctx.add("jobs.partner_not_builder")  # an agency hiring a receptionist is not a partner lead
+        return None
     seg = segments.get(f"{DOMAIN_MAP.get(domain, domain)}-{country}")
-    if seg is None and role == "builder":
+    if seg is None and role == "builder" and DOMAIN_MAP.get(domain) != "partners":
         # A business hiring a developer is a need-first lead whatever its industry (13 Nov 2026).
         seg = segments.get(f"firms-{country}")
     if seg is None:

@@ -363,7 +363,6 @@ class JobFeedsAdapter(SourceAdapter):
             "role_category": "builder",
             "contract": contract,
             "company_kind": kind,
-            "fallback_segment": f"firms-{country}" if domain == "partners" else None,
         }
         if isinstance(team, int):
             details["team_size"] = team

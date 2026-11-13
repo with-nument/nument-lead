@@ -153,7 +153,7 @@ def test_extract_prompt_wraps_pages_so_urls_can_be_cited() -> None:
 
 def test_tag_format() -> None:
     prompt = prompts.load("judge_lead.md")
-    assert prompts.tag("gemini", "gemini-4-argon", prompt) == "gemini:gemini-4-argon#judge_lead.v2"
+    assert prompts.tag("gemini", "gemini-4-argon", prompt) == "gemini:gemini-4-argon#judge_lead.v3"
 
 
 @pytest.mark.parametrize(

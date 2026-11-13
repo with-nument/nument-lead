@@ -28,7 +28,13 @@ TICKET_CLASSES = {
     "ivf_fertility", "hair_transplant", "aesthetic", "dermatology", "dental", "physio", "therapy_group",
     "developer", "broker", "property_services", "study_abroad", "coaching_institute", "academy", "tutoring",
     "funded_startup", "smb",
+    # 13 Nov 2026: partner agencies, clinics abroad, law and accounting firms
+    "performance", "brand_web", "general", "fertility", "chiro_physio", "injury_immigration", "law", "accounting",
 }  # fmt: skip
+# The partner track and the map segments abroad (13 Nov 2026).
+GLOBAL_MAP = {f"partners-{cc}" for cc in ("in", "us", "gb", "au", "ae")} | {
+    f"{d}-{cc}" for d in ("clinics", "professional") for cc in ("us", "gb", "au")
+}
 
 
 def _copy_with(tmp_path: Path, seg_id: str, old: str, new: str, file_name: str | None = None) -> Path:
@@ -42,7 +48,7 @@ def _copy_with(tmp_path: Path, seg_id: str, old: str, new: str, file_name: str |
 
 
 def test_all_segments_load() -> None:
-    assert set(load_segments()) == WAVE1 | NEED_FIRST
+    assert set(load_segments()) == WAVE1 | NEED_FIRST | GLOBAL_MAP
     firms = load_segments()["firms-in"]
     assert firms.universe == "signals_only" and not firms.overture.categories and firms.packaged_outcome
 
@@ -92,6 +98,7 @@ def test_exclusions_file_shape() -> None:
         "non_target_keywords",
         "hospital_keywords",
         "agency_keywords",
+        "partner_ok_keywords",
         "competitors",
         "max_branches",
     }
@@ -206,7 +213,7 @@ def test_sync_fills_config_honours_the_switch_and_keeps_the_app_quota(db_conn: C
         [Jsonb({"education-ae": False})],
     )
     segments = load_segments()
-    assert sync_segments_to_db(db_conn, segments) == 13
+    assert sync_segments_to_db(db_conn, segments) == 24
     rows = {
         r["id"]: r
         for r in db_conn.execute(
@@ -222,7 +229,7 @@ def test_sync_fills_config_honours_the_switch_and_keeps_the_app_quota(db_conn: C
     assert db_conn.execute("select daily_quota from public.segments where id = 'clinics-in'").fetchone() == {
         "daily_quota": 25
     }
-    assert db_conn.execute("select count(*) as n from public.segments").fetchone() == {"n": 13}
+    assert db_conn.execute("select count(*) as n from public.segments").fetchone() == {"n": 24}
 
 
 def test_sync_inserts_a_new_segment_with_its_file_quota(db_conn: Conn) -> None:

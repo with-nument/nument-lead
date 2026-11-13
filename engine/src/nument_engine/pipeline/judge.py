@@ -55,6 +55,13 @@ DISQUALIFIERS: Final = re.compile(
     re.I,
 )
 
+# A partner (white-label) lead is a marketing or design agency on purpose: being an agency is not a risk there.
+PARTNER_DISQUALIFIERS: Final = re.compile(
+    r"\b(software (?:vendor|company|house|agency)|dev(?:elopment)? (?:shop|agency)|it services|chain|franchise|"
+    r"head office|in.house (?:tech|dev)|tech team|corporate|listed company)\b",
+    re.I,
+)
+
 
 def clamp(rule_grade: str, proposed: str) -> str:
     """At most one step away from the rule grade: B may become A, B or C (11.10.4 rule 1)."""
@@ -62,7 +69,7 @@ def clamp(rule_grade: str, proposed: str) -> str:
     return GRADE_ORDER[max(r - 1, min(r + 1, p))]
 
 
-def adjustment(rule_grade: str, judgement: LeadJudgement, cited: int, total: float) -> int:
+def adjustment(rule_grade: str, judgement: LeadJudgement, cited: int, total: float, *, partner: bool = False) -> int:
     """Points the judge adds to or takes from the rule total (s2.0).
 
     A higher grade adds RAISE points, only with confidence of at least 0.7 and two cited facts or signals.
@@ -73,7 +80,7 @@ def adjustment(rule_grade: str, judgement: LeadJudgement, cited: int, total: flo
     if (
         judgement.judge_grade == "D"
         and judgement.confidence >= DISQUALIFY_MIN_CONFIDENCE
-        and any(DISQUALIFIERS.search(risk) for risk in judgement.risks)
+        and any((PARTNER_DISQUALIFIERS if partner else DISQUALIFIERS).search(risk) for risk in judgement.risks)
     ):
         return int(min(-LOWER_MAX, 39 - total))
     if p < r:
@@ -146,7 +153,9 @@ def review(
         cited.append(known)
     final_total, adjust = total, 0
     if total is not None and grade_for is not None:
-        adjust = 0 if locked else adjustment(rule_grade, judgement, len(set(cited)), total)
+        adjust = (
+            0 if locked else adjustment(rule_grade, judgement, len(set(cited)), total, partner=seg.domain == "partners")
+        )
         final_total = max(0.0, min(100.0, total + adjust))
         final = "D" if locked else grade_for(final_total)
     else:

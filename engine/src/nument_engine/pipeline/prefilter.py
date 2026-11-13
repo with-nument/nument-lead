@@ -58,6 +58,7 @@ class Exclusions:
     agency: list[re.Pattern[str]]
     max_branches: int
     non_target: list[re.Pattern[str]] = field(default_factory=list)
+    agency_partner: list[re.Pattern[str]] = field(default_factory=list)  # agency keywords minus marketing ones
 
     @classmethod
     def load(cls) -> Exclusions:
@@ -67,6 +68,11 @@ class Exclusions:
             chain_domains={d.lower() for c in cfg.get("chains", []) for d in c.get("domains", []) or []},
             hospital=[_phrase(k) for k in cfg.get("hospital_keywords", [])],
             agency=[_phrase(k) for k in cfg.get("agency_keywords", [])],
+            agency_partner=[
+                _phrase(k)
+                for k in cfg.get("agency_keywords", [])
+                if k not in set(cfg.get("partner_ok_keywords", []) or [])
+            ],
             max_branches=int(cfg.get("max_branches", 10)),
             non_target=[_phrase(k) for k in cfg.get("non_target_keywords", [])],
         )
@@ -253,7 +259,8 @@ def apply_rules(b: dict[str, Any], seg: Segment | None, excl: Exclusions, world:
     if (b.get("branches_count") or 0) >= excl.max_branches:
         return "reject", "R3_excluded"
     # R4: agencies and vendors sell what we sell
-    if any(p.search(name) or p.search(plain_text(b.get("category"))) for p in excl.agency):
+    agency = excl.agency_partner if seg.domain == "partners" else excl.agency  # partners: agencies are the target
+    if any(p.search(name) or p.search(plain_text(b.get("category"))) for p in agency):
         return "reject", "R4_agency"
     # R5: suppression list (phones, emails, domain)
     if (

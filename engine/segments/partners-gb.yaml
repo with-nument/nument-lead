@@ -1,0 +1,128 @@
+# Marketing and design agencies (white-label partners), UK (founder, 13 Nov 2026: 50 to 60 A and B leads a day across seven countries).
+# Marketing, advertising, branding and design agencies as white-label partners: they sell, Nument builds under their brand. Software, app and IT shops are competitors and stay excluded.
+id: partners-gb
+domain: partners
+country: gb
+display_name: Marketing and design agencies (white-label partners), UK
+enabled: true
+timezone: Europe/London
+currency: GBP
+outreach_channel: email
+
+quota:
+  daily_research: 20
+
+cities:
+  - name: London
+    aliases: [Greater London]
+    bbox: [-0.51, 51.28, 0.33, 51.69]
+    localities: [Shoreditch, Soho, Canary Wharf, King's Cross]
+  - name: Manchester
+    aliases: []
+    bbox: [-2.40, 53.35, -2.15, 53.55]
+    localities: [Northern Quarter, Spinningfields]
+  - name: Birmingham
+    aliases: []
+    bbox: [-2.03, 52.38, -1.73, 52.61]
+    localities: [Digbeth, Jewellery Quarter]
+  - name: Edinburgh
+    aliases: []
+    bbox: [-3.33, 55.89, -3.08, 55.99]
+    localities: [Leith, New Town]
+  - name: Bristol
+    aliases: []
+    bbox: [-2.72, 51.40, -2.51, 51.52]
+    localities: [Harbourside]
+  - name: Leeds
+    aliases: []
+    bbox: [-1.70, 53.70, -1.40, 53.90]
+    localities: [City Centre]
+  - name: Cambridge
+    aliases: []
+    bbox: [0.07, 52.16, 0.20, 52.24]
+    localities: [Cambridge Science Park]
+
+overture:
+  categories:                   # checked against Overture release 2026-10-21.0 (Pune, London, Austin)
+    - marketing_agency
+    - advertising_agency
+    - social_media_agency
+    - internet_marketing_service
+    - b2b_advertising_and_marketing_service
+    - b2b_marketing_consultant
+    - web_designer
+    - graphic_designer
+    - public_relations
+    - media_agency
+
+places:                         # used only when a Google Maps key exists
+  queries:
+    - "marketing agency in {locality}, {city}"
+    - "digital marketing agency in {locality}, {city}"
+    - "branding agency in {locality}, {city}"
+    - "design studio in {locality}, {city}"
+  details_per_day: 0
+  reviews_per_day: 0
+
+registries: []
+osm: {enabled: false}
+apna: {pages_per_day: 0}
+adzuna_enabled: false
+
+job_keywords:
+  frontdesk: [client servicing executive, account manager, client success manager]
+  builder: [web developer, wordpress developer, shopify developer, webflow developer, full stack developer, front end developer, app developer, ai automation, automation specialist, n8n, zapier, chatbot developer, developer]
+  exclude: [intern, sales, seo executive, content writer, graphic designer, video editor]
+
+public_ask_queries:
+  - "marketing agency in the UK looking for a white-label development partner or outsourced dev team, recent post"
+  - "hiring: digital marketing or design agency in the UK hiring a web, Shopify or app developer, posted this week"
+  - "hiring: marketing agency in the UK hiring an AI automation or chatbot specialist, posted recently"
+  - "agency owner in the UK looking for a developer to build a client's app or AI chatbot, recent post"
+news_queries:
+  - '("agency" OR "studio") ("wins" OR "appointed" OR "bags") ("account" OR "mandate" OR "brief") sourcecountry:UK'
+  - '("marketing agency" OR "creative agency" OR "design agency") ("expands" OR "launches" OR "opens") sourcecountry:UK'
+
+size_rules:                     # an active stated need also passes
+  any_of:
+    - {source: business, key: staff_count, op: ">=", value: 3}
+    - {source: fact, key: staff_or_doctors, field: count, op: ">=", value: 3}
+    - {source: business, key: review_count, op: ">=", value: 15}
+
+signal_points: {hiring_builder: 9, public_ask: 10, funding: 5}
+
+fit:
+  categories: [marketing_agency, advertising_agency, social_media_agency, internet_marketing_service, b2b_advertising_and_marketing_service, b2b_marketing_consultant, web_designer, graphic_designer, public_relations, media_agency, marketing agency, advertising agency, design agency]
+  service_keywords: [digital marketing, performance marketing, social media, seo, branding, brand identity, web design, ui ux, content marketing, advertising, paid ads, google ads, meta ads, shopify, webflow, wordpress]
+  min_reviews: 15
+  min_staff: 3
+
+ticket_class:                   # match order matters: the first class that matches wins
+  performance: {match: [performance marketing, paid ads, google ads, meta ads, ecommerce, e-commerce], points: 5}
+  brand_web: {match: [branding, web design, webflow, shopify, ui ux, design agency, web_designer], points: 5}
+  general: {match: [marketing_agency, advertising_agency, digital marketing, social media, seo], points: 4}
+
+can_pay:
+  premium_price: {other: 1200}    # GBP
+
+scoring: {}
+
+packaged_outcome: White-label dev and AI team
+
+angles:
+  - {key: build_what_they_asked, label: Their own stated need, signals: [public_ask, tender, hiring_builder],
+     idea: "We become their white-label dev and AI team for exactly this, so they take the project without a new hire."}
+  - {key: frontdesk_load, label: Client service overloaded, signals: [hiring_frontdesk],
+     idea: "An AI assistant answers routine client and lead questions, and they can resell the same assistant to clients."}
+  - {key: missed_calls, label: Leads waiting for replies, signals: [review_pain],
+     idea: "Instant replies to every enquiry, theirs and their clients', built under their brand."}
+  - {key: ad_leads_cold, label: Ad leads going cold, signals: [ads_running],
+     idea: "AI lead follow-up they can bundle with their ad management, so clients' leads convert."}
+  - {key: no_online_booking, label: Clients' sites without booking, signals: [no_booking],
+     idea: "Booking, quote and checkout flows for their clients' sites, delivered under their brand."}
+  - {key: slow_site, label: Slow website, signals: [slow_site],
+     idea: "Fast rebuilds of slow sites for them and their clients, under their brand."}
+  - {key: growth_capacity, label: Growing or new accounts, signals: [new_branch, news, new_place, funding],
+     idea: "New accounts mean more builds: a senior dev and AI team on call, no hiring."}
+  - {key: white_label_team, label: White-label dev and AI team (no signal), signals: [fit_only],
+     idea: "A senior dev and AI team under their brand for client apps, sites and AI work they'd otherwise turn down."}

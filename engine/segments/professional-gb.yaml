@@ -1,0 +1,125 @@
+# Law and accounting firms, UK (founder, 13 Nov 2026: 50 to 60 A and B leads a day across seven countries).
+# Small and mid-size law firms and accounting practices: every new client starts as an enquiry, and a missed call is lost revenue. Big firms (200+ staff) and legal-aid bodies stay excluded.
+id: professional-gb
+domain: professional
+country: gb
+display_name: Law and accounting firms, UK
+enabled: true
+timezone: Europe/London
+currency: GBP
+outreach_channel: email
+
+quota:
+  daily_research: 30
+
+cities:
+  - name: London
+    aliases: [Greater London]
+    bbox: [-0.51, 51.28, 0.33, 51.69]
+    localities: [Shoreditch, Soho, Canary Wharf, King's Cross]
+  - name: Manchester
+    aliases: []
+    bbox: [-2.40, 53.35, -2.15, 53.55]
+    localities: [Northern Quarter, Spinningfields]
+  - name: Birmingham
+    aliases: []
+    bbox: [-2.03, 52.38, -1.73, 52.61]
+    localities: [Digbeth, Jewellery Quarter]
+  - name: Edinburgh
+    aliases: []
+    bbox: [-3.33, 55.89, -3.08, 55.99]
+    localities: [Leith, New Town]
+  - name: Bristol
+    aliases: []
+    bbox: [-2.72, 51.40, -2.51, 51.52]
+    localities: [Harbourside]
+  - name: Leeds
+    aliases: []
+    bbox: [-1.70, 53.70, -1.40, 53.90]
+    localities: [City Centre]
+  - name: Cambridge
+    aliases: []
+    bbox: [0.07, 52.16, 0.20, 52.24]
+    localities: [Cambridge Science Park]
+
+overture:
+  categories:                   # checked against Overture release 2026-10-21.0 (Pune, London, Austin)
+    - attorney_or_law_firm
+    - personal_injury_law
+    - immigration_law
+    - divorce_and_family_law
+    - business_law
+    - criminal_defense_law
+    - accountant
+    - tax_service
+
+places:                         # used only when a Google Maps key exists
+  queries:
+    - "law firm in {locality}, {city}"
+    - "personal injury lawyer in {locality}, {city}"
+    - "accountant in {locality}, {city}"
+    - "tax accountant in {locality}, {city}"
+  details_per_day: 0
+  reviews_per_day: 0
+
+registries: []
+osm: {enabled: false}
+apna: {pages_per_day: 0}
+adzuna_enabled: false
+
+job_keywords:
+  frontdesk: [receptionist, legal receptionist, intake specialist, client intake, intake coordinator, legal secretary, office administrator, client services coordinator]
+  builder: [web developer, app developer, full stack developer, automation, n8n, zapier, ai engineer, chatbot, software developer, legal technologist]
+  exclude: [attorney, lawyer, solicitor, paralegal, accountant, bookkeeper, auditor, partner]
+
+public_ask_queries:
+  - "law firm in the UK looking for someone to build client intake automation or an AI assistant, recent post"
+  - "accounting practice in the UK looking for a developer to automate client onboarding or documents, recent post"
+  - "small law firm in the UK looking for a website or app developer, recent post"
+news_queries:
+  - '("law firm" OR "accounting firm") ("opens" OR "launches" OR "new office") sourcecountry:UK'
+  - '("law firm" OR "accounting firm") ("merger" OR "expands" OR "hires") sourcecountry:UK'
+
+size_rules:                     # an active stated need also passes
+  any_of:
+    - {source: business, key: review_count, op: ">=", value: 40}
+    - {source: business, key: branches_count, op: ">=", value: 2}
+    - {source: fact, key: staff_or_doctors, field: count, op: ">=", value: 3}
+
+signal_points: {review_pain: 7, no_booking: 4}
+
+fit:
+  categories: [attorney_or_law_firm, personal_injury_law, immigration_law, divorce_and_family_law, business_law, criminal_defense_law, accountant, tax_service, lawyer, accounting, law firm]
+  service_keywords: [personal injury, immigration, family law, divorce, estate planning, business law, criminal defense, conveyancing, tax, bookkeeping, audit, payroll, accounting]
+  min_reviews: 40
+  min_staff: 3
+
+ticket_class:                   # match order matters: the first class that matches wins
+  injury_immigration: {match: [personal_injury_law, immigration_law, personal injury, immigration], points: 6}
+  law: {match: [attorney_or_law_firm, divorce_and_family_law, business_law, criminal_defense_law, law firm, lawyer], points: 5}
+  accounting: {match: [accountant, tax_service, accounting, tax, bookkeeping], points: 4}
+
+can_pay:
+  premium_price: {consultation: 150, other: 1600}    # GBP
+
+scoring: {}
+
+packaged_outcome: AI client intake
+
+angles:
+  - {key: build_what_they_asked, label: Their own stated need, signals: [public_ask, tender, hiring_builder],
+     idea: "Build exactly what they asked for, in their words, and mention one detail from their post."}
+  - {key: frontdesk_load, label: Intake overloaded, signals: [hiring_frontdesk],
+     idea: "An AI intake assistant answers new-client enquiries, qualifies them and books consultations, so staff handle only real cases."}
+  - {key: missed_calls, label: Enquiries missed, signals: [review_pain],
+     idea: "Every calls, texts and web chat answered in seconds, with qualified enquiries booked straight into the calendar."}
+  - {key: ad_leads_cold, label: Ad enquiries going cold, signals: [ads_running],
+     idea: "Every ad enquiry answered and followed up until it books a consultation."}
+  - {key: no_online_booking, label: No online consultation booking, signals: [no_booking],
+     idea: "Clients book a consultation online in under a minute, with document checklists sent automatically."}
+  - {key: slow_site, label: Slow website, signals: [slow_site],
+     idea: "A fast site that turns visitors into consultation requests."}
+  - {key: new_branch_setup, label: New office or growth, signals: [new_branch, new_place, news],
+     idea: "One AI intake for every office from day one."}
+  - {key: client_intake, label: AI client intake (no signal), signals: [fit_only],
+     idea: "AI client intake and follow-up that answers every enquiry after hours and books consultations."}

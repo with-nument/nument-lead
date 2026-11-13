@@ -517,7 +517,9 @@ def store(li: LeadInput, best: Checked, flags: list[str], run_id: str) -> bool:
         "followup_d3": None if "followup_d3" in best.drop else d.followup_d3,
         "followup_d7": None if "followup_d7" in best.drop else d.followup_d7,
         "email_subject": (d.email_subject if li.needs_email and "email_subject" not in best.drop else None),
-        "email_body": with_footer(d.email_body, li.segment) if li.needs_email and "email_body" not in best.drop else None,
+        "email_body": with_footer(d.email_body, li.segment)
+        if li.needs_email and "email_body" not in best.drop
+        else None,
     }
     with db.tx("engine", {"run_id": run_id, "stage": "message"}) as conn:
         cur = conn.execute(

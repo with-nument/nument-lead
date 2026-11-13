@@ -324,7 +324,7 @@ def fit_gate(
     listed = (
         excl.chain_match(names, b.get("web_domain"))
         or excl.hospital_match(names)
-        or excl.competitor_match(names, b.get("web_domain"))
+        or excl.competitor_match(names, b.get("web_domain"), partner=seg.domain == "partners")
     )
     if tech:
         why.append(f"has an in-house tech team (fact {evidence.short_id(tech[0]['id'])})")

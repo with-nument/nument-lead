@@ -137,6 +137,17 @@ _CREDIT_LINE: Final = re.compile(
     r"maintained by|all rights reserved|©|copyright",
     re.I,
 )
+# What a partner agency must not sell itself (a software or app shop is a competitor, a marketing studio is not).
+_PARTNER_COMPETITOR: Final = re.compile(
+    r"\b(?:software development|app development|mobile apps?|it (?:services|solutions|consulting)|staffing|"
+    r"recruitment|placement|outsourcing|erp)\b",
+    re.I,
+)
+_PARTNER_PHRASES: Final = re.compile(
+    r"\b(?:software development company|app development company|it services|it solutions|staffing solutions|"
+    r"recruitment agency|outsourcing partner)\b",
+    re.I,
+)
 _SERVICE_COMPETITOR: Final = re.compile(
     r"\b(?:software|web\s?(?:site)?\s?(?:design|development)|app development|mobile apps?|seo|"
     r"digital marketing|social media marketing|it (?:services|solutions|consulting)|staffing|recruitment|"
@@ -159,6 +170,7 @@ class Exclusions:
     agency_keywords: tuple[str, ...]
     competitors: tuple[str, ...]
     max_branches: int
+    partner_ok_keywords: tuple[str, ...] = ()  # agency keywords that do not exclude a partners-segment business
 
     @classmethod
     def load(cls, data: Mapping[str, Any] | None = None) -> Exclusions:
@@ -171,6 +183,7 @@ class Exclusions:
             chains=chains,
             hospital_keywords=tuple(str(k).lower() for k in raw.get("hospital_keywords") or ()),
             agency_keywords=tuple(str(k).lower() for k in raw.get("agency_keywords") or ()),
+            partner_ok_keywords=tuple(str(k).lower() for k in raw.get("partner_ok_keywords") or ()),
             competitors=tuple(str(k).lower() for k in raw.get("competitors") or ()),
             max_branches=int(raw.get("max_branches") or 10),
         )
@@ -196,7 +209,9 @@ class Exclusions:
                 return f"hospital keyword '{kw}'"
         return None
 
-    def competitor_match(self, names: Iterable[str], web_domain: str | None) -> str | None:
+    def competitor_match(self, names: Iterable[str], web_domain: str | None, *, partner: bool = False) -> str | None:
+        """A competitor's name or domain, or an agency keyword. In a partners segment marketing and design agency
+        keywords are what we look for, so only software, IT and staffing keywords count (13 Nov 2026)."""
         texts = [n.lower() for n in names if n]
         dom = (web_domain or "").lower()
         label = dom.split(".", 1)[0] if dom else ""
@@ -206,6 +221,8 @@ class Exclusions:
             if any(self._word_in(comp, t) for t in texts):
                 return f"competitor name '{comp}'"
         for kw in self.agency_keywords:
+            if partner and kw in self.partner_ok_keywords:
+                continue
             if any(self._word_in(kw, t) for t in texts):
                 return f"agency keyword '{kw}'"
         return None
@@ -541,12 +558,12 @@ def plan_website(bundle: Bundle, now: datetime) -> tuple[str | None, Row | None]
     return status, fact
 
 
-def _competitor_phrase(text: str) -> str | None:
+def _competitor_phrase(text: str, phrases: re.Pattern[str] = COMPETITOR_PHRASES) -> str | None:
     """The first competitor phrase on a page, ignoring footer credits for the site's own web vendor."""
     for line in text.splitlines():
         if _CREDIT_LINE.search(line):
             continue
-        m = COMPETITOR_PHRASES.search(line)
+        m = phrases.search(line)
         if m:
             return m.group(0).lower()
     return None
@@ -556,11 +573,13 @@ def competitor_hints(bundle: Bundle, verified: Sequence[Row], excl: Exclusions) 
     """The four signs of a competitor (10.5.2). One is a question for the AI, two reject."""
     b = bundle.business
     hints: list[str] = []
+    partner = str(b.get("segment_id") or "").startswith("partners-")  # agencies are the target there
     agency_facts = [f for f in evidence.by_field(verified, "is_agency_or_vendor") if fact_flag(f) is True]
-    if agency_facts:
+    if agency_facts and not partner:
         hints.append(f"is_agency_or_vendor fact {evidence.short_id(agency_facts[0]['id'])}")
+    phrases = _PARTNER_PHRASES if partner else COMPETITOR_PHRASES
     for p in bundle.pages:
-        hit = _competitor_phrase(p.get("text") or "") if on_domain(p["url"], b.get("web_domain")) else None
+        hit = _competitor_phrase(p.get("text") or "", phrases) if on_domain(p["url"], b.get("web_domain")) else None
         if hit:
             hints.append(f"own site says '{hit}'")
             break
@@ -571,11 +590,11 @@ def competitor_hints(bundle: Bundle, verified: Sequence[Row], excl: Exclusions) 
             for f in evidence.by_field(verified, "business_name", "jsonld_name")
         ),
     ]
-    listed = excl.competitor_match(names, b.get("web_domain"))
+    listed = excl.competitor_match(names, b.get("web_domain"), partner=partner)
     if listed:
         hints.append(listed)
     services = [fact_text(f) for f in evidence.by_field(verified, "service")]
-    selling = [s for s in services if _SERVICE_COMPETITOR.search(s)]
+    selling = [s for s in services if (_PARTNER_COMPETITOR if partner else _SERVICE_COMPETITOR).search(s)]
     if len(selling) >= 2 and len(selling) * 2 >= len(services):
         hints.append(f"{len(selling)} of {len(services)} services are software, marketing or hiring")
     return hints

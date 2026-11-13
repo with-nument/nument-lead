@@ -108,6 +108,8 @@ DOMAIN_WORDS: dict[str, str] = {
     "realestate": "real estate",
     "education": "coaching or education",
     "firms": "small or mid-size company of any industry (not an IT services firm, agency or staffing company)",
+    "partners": "marketing, advertising, branding or design agency (as a white-label partner)",
+    "professional": "law firm or accounting firm",
 }
 # A query that starts with this looks for job posts (hiring_builder) instead of public asks (13 Nov 2026).
 HIRING_PREFIX = "hiring:"
@@ -242,6 +244,13 @@ class GroundedSearchAdapter(SourceAdapter):
         domain = str(field_of(result, "employer_domain") or "other")
         if domain == "agency_or_staffing":
             return None
+        if DOMAIN_MAP.get(domain) == "partners" or seg.domain == "partners":
+            # Marketing and design agencies are white-label partners (13 Nov 2026), never firms leads; a partner
+            # search that finds a product company hiring a builder hands it to that country's firms segment.
+            if DOMAIN_MAP.get(domain) == "partners":
+                return f"partners-{seg.country}"
+            builder = str(field_of(result, "role_category") or "") == "builder"
+            return f"firms-{seg.country}" if builder else None
         if seg.universe == "signals_only":
             if str(field_of(result, "role_category") or "") != "builder":
                 return None
@@ -283,7 +292,7 @@ class GroundedSearchAdapter(SourceAdapter):
             details["role"] = field_of(item, "need")
         if posted is None:
             details["date_estimated"] = True
-        if target != seg.id:
+        if target != seg.id and not target.startswith("partners-") and seg.domain != "partners":
             details["fallback_segment"] = seg.id  # used when the poster's own segment is off
         return Signal(
             type="hiring_builder" if kind == "jobs" else "public_ask",
