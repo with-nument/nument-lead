@@ -26,7 +26,7 @@ from zoneinfo import ZoneInfo
 from .. import db
 from ..logging import get_logger
 from ..models import SIGNAL_CATEGORY, MessageCheck, MessageDraft
-from ..segments import PACKAGED_OUTCOME, Segment
+from ..segments import PACKAGED_OUTCOME, Segment, country_name
 from ..settings import get_settings
 from . import ai, evidence, leads, score
 from .evidence import Row
@@ -92,8 +92,16 @@ COUNTRY_NOTES: Final[dict[str, str]] = {
     "ae": "UAE. Plain, polite English for owners from anywhere. Greet by first name or 'Dr. Surname', no other "
     "honorifics. Name the emirate or area only when a fact gives it. Never mention AED, prices or 'cheap', and "
     "never suggest a low-cost vendor from India; 'a small dev team' is enough.",
+    "us": "United States. Plain, direct, friendly English; first names for everyone. Never mention prices, India "
+    "or offshore; 'a small senior dev team' is enough. Email: short subject, no hype.",
+    "gb": "United Kingdom. Plain, polite, understated English with British spelling; first names. Never mention "
+    "prices, India or offshore; 'a small senior dev team' is enough.",
+    "au": "Australia. Plain, relaxed, direct English with British spelling; first names. Never mention prices, "
+    "India or offshore.",
+    "ca": "Canada. Plain, polite English; first names. Never mention prices, India or offshore.",
+    "sg": "Singapore. Plain, polite, efficient English; first names unless a title is given. Never mention "
+    "prices, India or offshore.",
 }
-COUNTRY_NAMES: Final[dict[str, str]] = {"in": "India", "ae": "UAE"}
 
 
 # ---------------------------------------------------------------------------
@@ -228,7 +236,7 @@ def build_input(
         "segment_id": seg.id,
         "domain": seg.domain,
         "country": seg.country,
-        "country_name": COUNTRY_NAMES.get(seg.country, seg.country.upper()),
+        "country_name": country_name(seg.country).removeprefix("the "),
         "city": single_city(b),
         "pitch_mode": mode,
         "angle": angle_key,

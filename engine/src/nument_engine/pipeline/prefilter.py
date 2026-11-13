@@ -3,7 +3,7 @@
 Every candidate business goes through the rules R1 to R11 in order; the first that fails decides. Rejections
 are permanent until a new signal arrives, so a rule that is not sure says "skip for now" instead. Businesses that
 pass get a priority (Step 8.7), and today's queue is filled from them:
-- at most `settings.research_per_day` (300) a day, minus what was already queued today;
+- at most `settings.research_per_day` (800 since 13 Nov 2026) a day, minus what was already queued today;
 - at most what the money left today pays for (80% of it, the rest is kept for the morning run);
 - each segment up to its `segments.daily_quota` (the database value, A.13.5 rule 11), scaled down
   proportionally when fewer slots are left, and at least 10% of the slots for every segment that has work;
@@ -403,7 +403,7 @@ def today_slots(segment_ids: list[str], budget: Budget | None = None) -> tuple[i
     """(slots, per-segment quotas left, explanation) after today's earlier queueing and the money check."""
     budget = budget or Budget()
     today = health.ist_day_start()
-    research_per_day = health.setting_int("research_per_day", 300)
+    research_per_day = health.setting_int("research_per_day", 800)
     used = {
         r["segment_id"]: int(r["n"])
         for r in db.fetch_all(

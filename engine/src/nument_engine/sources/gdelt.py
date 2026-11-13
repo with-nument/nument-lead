@@ -161,7 +161,7 @@ class GdeltAdapter(SourceAdapter):
             return None
         name = (field_of(result, "business_name") or "").strip()
         city = city_for_text(str(field_of(result, "city") or ""), seg.cities) or city_for_text(text, seg.cities)
-        if not name or city is None:
+        if not name or (city is None and seg.universe != "signals_only"):  # need-first: remote companies
             self.ctx.add("gdelt.no_business_or_city")
             return None
         observed = art.seen or datetime.now(UTC)

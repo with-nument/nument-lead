@@ -261,6 +261,13 @@ SMOKE_INPUTS: dict[str, dict[str, Any]] = {
         "facts": [{"id": "F1", "field": "branches", "value": {"count": 2}}],
         "signals": [{"id": "S1", "type": "hiring_frontdesk", "summary": "hiring a patient coordinator in Baner"}],
     },
+    "classify_feed_job": {
+        "feed": "hn",
+        "url": "https://news.ycombinator.com/item?id=1",
+        "text": "Brightcart | Full-stack engineer (contract) | Austin, TX | REMOTE (US) | https://brightcart.example\n"
+        "We are a 9-person team building ordering software for independent grocers and need help shipping our "
+        "React Native app.",
+    },
     "find_website": {
         "name": "Brightcart Foods",
         "city": "Pune",

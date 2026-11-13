@@ -537,7 +537,7 @@ def submit(rc: RunContext, *, router: AIRouter | None = None) -> dict[str, Any]:
     """Night: build today's items and submit the extraction batch (dry runs build the items only)."""
     ctx = SourceContext.from_run(rc, router)
     segments = active_segments(rc.opts.segments)
-    limit = rc.opts.limit or int(db.get_setting("research_per_day", 300) or 300)
+    limit = rc.opts.limit or int(db.get_setting("research_per_day", 800) or 800)
     items, stats = build_items(segments, limit, dry_run=rc.opts.dry_run)
     out: dict[str, Any] = {**stats, "items": len(items)}
     if rc.opts.dry_run:

@@ -22,7 +22,7 @@ from nument_engine.segments import (
 from .helpers import Conn
 
 WAVE1 = {"clinics-in", "realestate-in", "education-in", "clinics-ae", "realestate-ae", "education-ae"}
-NEED_FIRST = {"firms-in"}  # the need-first track (13 Nov 2026): businesses come from signals only
+NEED_FIRST = {f"firms-{cc}" for cc in ("in", "ae", "us", "gb", "au", "ca", "sg")}  # need-first track (13 Nov 2026)
 # A.13.5 rule 7: the only subcategory and ticket class names.
 TICKET_CLASSES = {
     "ivf_fertility", "hair_transplant", "aesthetic", "dermatology", "dental", "physio", "therapy_group",
@@ -48,7 +48,9 @@ def test_all_segments_load() -> None:
 
 
 def test_quotas_fit_research_per_day() -> None:
-    assert sum(s.quota.daily_research for s in load_segments().values() if s.enabled) <= 300
+    assert (
+        sum(s.quota.daily_research for s in load_segments().values() if s.enabled) <= 800
+    )  # research_per_day since 13 Nov 2026
 
 
 def test_places_caps_inside_free_allowance() -> None:
@@ -204,7 +206,7 @@ def test_sync_fills_config_honours_the_switch_and_keeps_the_app_quota(db_conn: C
         [Jsonb({"education-ae": False})],
     )
     segments = load_segments()
-    assert sync_segments_to_db(db_conn, segments) == 7
+    assert sync_segments_to_db(db_conn, segments) == 13
     rows = {
         r["id"]: r
         for r in db_conn.execute(
@@ -220,7 +222,7 @@ def test_sync_fills_config_honours_the_switch_and_keeps_the_app_quota(db_conn: C
     assert db_conn.execute("select daily_quota from public.segments where id = 'clinics-in'").fetchone() == {
         "daily_quota": 25
     }
-    assert db_conn.execute("select count(*) as n from public.segments").fetchone() == {"n": 7}
+    assert db_conn.execute("select count(*) as n from public.segments").fetchone() == {"n": 13}
 
 
 def test_sync_inserts_a_new_segment_with_its_file_quota(db_conn: Conn) -> None:

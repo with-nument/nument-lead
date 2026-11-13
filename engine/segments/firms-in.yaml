@@ -114,7 +114,7 @@ size_rules:
     - {source: business, key: staff_count, op: ">=", value: 3}
     - {source: business, key: branches_count, op: ">=", value: 1}
 
-signal_points: {hiring_builder: 8, public_ask: 10}
+signal_points: {hiring_builder: 8, public_ask: 10, funding: 5}
 
 fit:
   categories: [startup, small_business]   # no map category: the stated need itself is the type match

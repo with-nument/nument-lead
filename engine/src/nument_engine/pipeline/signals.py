@@ -42,6 +42,7 @@ from ..sources.base import (
 from ..sources.careers_watch import CareersWatchAdapter
 from ..sources.gdelt import GdeltAdapter
 from ..sources.grounded_search import GroundedSearchAdapter
+from ..sources.job_feeds import JobFeedsAdapter
 from ..sources.jobs import DOMAIN_MAP, MIN_CONFIDENCE
 from ..sources.places import PlacesAdapter, QuotaReached, listing_url, review_flags
 from .resolve import Candidate, Resolver, candidate_from_hint
@@ -146,7 +147,9 @@ class SignalSink:
             return sig.business_id
         hint = sig.business_hint
         city_ok = bool(hint.get("city")) and any(c.name == hint.get("city") for c in seg.cities)
-        if not city_ok and not hint.get("website"):
+        # A need-first segment has no map: a named remote company is enough, the lookup stage finds its site.
+        named_ok = seg.universe == "signals_only" and bool(hint.get("name"))
+        if not city_ok and not hint.get("website") and not named_ok:
             self._count(seg.id, "unlinked")  # Step 7.4.6 rule 3: no city in the segment and no website
             return None
         source = sig.source if sig.source in SOURCE_NAMES else "inbox"
@@ -399,6 +402,15 @@ async def grounded_public_asks(ctx: SourceContext, segments: dict[str, Segment],
                 sink.add(sig, seg)
 
 
+async def job_feeds_watch(ctx: SourceContext, segments: dict[str, Segment], sink: SignalSink) -> None:
+    """Builder roles from Hacker News "Who is hiring?" and remote job boards, routed by the company's country."""
+    async with JobFeedsAdapter(ctx) as adapter:
+        sigs = await adapter.safe_call(adapter.signals_for, segments, limit=ctx.limit)
+        for sig in sigs or []:
+            if sig.segment_id in segments:
+                sink.add(sig, segments[sig.segment_id or ""])
+
+
 Watcher = Callable[[SourceContext, dict[str, Segment], SignalSink], Awaitable[None]]
 WATCHERS: tuple[tuple[str, Watcher], ...] = (
     ("careers_watch", careers_watch_run),
@@ -407,6 +419,7 @@ WATCHERS: tuple[tuple[str, Watcher], ...] = (
     ("apna", apna_watch),
     ("gdelt", gdelt_watch),
     ("grounded_search", grounded_public_asks),
+    ("job_feeds", job_feeds_watch),
     ("adzuna", adzuna_watch),
 )
 

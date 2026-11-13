@@ -571,7 +571,7 @@ def run(rc: RunContext, *, router: AIRouter | None = None) -> dict[str, Any]:
     """Crawl queued businesses politely and store their pages and code facts."""
     ctx = SourceContext.from_run(rc, router)
     segments = active_segments(rc.opts.segments)
-    research_cap = health.setting_int("research_per_day", 300)
+    research_cap = health.setting_int("research_per_day", 800)
     queue = db.fetch_all(
         QUEUE_SQL,
         {

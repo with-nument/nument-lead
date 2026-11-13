@@ -36,7 +36,7 @@ from rapidfuzz import fuzz
 from .. import db
 from ..http import PoliteClient, host_of
 from ..logging import get_logger
-from ..segments import Segment
+from ..segments import Segment, country_name
 from ..sources.base import QUOTE_MAX, Signal, SourceContext
 from ..sources.grounded_search import REDIRECT_HOSTS
 from . import ai, score
@@ -56,7 +56,6 @@ MAX_DOWN_STREAK: Final = 3  # consecutive "no usable provider" answers before th
 KEEP_DAYS: Final = 30
 SOURCE: Final = "grounded_search"
 EXPIRING_SOURCES: Final = (SOURCE, "maps_reviews")  # review numbers kept 30 days like Places content
-COUNTRY_NAMES: Final[dict[str, str]] = {"in": "India", "ae": "the UAE", "sa": "Saudi Arabia", "qa": "Qatar"}
 KINDS: Final[dict[str, str]] = {
     "clinics": "clinic",
     "realestate": "real estate business",
@@ -170,7 +169,7 @@ def _inputs(b: dict[str, Any], seg: Segment, now: datetime | None = None) -> dic
     return {
         "name": b["name"],
         "city": b.get("city") or "",
-        "country": COUNTRY_NAMES.get(seg.country, seg.country.upper()),
+        "country": country_name(seg.country),
         "kind": KINDS.get(seg.domain, seg.domain),
         "website": b.get("website") or "",
         "practo": practo,

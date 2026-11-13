@@ -196,6 +196,8 @@ SourceName = Literal[
     "adzuna",
     "practo",
     "maps_reviews",
+    "job_feeds",
+    "startup_news",
     "legacy",
     "legacy_skip",
 ]
@@ -219,6 +221,7 @@ AITask = Literal[
     "lookup_reviews",
     "find_website",
     "classify_reviews",
+    "classify_feed_job",
     "weekly_audit",
 ]
 AI_TASKS: Final[tuple[str, ...]] = get_args(AITask)
@@ -251,6 +254,32 @@ class SignalClassification(BaseModel):
     ]
     city: str | None
     evidence_quote: str  # exact sentence from the input proving the role
+    confidence: float = Field(ge=0, le=1)
+
+
+class FeedJobClassification(BaseModel):
+    """`classify_feed_job`: one post from a global job feed (Hacker News "Who is hiring?", remote job boards).
+    Need-first track, 13 Nov 2026: a small company hiring a builder is a lead in its own country's segment."""
+
+    is_relevant: bool  # a real company hiring someone to build software for itself
+    company_name: str | None
+    company_website: str | None  # only a website or domain written in the post
+    company_kind: Literal[
+        "product_company",
+        "small_business",
+        "marketing_or_design_agency",
+        "software_agency_or_it_services",
+        "staffing_or_marketplace",
+        "enterprise",
+        "public_or_nonprofit",
+        "other",
+    ]
+    hq_country: str | None  # ISO 3166-1 alpha-2 of the company's home base, lower case ("us", "gb", "in")
+    city: str | None
+    role: str | None  # the builder role, as written
+    contract: bool  # contract, freelance, part-time or "agencies welcome"
+    team_size: int | None  # total staff when the post says it
+    evidence_quote: str  # exact phrase from the post that proves the role
     confidence: float = Field(ge=0, le=1)
 
 
@@ -334,7 +363,7 @@ class ReviewPainClassification(BaseModel):
 
 
 # ---- extract_facts (Step 9.12) ---------------------------------------------
-Currency = Literal["INR", "AED", "SAR", "QAR", "GBP", "SGD", "USD", "AUD"]
+Currency = Literal["INR", "AED", "SAR", "QAR", "GBP", "SGD", "USD", "AUD", "CAD"]
 
 
 class Quoted(BaseModel):
@@ -486,5 +515,6 @@ AI_OUTPUT_MODELS: Final[dict[str, type[BaseModel]]] = {
     "lookup_reviews": ReviewLookup,
     "find_website": WebsiteLookup,
     "classify_reviews": ReviewPainClassification,
+    "classify_feed_job": FeedJobClassification,
     "weekly_audit": AuditResult,
 }

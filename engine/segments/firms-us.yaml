@@ -1,0 +1,139 @@
+# The need-first track abroad (founder, 13 Nov 2026): small companies and startups in United States of any
+# industry that say in public they need a build right now: a job post for a developer, AI or automation person,
+# or a public ask for an agency or developer. There is no map universe: a business exists here only because of
+# such a signal. Agencies, IT services firms and staffing companies are never leads here (marketing and design
+# agencies go to the partner track). Outreach is by email: the founder sends from his own mailbox.
+id: firms-us
+domain: firms
+country: us
+display_name: SMEs and startups that need a build, United States
+enabled: true
+timezone: America/New_York
+currency: USD
+universe: signals_only
+
+quota:
+  daily_research: 40
+
+cities:
+  - name: New York
+    aliases: [New York City, NYC, Manhattan, Brooklyn]
+    bbox: [-74.26, 40.49, -73.70, 40.92]
+    localities: [Manhattan, Brooklyn, Queens]
+  - name: San Francisco Bay Area
+    aliases: [San Francisco, Bay Area, Palo Alto, Mountain View, San Jose, Oakland, Menlo Park]
+    bbox: [-122.55, 37.20, -121.75, 37.90]
+    localities: [SoMa, Palo Alto, San Jose]
+  - name: Los Angeles
+    aliases: [LA, Santa Monica]
+    bbox: [-118.67, 33.70, -118.15, 34.34]
+    localities: [Santa Monica, Downtown LA]
+  - name: Austin
+    aliases: []
+    bbox: [-97.95, 30.10, -97.55, 30.52]
+    localities: [Downtown Austin]
+  - name: Seattle
+    aliases: [Bellevue, Redmond]
+    bbox: [-122.45, 47.48, -122.05, 47.74]
+    localities: [Downtown Seattle, Bellevue]
+  - name: Boston
+    aliases: [Cambridge MA]
+    bbox: [-71.20, 42.23, -70.99, 42.40]
+    localities: [Back Bay, Kendall Square]
+  - name: Chicago
+    aliases: []
+    bbox: [-87.94, 41.64, -87.52, 42.03]
+    localities: [The Loop, River North]
+  - name: Miami
+    aliases: []
+    bbox: [-80.45, 25.55, -80.12, 25.98]
+    localities: [Brickell, Wynwood]
+  - name: Denver
+    aliases: [Boulder]
+    bbox: [-105.30, 39.61, -104.80, 40.10]
+    localities: [Downtown Denver, Boulder]
+  - name: Dallas
+    aliases: [Fort Worth, Plano]
+    bbox: [-97.40, 32.62, -96.55, 33.10]
+    localities: [Uptown Dallas, Plano]
+  - name: Atlanta
+    aliases: []
+    bbox: [-84.55, 33.65, -84.29, 33.89]
+    localities: [Midtown Atlanta]
+
+overture: {categories: []}      # no map universe (universe: signals_only)
+places: {queries: [], details_per_day: 0, reviews_per_day: 0}
+registries: []
+osm: {enabled: false}
+apna: {pages_per_day: 0}
+adzuna_enabled: false
+
+job_keywords:
+  frontdesk: [customer support executive, customer success executive, sales coordinator, telecaller,
+              inside sales executive]
+  builder: [full stack developer, web developer, app developer, mobile app developer, react developer,
+            react native developer, flutter developer, node developer, python developer, backend developer,
+            frontend developer, software developer, ai engineer, ml engineer, machine learning engineer,
+            genai engineer, llm engineer, automation engineer, n8n, zapier, chatbot developer,
+            whatsapp automation, shopify developer, wordpress developer, cto, tech lead]
+  exclude: [teacher, faculty, driver, peon, nurse, accountant, delivery]
+
+# Grounded search queries. A query that starts with "hiring:" looks for job posts and makes `hiring_builder`
+# signals; the others look for public asks (`public_ask`). Job boards and LinkedIn are search snippets only,
+# never fetched. Marketplaces (Upwork, Freelancer and similar) are never used. Every query runs every day here.
+public_ask_queries:
+  - "hiring: small company or startup in United States hiring a full stack or web developer, job posted in the last 7 days"
+  - "hiring: startup in United States hiring a React Native or Flutter mobile app developer, posted this week"
+  - "hiring: small business in United States hiring an AI engineer, automation engineer or chatbot developer, posted this week"
+  - "hiring: founder-led company in United States hiring its first engineer or a contract developer, posted recently"
+  - "business owner in United States looking for a developer or agency to build an app or website, posted this week"
+  - "founder in United States looking for a technical partner or development agency to build an MVP, recent post"
+  - "business in United States looking for someone to build an AI agent, chatbot or workflow automation, recent post"
+news_queries:
+  - '("raises" OR "secures" OR "closes") ("seed" OR "pre-seed" OR "Series A") startup sourcecountry:US'
+  - '("launches" OR "unveils") startup ("app" OR "platform" OR "AI") sourcecountry:US'
+
+
+size_rules:
+  any_of:
+    - {source: business, key: staff_count, op: ">=", value: 3}
+    - {source: business, key: branches_count, op: ">=", value: 1}
+
+signal_points: {hiring_builder: 8, public_ask: 10, funding: 5}
+
+fit:
+  categories: [startup, small_business]   # no map category: the stated need itself is the type match
+  service_keywords: [startup, saas, d2c, e-commerce, ecommerce, retail, fintech, edtech, healthtech, logistics,
+                     manufacturing, real estate, restaurant, travel, fashion, platform, marketplace, brand]
+  min_reviews: 100
+  min_staff: 3
+
+ticket_class:
+  funded_startup: {match: [startup, saas, platform, fintech, edtech, healthtech, d2c], points: 5}
+  smb:            {match: [small_business, brand, retail, manufacturing, logistics, restaurant, travel,
+                           fashion, e-commerce, ecommerce], points: 4}
+
+can_pay:
+  premium_price: {other: 1000}       # USD, any product, plan or project price they publish
+
+scoring: {}
+
+packaged_outcome: Custom AI workflows
+
+angles:
+  - {key: build_what_they_asked, label: Their own stated need, signals: [public_ask, tender, hiring_builder],
+     idea: "We build exactly what they are hiring for or asked for, shipped by a small senior team in weeks, so they skip a long hire."}
+  - {key: frontdesk_load, label: Team overloaded with enquiries, signals: [hiring_frontdesk],
+     idea: "An AI assistant answers routine customer questions on WhatsApp and the website, so the new hire handles only real work."}
+  - {key: missed_calls, label: Customers waiting for replies, signals: [review_pain],
+     idea: "Every customer message answered in seconds, day and night, with a hand-off to a person when needed."}
+  - {key: ad_leads_cold, label: Ad leads going cold, signals: [ads_running],
+     idea: "Every lead from ads gets an instant reply and follow-ups until it converts."}
+  - {key: no_online_booking, label: No self-serve on the website, signals: [no_booking],
+     idea: "Customers can book, order or get a quote on the website and WhatsApp without waiting for a call."}
+  - {key: slow_site, label: Slow website, signals: [slow_site],
+     idea: "A fast new website that turns visitors into enquiries."}
+  - {key: growth_build, label: Growing or just funded, signals: [new_branch, news, new_place, funding],
+     idea: "New funding or growth usually means a product backlog: we ship the next feature fast."}
+  - {key: custom_ai_workflows, label: Custom AI workflows (no signal), signals: [fit_only],
+     idea: "One custom AI workflow that saves the team hours a week, built in weeks."}

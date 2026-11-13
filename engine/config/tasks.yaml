@@ -270,6 +270,25 @@ tiers:
       daily_limit_setting: ai.classify_per_day
       daily_limit: 1500
 
+    classify_feed_job:                        # a global job feed post: who is hiring a builder, and where (13 Nov 2026)
+      primary: g_lite
+      fallbacks: [g_flash, o_nano]
+      mode: sync
+      schema: FeedJobClassification
+      prompt: classify_feed_job.md
+      max_output_tokens: 400
+      temperature: 0.0
+      thinking: "off"
+      tools: []
+      priority: 4
+      est_input_tokens: 1500
+      est_output_tokens: 250
+      cache_ttl_days: 30
+      timeout_s: 60
+      max_retries: 3
+      daily_limit_setting: ai.classify_per_day
+      daily_limit: 1500
+
     weekly_audit:
       primary: g_pro
       fallbacks: [g_flash, o_top]

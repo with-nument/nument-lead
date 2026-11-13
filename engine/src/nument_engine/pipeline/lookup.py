@@ -25,6 +25,7 @@ from .. import db
 from ..http import PoliteClient, host_blocked
 from ..logging import get_logger
 from ..normalize import web_domain
+from ..segments import country_name
 from . import ai, score
 from .runs import RunContext
 from .verify import distinctive_words
@@ -34,7 +35,6 @@ log = get_logger()
 TASK: Final = "find_website"
 SETTING: Final = "lookup.per_day"
 DEFAULT_PER_DAY: Final = 40
-COUNTRY_NAMES: Final[dict[str, str]] = {"in": "India", "ae": "the UAE", "sa": "Saudi Arabia", "qa": "Qatar"}
 _TITLE: Final = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 _SITE_NAME: Final = re.compile(r"""<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)""", re.I)
 _TAGS: Final = re.compile(r"<[^>]+>")
@@ -169,7 +169,7 @@ def run(rc: RunContext, router: Any = None) -> dict[str, Any]:
         inputs = {
             "name": b["name"],
             "city": b.get("city") or "",
-            "country": COUNTRY_NAMES.get(seg.country, seg.country.upper()),
+            "country": country_name(seg.country),
             "need": str(b.get("need") or "")[:200],
         }
         try:

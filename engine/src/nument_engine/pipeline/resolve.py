@@ -365,8 +365,8 @@ class Resolver:
         """A candidate without a map point (a job post, a public ask): the same name once spaces, punctuation,
         "&"/"and" and generic words are ignored, held by exactly one business in the same city. Live check
         12 Nov: "Dr. Ali's Dentacare" (Apna) is "Dralisdentacare" (Overture, with its website)."""
-        if c.has_point or not c.city:
-            return None
+        if c.has_point or (not c.city and self.seg.universe != "signals_only"):
+            return None  # a remote company (signals-only segments) may have no city: match within "no city"
         compact = compact_name(c.name)
         if len(compact) < MIN_COMPACT_NAME:
             return None  # "Dental Clinic" is "dental": too common to identify one business

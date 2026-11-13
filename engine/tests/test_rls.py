@@ -253,7 +253,7 @@ def test_admin_reads_operations_data(db_conn: Conn, rls_world: RlsWorld) -> None
     act_as(db_conn, "authenticated", rls_world.admin)
     assert _count(db_conn, "select count(*) from public.costs where task = 'rls_world'") == 1
     assert _count(db_conn, "select count(*) from public.settings") >= 23
-    assert _count(db_conn, "select count(*) from public.source_health") == 13
+    assert _count(db_conn, "select count(*) from public.source_health") == 15
     assert _count(db_conn, "select count(*) from public.v_costs_daily where task = 'rls_world'") == 1
     assert db_conn.execute("update public.source_health set enabled = false where source = 'gdelt'").rowcount == 1
 

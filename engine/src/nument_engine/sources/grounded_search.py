@@ -29,7 +29,7 @@ from rapidfuzz import fuzz
 from ..http import NeverFetch, PoliteClient, SourceBlocked, host_blocked, host_of
 from ..normalize import canonical_url, city_for_text
 from ..research.text import page_text
-from ..segments import Segment
+from ..segments import Segment, country_name
 from .base import QUOTE_MAX, SNIPPET_ONLY_POINTS, Signal, SourceAdapter, field_of
 from .jobs import DOMAIN_MAP, MIN_CONFIDENCE, quote_in
 
@@ -103,17 +103,6 @@ def _same_url(a: str, b: str) -> bool:
 
 # The prompt reads "a business in {country} ... for a {domain} business"; segment codes ("in", "clinics")
 # read badly there, and a garbled ask makes the model more likely to answer without searching.
-COUNTRY_NAMES: dict[str, str] = {
-    "in": "India",
-    "ae": "the UAE",
-    "sa": "Saudi Arabia",
-    "qa": "Qatar",
-    "uk": "the UK",
-    "gb": "the UK",
-    "sg": "Singapore",
-    "us": "the US",
-    "au": "Australia",
-}
 DOMAIN_WORDS: dict[str, str] = {
     "clinics": "clinic",
     "realestate": "real estate",
@@ -277,7 +266,8 @@ class GroundedSearchAdapter(SourceAdapter):
             return None
         city = city_for_text(str(field_of(item, "poster_city") or ""), seg.cities)
         name = str(field_of(item, "poster_business") or "").strip()
-        if not name or city is None:
+        # A need-first segment (no map) takes a named company without a city: remote companies have none.
+        if not name or (city is None and seg.universe != "signals_only"):
             self.ctx.add("grounded_search.no_business_or_city")
             return None
         snippet_only = host_blocked(cited)
@@ -319,7 +309,7 @@ class GroundedSearchAdapter(SourceAdapter):
                 {
                     "segment_id": seg.id,
                     "domain": DOMAIN_WORDS.get(seg.domain, seg.domain),
-                    "country": COUNTRY_NAMES.get(seg.country, seg.country.upper()),
+                    "country": country_name(seg.country),
                     "cities": [c.name for c in seg.cities],
                     "query": query,
                     "queries": [query],

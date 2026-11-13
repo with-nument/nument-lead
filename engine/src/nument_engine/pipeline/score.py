@@ -605,8 +605,17 @@ def score_business(
     )
     fit, fit_why = fit_gate(b, facts, seg, excl, stated)
     can_pay, pay_why, pay_proxies = can_pay_breakdown(b, facts, active, seg, cfg)
+    # Money signals feed can-pay; a segment that gives them points (firms: "just funded") also counts them as need.
     intent, kept = intent_score(
-        [s for s in active if (s.get("category") or SIGNAL_CATEGORY.get(str(s["type"]))) != "money"], now, cfg, seg
+        [
+            s
+            for s in active
+            if (s.get("category") or SIGNAL_CATEGORY.get(str(s["type"]))) != "money"
+            or float(cast(dict[str, float], seg.signal_points).get(str(s["type"])) or 0) > 0
+        ],
+        now,
+        cfg,
+        seg,
     )
     reach = reach_of(contacts, facts, cfg, now, suppressed)
     fit_bonus = cfg.fit_bonus.get(fit, 0.0)

@@ -15,7 +15,7 @@ from ..segments import Segment, load_segments
 
 def active_segments(only: Sequence[str] | None = None) -> dict[str, Segment]:
     """Enabled segments, optionally only the ids in `only` (the `--segment` flag)."""
-    research_per_day = int(db.get_setting("research_per_day", 300) or 300)
+    research_per_day = int(db.get_setting("research_per_day", 800) or 800)
     segments = load_segments(research_per_day=max(research_per_day, 1))
     switches = db.get_setting("segments_enabled", {}) or {}
     rows = {r["id"]: r for r in db.fetch_all("select id, enabled from public.segments")}

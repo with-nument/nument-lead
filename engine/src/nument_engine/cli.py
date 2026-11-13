@@ -741,7 +741,7 @@ def db_sync_segments(ctx: typer.Context) -> None:
 
     opts = _bootstrap(ctx)
     try:
-        research_per_day = int(db.get_setting("research_per_day", 300))
+        research_per_day = int(db.get_setting("research_per_day", 800))
         segments = load_segments(research_per_day=research_per_day)
         if opts.dry_run:
             typer.echo(f"Valid: {', '.join(sorted(segments))} (dry run, nothing written)")

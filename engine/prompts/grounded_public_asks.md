@@ -1,6 +1,6 @@
 ---
 task: grounded_search
-version: 2
+version: 3
 output: null
 inputs: [domain, country, days, queries]
 description: Search the web for recent public posts where a business asks for a builder or vendor (search step).
@@ -12,7 +12,7 @@ You find PUBLIC job posts from the last {{ days }} days in which a {{ domain }} 
 Rules:
 - Only report job posts by the business that will use the software. Skip IT services companies, software agencies, staffing and placement firms, recruiters hiring for unnamed clients, and large corporates.
 - Only report posts that show or imply a date within the last {{ days }} days.
-- Job boards such as Naukri, Instahyre, Indeed or Cutshort are fine to report from what the search results show, with the link. Do not use freelance marketplaces such as Upwork or Freelancer.
+- Job boards such as Indeed, LinkedIn Jobs, Wellfound, Naukri, Seek or Reed are fine to report from what the search results show, with the link. Do not use freelance marketplaces such as Upwork or Freelancer.
 {% else %}
 You find PUBLIC posts from the last {{ days }} days in which a business in {{ country }} asks for a developer, an agency, an automation partner, a chatbot or WhatsApp automation, a CRM or a website, for a {{ domain }} business. You always use the Google Search tool to find them; you never answer from memory.
 

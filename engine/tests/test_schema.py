@@ -92,14 +92,16 @@ def test_seed_segments_and_quotas(db_conn: Conn) -> None:
     seeded = [r for r in rows if r["id"] in WAVE1]
     # A segment sync (test_cli runs one) may add newer segments such as firms-in and apply the YAML switches
     # (real estate is off since 12 Nov 2026); the seed itself is the six wave-1 rows with quotas adding to 300.
-    assert {r["id"] for r in seeded} == WAVE1 and {r["id"] for r in rows} <= WAVE1 | {"firms-in"}
+    assert {r["id"] for r in seeded} == WAVE1 and {r["id"] for r in rows} <= WAVE1 | {
+        f"firms-{cc}" for cc in ("in", "ae", "us", "gb", "au", "ca", "sg")
+    }
     assert sum(r["daily_quota"] for r in seeded) == 300
     assert all(r["enabled"] for r in seeded if not r["id"].startswith("realestate"))
 
 
 def test_seed_settings_with_openai_off_and_review_sources_on(db_conn: Conn) -> None:
     settings = {r["key"]: r["value"] for r in db_conn.execute("select key, value from public.settings").fetchall()}
-    assert settings["daily_cap_inr"] == 750 and settings["research_per_day"] == 300
+    assert settings["daily_cap_inr"] == 750 and settings["research_per_day"] == 800  # 0014: 50 to 60 leads a day
     assert settings["providers_enabled"] == {"gemini": True, "openai": False}
     assert settings["sources_enabled"]["adzuna"] is False
     assert settings["sources_enabled"]["practo"] is True and settings["sources_enabled"]["maps_reviews"] is True
@@ -122,7 +124,7 @@ def test_seed_source_health(db_conn: Conn) -> None:
         r["source"]: r["enabled"]
         for r in db_conn.execute("select source, enabled from public.source_health").fetchall()
     }
-    assert len(rows) == 13
+    assert len(rows) == 15
     assert {s for s, on in rows.items() if not on} == {"adzuna", "llm:openai"}
 
 

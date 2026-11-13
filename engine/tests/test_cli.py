@@ -200,8 +200,8 @@ def test_db_commands(engine_db: str) -> None:
     dry = runner.invoke(app, ["--dry-run", "db", "sync-segments"])
     assert dry.exit_code == 0 and "dry run, nothing written" in dry.stdout
     synced = runner.invoke(app, ["db", "sync-segments"])
-    assert synced.exit_code == 0 and "Synced 7 segments" in synced.stdout
-    assert db.scalar("select count(*) from public.segments where config_version is not null") == 7
+    assert synced.exit_code == 0 and "Synced 13 segments" in synced.stdout
+    assert db.scalar("select count(*) from public.segments where config_version is not null") == 13
 
 
 def test_global_flags_work_after_the_command_too(engine_db: str, monkeypatch: pytest.MonkeyPatch) -> None:

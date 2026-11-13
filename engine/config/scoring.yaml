@@ -27,9 +27,10 @@ can_pay:
 intent:                         # shown as "Need" in the app and the email
   cap: 35
   # A signal's points (A.12.3, for example public_ask 10, review_pain 7) times its category's multiplier.
-  multiplier: {stated_need: 3.5, visible_pain: 2.2, growth: 2.0}
-  # Visible pain and growth alone can never look like a stated need.
-  category_cap: {visible_pain: 24, growth: 12}
+  multiplier: {stated_need: 3.5, visible_pain: 2.2, growth: 2.0, money: 2.0}
+  # Visible pain, growth and fresh funding alone can never look like a stated need. Funding counts only where a
+  # segment gives it points (firms: 5, "just funded" is a growth sign; 13 Nov 2026).
+  category_cap: {visible_pain: 24, growth: 12, money: 12}
   stack_bonus_per_type: 3       # for each signal type after the first
   stack_bonus_max: 6
 

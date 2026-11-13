@@ -47,6 +47,25 @@ REQUIRED_ANGLES = frozenset(
     {"build_what_they_asked", "frontdesk_load", "missed_calls", "ad_leads_cold", "no_online_booking", "slow_site"}
 )
 GROWTH_SIGNALS = frozenset({"new_place", "new_branch", "news"})
+# Country names for prompts and messages, one map for every stage (13 Nov 2026: seven countries).
+COUNTRY_NAMES: dict[str, str] = {
+    "in": "India",
+    "ae": "the UAE",
+    "sa": "Saudi Arabia",
+    "qa": "Qatar",
+    "gb": "the UK",
+    "uk": "the UK",
+    "us": "the US",
+    "au": "Australia",
+    "ca": "Canada",
+    "sg": "Singapore",
+}
+
+
+def country_name(code: str) -> str:
+    """ "the US" for "us"; an unknown code comes back in capitals."""
+    return COUNTRY_NAMES.get(code.lower(), code.upper())
+
 
 BBox = tuple[float, float, float, float]
 
@@ -304,7 +323,7 @@ def file_hash(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
 
 
-def load_segments(directory: Path = SEGMENTS_DIR, research_per_day: int = 300) -> dict[str, Segment]:
+def load_segments(directory: Path = SEGMENTS_DIR, research_per_day: int = 800) -> dict[str, Segment]:
     """Read and validate every `*.yaml` in `directory`. Stops with SegmentConfigError on any problem."""
     segments: dict[str, Segment] = {}
     for path in sorted(directory.glob("*.yaml")):
