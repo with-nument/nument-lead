@@ -268,6 +268,12 @@ SMOKE_INPUTS: dict[str, dict[str, Any]] = {
         "We are a 9-person team building ordering software for independent grocers and need help shipping our "
         "React Native app.",
     },
+    "find_decision_maker": {
+        "name": "Brightcart Foods",
+        "city": "Pune",
+        "country": "India",
+        "website": "https://brightcart.in",
+    },
     "find_website": {
         "name": "Brightcart Foods",
         "city": "Pune",

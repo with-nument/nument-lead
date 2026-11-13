@@ -288,6 +288,14 @@ def lookup(ctx: typer.Context) -> None:
 
 
 @app.command()
+def people(ctx: typer.Context) -> None:
+    """The founder or owner of new A and B leads, from Google Search (plan 5.11.4)."""
+    from .pipeline import people as m
+
+    _execute(ctx, "manual", m.run)
+
+
+@app.command()
 def judge(ctx: typer.Context) -> None:
     """Top-model judgement for the top half (Step 11)."""
     from .pipeline import judge as m

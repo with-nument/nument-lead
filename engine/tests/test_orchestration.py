@@ -198,8 +198,12 @@ def test_phase_tables_follow_the_plan() -> None:
         "health", "universe", "signals", "lookup", "prefilter", "research", "extract_submit", "maps_reviews",
     ]  # fmt: skip
     assert names["morning"] == [
-        "health", "extract_collect", "verify", "reviews", "score", "judge", "message", "sheet_sync", "prune", "summary",
-        "email",
+        "health", "extract_collect", "verify", "reviews", "score", "judge", "people", "message", "sheet_sync", "prune",
+        "summary", "email",
+    ]  # fmt: skip
+    # 13 Nov 2026: the midday run (13:00 IST) and its hot-lead email
+    assert [p.name for p in runs.midday_phases()] == [
+        "health", "signals", "lookup", "extract_collect", "verify", "score", "judge", "people", "message", "hot_email",
     ]  # fmt: skip
     assert names["weekly"] == ["learn", "audit", "report"]  # the report includes this week's audit (16.6.2)
     assert names["monthly"] == ["universe", "prune"]

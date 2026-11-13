@@ -351,6 +351,8 @@ def morning_phases() -> list[Phase]:
         Phase("reviews", stage("pipeline.reviews"), budget="grounded_search"),  # Places fallback before scoring
         Phase("score", stage("pipeline.score"), essential=True),
         Phase("judge", stage("pipeline.judge"), budget="judge"),
+        # the founder or owner of A and B leads without a named decision maker, so messages greet a person
+        Phase("people", stage("pipeline.people"), budget="grounded_search"),
         Phase("message", stage("pipeline.message"), budget="message"),
         Phase("sheet_sync", sheet_sync(light=False), essential=True),
         Phase("prune", stage("ops.health", "prune_run")),  # daily, so 30-day Places content never overstays
@@ -372,6 +374,8 @@ def midday_phases() -> list[Phase]:
         Phase("verify", stage("pipeline.verify"), essential=True),
         Phase("score", stage("pipeline.score"), essential=True),
         Phase("judge", stage("pipeline.judge"), budget="judge"),
+        # the founder or owner of A and B leads without a named decision maker, so messages greet a person
+        Phase("people", stage("pipeline.people"), budget="grounded_search"),
         Phase("message", stage("pipeline.message"), budget="message"),
         Phase("hot_email", stage("ops.emails", "hot"), after_deadline=True),
     ]

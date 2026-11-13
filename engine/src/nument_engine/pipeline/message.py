@@ -159,7 +159,10 @@ def greeting_contact(contacts: Sequence[Row]) -> Row | None:
         if c.get("is_decision_maker")
         and c.get("name")
         and c.get("verified")
-        and c.get("source") in ("website", "registry")
+        and (
+            c.get("source") in ("website", "registry")
+            or (c.get("source") == "other" and c.get("quote"))  # a founder found by a backed search (5.11.4)
+        )
         and not c.get("do_not_contact")
     ]
     people.sort(key=lambda c: (not c.get("phone_e164"), not c.get("email")))

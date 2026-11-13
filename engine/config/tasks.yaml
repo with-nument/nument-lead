@@ -233,6 +233,24 @@ tiers:
       cache_ttl_days: 30
       timeout_s: 120
       max_retries: 1
+    find_decision_maker:                      # plan 5.11.4: the founder or owner of an A or B lead, from search
+      primary: g_flash
+      fallbacks: [g_pro, g_lite]
+      mode: sync
+      schema: DecisionMakerLookup
+      prompt: find_decision_maker.md
+      structure_with: g_lite
+      structure_prompt: structure_decision_maker.md
+      max_output_tokens: 600
+      temperature: 0.0
+      thinking: low
+      tools: [web_search]
+      priority: 4
+      est_input_tokens: 400
+      est_output_tokens: 300
+      cache_ttl_days: 30
+      timeout_s: 120
+      max_retries: 1
     lookup_reviews:                           # the Places fallback: public review numbers through Google Search grounding
       primary: g_flash
       fallbacks: [g_pro, g_lite]

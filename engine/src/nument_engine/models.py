@@ -232,6 +232,7 @@ AITask = Literal[
     "grounded_search",
     "lookup_reviews",
     "find_website",
+    "find_decision_maker",
     "classify_reviews",
     "classify_feed_job",
     "weekly_audit",
@@ -352,6 +353,15 @@ class ReviewLookup(BaseModel):
     hiring_line: str | None = Field(default=None, description="the Hiring line copied exactly from the answer, or null")
     branch_line: str | None = Field(default=None, description="the New branch line copied exactly, or null")
     complaint_line: str | None = Field(default=None, description="the Complaint line copied exactly, or null")
+
+
+class DecisionMakerLookup(BaseModel):
+    """`find_decision_maker`: who runs one business, from Google Search grounding (plan 5.11.4, 13 Nov 2026).
+    Code keeps the name only when a sentence the search results back contains it, and the role is in charge."""
+
+    name: str | None = Field(description="the person's full name as the answer gives it, or null")
+    role: str | None = Field(description="their role as written, for example Founder or Owner, or null")
+    line: str | None = Field(description="the Decision maker line copied exactly from the answer, or null")
 
 
 class WebsiteLookup(BaseModel):
@@ -528,6 +538,7 @@ AI_OUTPUT_MODELS: Final[dict[str, type[BaseModel]]] = {
     "grounded_search": PublicAskResults,
     "lookup_reviews": ReviewLookup,
     "find_website": WebsiteLookup,
+    "find_decision_maker": DecisionMakerLookup,
     "classify_reviews": ReviewPainClassification,
     "classify_feed_job": FeedJobClassification,
     "weekly_audit": AuditResult,

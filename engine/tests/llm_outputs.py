@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from nument_engine.models import (
     AuditResult,
     Claim,
+    DecisionMakerLookup,
     FactsExtraction,
     FeedJobClassification,
     FlaggedVerification,
@@ -119,6 +120,9 @@ OUTPUTS: dict[str, BaseModel] = {
         team_size=9,
         evidence_quote="Full-stack engineer (contract)",
         confidence=0.9,
+    ),
+    "find_decision_maker": DecisionMakerLookup(
+        name="Asha Rao", role="Founder", line="Decision maker: Asha Rao, Founder at Brightcart Foods"
     ),
     "find_website": WebsiteLookup(website="https://brightcart.in", website_line="Website: https://brightcart.in"),
     "classify_reviews": ReviewPainClassification(
