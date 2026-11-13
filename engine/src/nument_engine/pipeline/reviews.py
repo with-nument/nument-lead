@@ -21,17 +21,27 @@ numbers only. Maps numbers expire after 30 days exactly like grounded ones.
 
 from __future__ import annotations
 
+import asyncio
 import re
 import time
-from collections import Counter
-from datetime import UTC, datetime
+from collections import Counter, deque
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 
+from dateutil import parser as dateparser
+from rapidfuzz import fuzz
+
 from .. import db
+from ..http import PoliteClient, host_of
 from ..logging import get_logger
 from ..segments import Segment
+from ..sources.base import QUOTE_MAX, Signal, SourceContext
+from ..sources.grounded_search import REDIRECT_HOSTS
 from . import ai, score
 from .runs import RunContext
+from .signals import SignalSink
 
 log = get_logger()
 
@@ -41,6 +51,7 @@ DEFAULT_PER_DAY: Final = 120
 SETTING_MINUTES: Final = "reviews.minutes_per_run"
 DEFAULT_MINUTES: Final = 8
 RESERVE_S: Final = 600.0  # kept for score, judge, message and email after this stage
+WORKERS: Final = 4  # lookups at once (the router is thread-safe; results are written in the main thread)
 MAX_DOWN_STREAK: Final = 3  # consecutive "no usable provider" answers before the stage stops
 KEEP_DAYS: Final = 30
 SOURCE: Final = "grounded_search"
@@ -163,6 +174,7 @@ def _inputs(b: dict[str, Any], seg: Segment, now: datetime | None = None) -> dic
         "kind": KINDS.get(seg.domain, seg.domain),
         "website": b.get("website") or "",
         "practo": practo,
+        "roles": seg.job_keywords.frontdesk[:8],  # the intent hunt: front-desk job posts (13 Nov 2026)
     }
 
 
@@ -190,8 +202,140 @@ def store(conn: Any, b: dict[str, Any], found: dict[str, Any], tag: str, url: st
         )
 
 
+# ---------------------------------------------------------------------------
+# The intent hunt (13 Nov 2026): the same grounded call reports dated signs of need
+# ---------------------------------------------------------------------------
+
+SIGNAL_MAX_AGE: Final = timedelta(days=60)
+# A search snippet is weaker evidence than a page we read ourselves: below the type's default points.
+SNIPPET_POINTS: Final[dict[str, float]] = {"hiring_frontdesk": 6.0, "review_pain": 5.0, "new_branch": 4.0}
+LINE_MATCH_MIN: Final = 90  # how closely a line of the answer must match a sentence the search results back
+NOTHING: Final = re.compile(r"^\s*(?:none|unknown|not found|no\b|n/?a\b)", re.I)
+BRANCH_WORDS: Final = re.compile(
+    r"new (?:branch|centre|center|clinic|campus|location)|open(?:s|ed|ing)|launch|inaugurat|second (?:branch|centre)",
+    re.I,
+)
+PAIN_FLAGS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
+    ("unanswered_calls", re.compile(r"call|phone|not (?:pick|answer)|unreachable", re.I)),
+    ("slow_replies", re.compile(r"repl|respon|whatsapp|message|enquir", re.I)),
+    ("booking_trouble", re.compile(r"book|appointment|slot|schedul", re.I)),
+    ("long_wait", re.compile(r"wait|delay|late", re.I)),
+    ("rude_front_desk", re.compile(r"rude|reception|front desk|staff behaviou?r", re.I)),
+)
+
+
+def _body(line: str | None) -> str:
+    """The text after "Hiring:", "New branch:" or "Complaint:"; empty when the answer said none."""
+    text = str(line or "").strip()
+    head, sep, rest = text.partition(":")
+    body = rest.strip() if sep and len(head) <= 12 else text
+    return "" if not body or NOTHING.match(body) else body
+
+
+def supported_line(line: str | None, grounding: dict[str, Any] | None) -> tuple[str, str | None] | None:
+    """(the backing sentence, the cited source URI) when a sentence the search results back contains the line."""
+    body = _body(line)
+    if len(body) < 8 or not grounding or not grounding.get("sources"):
+        return None
+    sources = grounding.get("sources") or []
+    for sup in grounding.get("supports") or []:
+        text = str(sup.get("text") or "")
+        if text and fuzz.partial_ratio(body.lower(), text.lower()) >= LINE_MATCH_MIN:
+            uris = [
+                str(sources[i].get("uri"))
+                for i in sup.get("chunks") or []
+                if isinstance(i, int) and 0 <= i < len(sources) and sources[i].get("uri")
+            ]
+            return text.strip()[:QUOTE_MAX], (uris[0] if uris else None)
+    return None
+
+
+def _when(text: str | None, now: datetime) -> datetime | None:
+    if not text or NOTHING.match(text):
+        return None
+    try:
+        when = dateparser.parse(text, fuzzy=True, default=now.replace(day=1, hour=0, minute=0, second=0))
+    except (ValueError, OverflowError):
+        return None
+    when = when if when.tzinfo else when.replace(tzinfo=UTC)
+    return when if when <= now else None
+
+
+def resolve_citations(signals: list[Signal]) -> list[Signal]:
+    """Grounding redirects become the pages they point at, read from the Location header only (nothing at the
+    target is fetched, so LinkedIn and job boards stay snippet-only). A redirect that fails is kept as it is."""
+    todo = [s for s in signals if s.url and host_of(s.url) in REDIRECT_HOSTS]
+    if not todo:
+        return signals
+
+    async def resolve() -> dict[str, str]:
+        found: dict[str, str] = {}
+        async with PoliteClient("review_citations", policy="public", min_gap_s=0.2) as http:
+            for sig in todo:
+                url = str(sig.url)
+                if url not in found:
+                    found[url] = await http.location(url) or url
+        return found
+
+    try:
+        resolved = asyncio.run(resolve())
+    except Exception as exc:  # citations are a nicety: never lose the signals over them
+        log.warning("reviews.citations_unresolved", error=f"{type(exc).__name__}: {exc}"[:200])
+        return signals
+    return [replace(s, url=resolved.get(str(s.url), s.url)) if s in todo else s for s in signals]
+
+
+def intent_signals(
+    output: Any, grounding: dict[str, Any] | None, b: dict[str, Any], seg: Segment, now: datetime
+) -> list[Signal]:
+    """Signals from the lookup answer, each backed by a sentence of the search results; never from memory."""
+    out: list[Signal] = []
+    key = str(b.get("web_domain") or b["id"])
+
+    def make(kind: str, hit: tuple[str, str | None], when: datetime | None, details: dict[str, Any]) -> Signal:
+        observed = when or now
+        return Signal(
+            type=kind,
+            source=SOURCE,
+            observed_at=observed,
+            url=hit[1],
+            quote=hit[0],
+            evidence_key=f"{key}|{kind}|{details.get('role') or 'lookup'}|{observed:%Y-%m}".lower(),
+            business_id=str(b["id"]),
+            details={**details, "snippet_only": True, "date_estimated": when is None, "from": "review_lookup"},
+            points=SNIPPET_POINTS[kind],
+        )
+
+    role = str(getattr(output, "hiring_role", None) or "").strip()
+    frontdesk = [k.lower() for k in seg.job_keywords.frontdesk]
+    if role and any(k in role.lower() for k in frontdesk):
+        hit = supported_line(getattr(output, "hiring_line", None), grounding)
+        posted = _when(getattr(output, "hiring_posted", None), now)
+        if hit and (posted is None or now - posted <= SIGNAL_MAX_AGE):
+            out.append(make("hiring_frontdesk", hit, posted, {"role": role[:80]}))
+    complaint = _body(getattr(output, "complaint_line", None))
+    flags = [flag for flag, pattern in PAIN_FLAGS if pattern.search(complaint)]
+    if flags:
+        hit = supported_line(getattr(output, "complaint_line", None), grounding)
+        if hit:
+            out.append(make("review_pain", hit, None, {"flags": flags}))
+    branch = _body(getattr(output, "branch_line", None))
+    if BRANCH_WORDS.search(branch):
+        hit = supported_line(getattr(output, "branch_line", None), grounding)
+        opened = _when(branch, now)
+        if hit and opened is not None and now - opened <= SIGNAL_MAX_AGE:
+            out.append(make("new_branch", hit, opened, {}))
+    return out
+
+
+def _lookup(run_result: Any, b: dict[str, Any], seg: Segment, now: datetime) -> tuple[dict[str, Any], Any]:
+    inputs = _inputs(b, seg, now)
+    return inputs, run_result(TASK, inputs)
+
+
 def run(rc: RunContext, router: Any = None) -> dict[str, Any]:
-    """`nlead reviews`: look up public review numbers for researched businesses without Places data."""
+    """`nlead reviews`: public review numbers (and dated signs of need) for researched businesses without Places
+    data. Up to WORKERS lookups run at once; results are written one at a time in this thread."""
     now = datetime.now(UTC)
     stats: Counter[str] = Counter()
     segments = score.enabled_segments(rc)
@@ -221,39 +365,65 @@ def run(rc: RunContext, router: Any = None) -> dict[str, Any]:
         float(minutes) * 60.0 if isinstance(minutes, int | float) else DEFAULT_MINUTES * 60.0,
         max(0.0, rc.time_left() - RESERVE_S),
     )
-    for i, b in enumerate(rows):
-        if time.monotonic() >= stop_at:
-            stats["stopped_time"] = len(rows) - i  # left for the next morning
-            break
-        quota = budget.grounding_quota_left() if budget is not None and hasattr(budget, "grounding_quota_left") else 1
-        if quota is not None and quota <= 0:
-            stats["stopped_quota"] += 1
-            break
-        seg = segments[b["segment_id"]]
-        try:
-            inputs = _inputs(b, seg, now)
-            stats["practo_covered"] += seg.domain == "clinics" and seg.country == "in" and not inputs["practo"]
-            res = run_result(TASK, inputs)
-        except Exception as exc:  # typed router errors: stop on budget, skip one stubborn business
-            name = type(exc).__name__
-            stats[f"error.{name}"] += 1
-            down_streak += name == "AllProvidersDown"
-            # One business whose answers never cite a search must not stop the stage (live run 12 Nov); three
-            # in a row look like a real outage.
-            if name in ("BudgetExceeded", "BudgetStop") or down_streak >= MAX_DOWN_STREAK:
-                log.warning("reviews.stopped", reason=f"{name}: {str(exc)[:200]}")
+    found_signals: list[tuple[Signal, Segment]] = []
+    pending = deque(rows)
+    running: dict[Future[tuple[dict[str, Any], Any]], dict[str, Any]] = {}
+    with ThreadPoolExecutor(max_workers=WORKERS, thread_name_prefix="reviews") as pool:
+        while pending or running:
+            while pending and len(running) < WORKERS:
+                if time.monotonic() >= stop_at:
+                    stats["stopped_time"] = len(pending)  # left for the next morning
+                    pending.clear()
+                    break
+                quota = (
+                    budget.grounding_quota_left()
+                    if budget is not None and hasattr(budget, "grounding_quota_left")
+                    else 1
+                )
+                if quota is not None and quota <= len(running):
+                    stats["stopped_quota"] += 1
+                    pending.clear()
+                    break
+                b = pending.popleft()
+                running[pool.submit(_lookup, run_result, b, segments[b["segment_id"]], now)] = b
+            if not running:
                 break
-            continue
-        down_streak = 0
-        found = accepted(res.output, res.grounding)
-        sources = (res.grounding or {}).get("sources") or []
-        url = str(sources[0].get("uri")) if sources else None
-        with db.tx("engine", {"run_id": rc.run_id, "stage": "reviews"}) as conn:
-            store(conn, b, found, res.tag, url, now)
-        stats["looked_up"] += 1
-        stats["google_found"] += "google" in found
-        stats["practo_found"] += "practo" in found
-        spent += float(getattr(res, "inr", 0) or 0)
+            done, _ = wait(running, return_when=FIRST_COMPLETED)
+            for fut in done:
+                b = running.pop(fut)
+                seg = segments[b["segment_id"]]
+                try:
+                    inputs, res = fut.result()
+                except Exception as exc:  # typed router errors: stop on budget, skip one stubborn business
+                    name = type(exc).__name__
+                    stats[f"error.{name}"] += 1
+                    down_streak += name == "AllProvidersDown"
+                    # One business whose answers never cite a search must not stop the stage (live run 12 Nov);
+                    # three in a row look like a real outage.
+                    if name in ("BudgetExceeded", "BudgetStop") or down_streak >= MAX_DOWN_STREAK:
+                        log.warning("reviews.stopped", reason=f"{name}: {str(exc)[:200]}")
+                        pending.clear()
+                    continue
+                down_streak = 0
+                stats["practo_covered"] += seg.domain == "clinics" and seg.country == "in" and not inputs["practo"]
+                found = accepted(res.output, res.grounding)
+                sources = (res.grounding or {}).get("sources") or []
+                url = str(sources[0].get("uri")) if sources else None
+                with db.tx("engine", {"run_id": rc.run_id, "stage": "reviews"}) as conn:
+                    store(conn, b, found, res.tag, url, now)
+                for sig in intent_signals(res.output, res.grounding, b, seg, now):
+                    found_signals.append((sig, seg))
+                    stats[f"signal.{sig.type}"] += 1
+                stats["looked_up"] += 1
+                stats["google_found"] += "google" in found
+                stats["practo_found"] += "practo" in found
+                spent += float(getattr(res, "inr", 0) or 0)
+    if found_signals:
+        sink = SignalSink(segments, SourceContext.from_run(rc, router))
+        urls = resolve_citations([sig for sig, _ in found_signals])
+        for sig, (_, seg) in zip(urls, found_signals, strict=True):
+            sink.add(sig, seg)
+        sink.flush()
     result: dict[str, Any] = {**stats, "inr": round(spent, 2)}
     rc.stats["reviews"] = result
     log.info("reviews.done", **{k.replace(".", "_"): v for k, v in result.items()})

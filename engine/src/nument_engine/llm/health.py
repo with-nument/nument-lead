@@ -268,6 +268,7 @@ SMOKE_INPUTS: dict[str, dict[str, Any]] = {
         "kind": "clinic",
         "website": "https://sunrisedental.example",
         "practo": True,
+        "roles": ["receptionist", "front desk", "patient coordinator"],
     },
     "classify_reviews": {
         "business_name": "Sunrise Dental Clinic",

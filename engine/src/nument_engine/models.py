@@ -301,6 +301,13 @@ class ReviewLookup(BaseModel):
     practo_story_count: int | None = Field(description="number of Practo patient stories in digits, or null")
     practo_quote: str | None = Field(description="the Practo line copied exactly from the answer, or null")
     complaint: str | None = Field(description="the main complaint in recent reviews as written, or null")
+    # The intent hunt (13 Nov 2026): the same grounded call also reports dated evidence of a need, each with the
+    # answer line copied exactly, so code can check it against what the search results back.
+    hiring_role: str | None = Field(default=None, description="the role of a recent job post by this business, or null")
+    hiring_posted: str | None = Field(default=None, description="when that job was posted, as written, or null")
+    hiring_line: str | None = Field(default=None, description="the Hiring line copied exactly from the answer, or null")
+    branch_line: str | None = Field(default=None, description="the New branch line copied exactly, or null")
+    complaint_line: str | None = Field(default=None, description="the Complaint line copied exactly, or null")
 
 
 ReviewPainFlag = Literal["unanswered_calls", "slow_replies", "booking_trouble", "long_wait", "rude_front_desk"]
