@@ -227,12 +227,15 @@ def refresh(business_ids: Iterable[str], conn: Connection[Any] | None = None) ->
         else {}
     )
     updates = plan_lines(contacts, pages, vendor, shared)
-    for u in updates:
-        db.execute(
-            "update public.contacts set line = %s, line_why = %s, is_decision_maker = %s where id = %s",
-            [u["line"], u["line_why"], u["dm"], u["id"]],
-            conn=conn,
-        )
+    if updates:
+        rows = [[u["line"], u["line_why"], u["dm"], u["id"]] for u in updates]
+        sql = "update public.contacts set line = %s, line_why = %s, is_decision_maker = %s where id = %s"
+        if conn is None:
+            with db.tx() as own, own.cursor() as cur:
+                cur.executemany(sql, rows)  # one pipelined round trip, not one per contact
+        else:
+            with conn.cursor() as cur:
+                cur.executemany(sql, rows)
     stats["contacts"] = len(contacts)
     for u in updates:
         stats[f"line.{u['line']}"] += 1

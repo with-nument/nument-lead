@@ -3,6 +3,30 @@
 Changes to the plan made while building and running the system, newest first. Each entry says what changed,
 why, and how to undo it. The plan itself is [IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md).
 
+## 2026-11-15: who answers each number (founder: "most of them are automation numbers")
+
+The founder contacted 16 of the first India and UAE leads and reached auto-replies and receptionists. The data
+agreed: of 33 leads, nearly every number was the clinic's front desk (the WhatsApp chat button `wa.me/...`, a
+booking or emergency line, the number in the site header and its schema data), 0 were provably the owner's,
+and the 3 marked decision maker were wrong (an emergency line and header numbers within 120 characters of the
+doctor's name). One UAE lead had a Russian number. Across 104 researched businesses: 123 emails, only 6 the
+owner's, 62 shared inboxes; an owner name for 57.
+
+- Every contact now has a line (migration 0018, `pipeline/lines.py`): owner, front desk, bot or call centre
+  (a WhatsApp bot vendor's button, toll-free, 600 or helpline numbers, numbers three or more businesses publish,
+  a number from another country), or other. A desk number near the owner's name no longer counts as theirs.
+- Reach follows the line: owner mobile 1.0, owner email 0.85, an unlabelled business mobile 0.75, front desk
+  0.55, landline 0.45, shared inbox 0.40, bot 0.20. An owner's own email beats a front-desk WhatsApp and the
+  lead goes out by email. A fit-only clinic with only a front desk drops from B to C.
+- write_message v2: a front-desk number gets a short message that says who it is for and asks them to pass it
+  to the owner (by name when we have it), instead of greeting the doctor as if she reads it.
+- The owner lookup keeps the owner's LinkedIn profile link (from the search citation, never fetched), so the
+  founder can message the owner there himself.
+- Not done, on purpose: personal mobiles from data brokers or contact databases (Lusha, Apollo, Truecaller and
+  similar). They break the founder's own rule (A.4.3, D-033) and India's and the UAE's data laws for cold
+  outreach. The real fix for reach is the need-first track, where the person who posted the job or the ask is
+  the decision maker.
+
 ## 2026-11-13 (evening): a near-100 plan, seven countries, 50 to 60 leads a day
 
 The founder rated the engine on conversion (100 = nearly every lead converts) and wants paying clients who stay
