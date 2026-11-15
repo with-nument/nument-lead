@@ -130,7 +130,7 @@ def test_budget_stop_inside_a_phase_is_clean(clean_costs: None) -> None:
 
 def test_deadline_skips_optional_phases_but_not_essential_ones(clean_costs: None) -> None:
     with run_context("night", Options()) as rc:
-        rc.started_at = dt.datetime.now(dt.UTC) - dt.timedelta(hours=2)
+        rc.started_at = dt.datetime.now(dt.UTC) - dt.timedelta(hours=3)  # past the 170-minute night deadline
         runs.execute(rc, [Phase("research", ok(), budget="research"), Phase("prefilter", ok(), essential=True)])
     row = _row(rc.run_id)
     assert row["stats"]["phases"]["research"] == {"skipped": "deadline"}

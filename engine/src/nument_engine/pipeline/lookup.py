@@ -21,12 +21,15 @@ from collections import Counter
 from datetime import UTC, datetime
 from typing import Any, Final
 
+import psycopg
+
 from .. import db
 from ..http import PoliteClient, host_blocked
 from ..logging import get_logger
 from ..normalize import web_domain
 from ..segments import country_name
 from . import ai, score
+from .resolve import merge_businesses
 from .runs import RunContext
 from .verify import distinctive_words
 
@@ -133,6 +136,46 @@ async def check_sites(found: dict[str, str], names: dict[str, str]) -> dict[str,
     return ok
 
 
+TWIN_SQL: Final = """
+select o.id::text as id from public.businesses o join public.businesses b on b.id = %s
+ where o.segment_id = b.segment_id and o.web_domain = %s and o.id <> b.id limit 1
+"""
+
+
+def write_results(run_id: str, names: dict[str, str], checked: dict[str, str], now: datetime) -> Counter[str]:
+    """Save each lookup. A site that already belongs to another business of the segment means the signal-born
+    business is a duplicate of it: its signals and facts move there and it is removed (live, 14 Nov 2026: one
+    duplicate stopped the whole night run's lookup, which also threw away every other website it had found).
+    Each business has its own savepoint, so one failure never undoes the others."""
+    stats: Counter[str] = Counter()
+    with db.tx("engine", {"run_id": run_id, "stage": "lookup"}) as conn:
+        for bid in names:
+            url = checked.get(bid)
+            try:
+                with conn.transaction():
+                    twin = conn.execute(TWIN_SQL, [bid, web_domain(url)]).fetchone() if url else None
+                    if twin:
+                        merge_businesses(str(twin["id"]), bid, conn=conn)
+                        stats["merged_duplicate"] += 1
+                        continue
+                    conn.execute(
+                        "update public.businesses set website = coalesce(%s, website), "
+                        "web_domain = coalesce(%s, web_domain), "
+                        "extra = extra || jsonb_build_object('website_lookup_at', %s::text, "
+                        "'website_lookup', %s::text) where id = %s",
+                        [url, web_domain(url) if url else None, now.isoformat(), url or "not_found", bid],
+                    )
+            except psycopg.Error as exc:  # never retried every night: the lookup is marked done
+                stats["write_failed"] += 1
+                log.warning("lookup.write_failed", business_id=bid, error=str(exc)[:200])
+                conn.execute(
+                    "update public.businesses set extra = extra || jsonb_build_object('website_lookup_at', %s::text, "
+                    "'website_lookup', 'write_failed') where id = %s",
+                    [now.isoformat(), bid],
+                )
+    return stats
+
+
 def run(rc: RunContext, router: Any = None) -> dict[str, Any]:
     """`nlead lookup`: official websites for signal-born businesses that have none."""
     now = datetime.now(UTC)
@@ -191,16 +234,7 @@ def run(rc: RunContext, router: Any = None) -> dict[str, Any]:
     checked = asyncio.run(check_sites(found, names)) if found else {}
     stats["found"] = len(checked)
     stats["rejected_site"] = len(found) - len(checked)
-    with db.tx("engine", {"run_id": rc.run_id, "stage": "lookup"}) as conn:
-        for bid in names:
-            url = checked.get(bid)
-            conn.execute(
-                "update public.businesses set website = coalesce(%s, website), "
-                "web_domain = coalesce(%s, web_domain), "
-                "extra = extra || jsonb_build_object('website_lookup_at', %s::text, 'website_lookup', %s::text) "
-                "where id = %s",
-                [url, web_domain(url) if url else None, now.isoformat(), url or "not_found", bid],
-            )
+    stats.update(write_results(rc.run_id, names, checked, now))
     result: dict[str, Any] = {**stats, "inr": round(spent, 2)}
     rc.stats["lookup"] = result
     log.info("lookup.done", **{k.replace(".", "_"): v for k, v in result.items()})

@@ -37,18 +37,18 @@ DRY_RUN_LIMIT: Final = 5  # items per stage in a dry run when --limit is not giv
 # Minutes a run may take before non-essential phases are skipped: each workflow's timeout minus a margin, so
 # the run closes its row itself instead of being killed with the row left 'running'.
 DEADLINE_MIN: Final[dict[str, int]] = {
-    "night": 80,
+    "night": 170,  # 14 Nov 2026: signals alone took 66 minutes, so research never started in 80
     "morning": 40,
-    "midday": 30,
+    "midday": 45,
     "sheet_sync": 8,
     "weekly": 26,
     "monthly": 55,
 }
 # A 'running' row older than this was killed (timeout or cancel) and is closed as failed by the next run.
 STALE_MIN: Final[dict[str, int]] = {
-    "night": 50,
+    "night": 190,
     "morning": 50,
-    "midday": 40,
+    "midday": 75,
     "sheet_sync": 15,
     "weekly": 35,
     "monthly": 65,

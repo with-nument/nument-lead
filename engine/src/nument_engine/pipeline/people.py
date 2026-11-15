@@ -34,6 +34,7 @@ log = get_logger()
 TASK: Final = "find_decision_maker"
 SETTING: Final = "dm_lookup.per_day"
 DEFAULT_PER_DAY: Final = 40
+RESERVE_S: Final = 600  # stop this long before the run's deadline, so the message stage still runs (14 Nov 2026)
 
 CANDIDATES_SQL: Final = """
 select b.id::text as id, b.name, b.city, b.website, b.segment_id
@@ -101,7 +102,7 @@ def run(rc: RunContext, router: Any = None) -> dict[str, Any]:
         if quota is not None and quota <= 0:
             stats["stopped_quota"] += 1
             break
-        if rc.time_left() <= 0:
+        if rc.time_left() <= RESERVE_S:
             stats["stopped_time"] += 1
             break
         seg = segments[b["segment_id"]]
