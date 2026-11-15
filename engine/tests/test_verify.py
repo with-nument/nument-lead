@@ -556,3 +556,125 @@ def test_closed_jobs_expire() -> None:
     ]
     pages = [_page("p2", CONTACT, "This job is closed. No longer accepting applications.")]
     assert signals_to_expire(_bundle(pages=pages, signals=signals), NOW) == ["s1", "s3"]
+
+
+# ---------------------------------------------------------------------------
+# 10.2.5 extract_facts v2: a startup fact's value must be in its quote (15 Nov 2026)
+# ---------------------------------------------------------------------------
+
+FIRMS = SEGMENTS["firms-us"]
+S_HOME = "https://brightcart.io/"
+S_TEAM = "https://brightcart.io/team"
+S_HOME_TEXT = (
+    "BrightCart\nAI checkout assistant for independent shops.\nJoin the waitlist for early access.\n"
+    "We raised a $400K pre-seed round in March 2026.\nFounded in 2025.\n"
+    "We are looking for a technical co-founder to build the first version.\nFounding engineer role: equity only."
+)
+S_TEAM_TEXT = "Our team\nMaya Chen, Co-founder and CEO\nTom Price, Co-founder and COO\nWe are a team of four."
+
+
+def _startup_bundle(facts: list[dict[str, Any]], **over: Any) -> Bundle:
+    return _bundle(
+        facts,
+        business={"segment_id": "firms-us", "name": "BrightCart", "country": "us", "website": S_HOME,
+                  "web_domain": "brightcart.io", "place_id": None},
+        pages=over.pop("pages", None) or [_page("p1", S_HOME, S_HOME_TEXT), _page("p2", S_TEAM, S_TEAM_TEXT)],
+        **over,
+    )  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "quote", "url", "why"),
+    [
+        ("team_member", {"name": "Maya Chen", "role": "Co-founder and CEO", "is_founder": True, "is_engineer": False},
+         "Maya Chen, Co-founder and CEO", S_TEAM, None),
+        ("team_member", {"name": "Priya Nair", "role": "CTO", "is_founder": True, "is_engineer": True},
+         "Maya Chen, Co-founder and CEO", S_TEAM, "name_not_in_quote"),
+        ("team_member", {"name": "Tom Price", "role": "CTO", "is_founder": True, "is_engineer": True},
+         "Tom Price, Co-founder and COO", S_TEAM, "role_not_in_quote"),
+        ("team_size", {"count": 4}, "We are a team of four.", S_TEAM, None),
+        ("team_size", {"count": 40}, "We are a team of four.", S_TEAM, "number_not_in_quote"),
+        ("founded_year", {"year": 2025}, "Founded in 2025.", S_HOME, None),
+        ("founded_year", {"year": 2015}, "Founded in 2025.", S_HOME, "year_not_in_quote"),
+        ("funding_mention", {"round": "pre-seed", "amount": 400000, "currency": "USD", "date": "March 2026"},
+         "We raised a $400K pre-seed round in March 2026.", S_HOME, None),
+        ("funding_mention", {"round": "pre-seed", "amount": 4000000, "currency": "USD", "date": None},
+         "We raised a $400K pre-seed round in March 2026.", S_HOME, "amount_not_in_quote"),
+        ("funding_mention", {"round": "Series A", "amount": None, "currency": None, "date": None},
+         "We raised a $400K pre-seed round in March 2026.", S_HOME, "round_not_in_quote"),
+        ("uses_ai", {"value": True}, "AI checkout assistant for independent shops.", S_HOME, None),
+        ("uses_ai", {"value": True}, "Join the waitlist for early access.", S_HOME, "ai_not_in_quote"),
+        ("product_status", {"value": "waitlist", "platform": None}, "Join the waitlist for early access.", S_HOME,
+         None),
+        ("product_status", {"value": "mobile_app", "platform": None}, "We raised a $400K pre-seed round in March 2026.",
+         S_HOME, "kind_not_in_quote"),
+        ("revenue_hint", {"kind": "no_budget", "value": "equity only"}, "Founding engineer role: equity only.", S_HOME,
+         None),
+        ("revenue_hint", {"kind": "no_budget", "value": "no money"}, "Join the waitlist for early access.", S_HOME,
+         "kind_not_in_quote"),
+        ("tech_statement", {"kind": "no_technical_team"},
+         "We are looking for a technical co-founder to build the first version.", S_HOME, None),
+        ("tech_statement", {"kind": "engineering_team"}, "Join the waitlist for early access.", S_HOME,
+         "kind_not_in_quote"),
+    ],
+)  # fmt: skip
+def test_startup_fact_values_must_be_in_the_quote(
+    field: str, value: dict[str, Any], quote: str, url: str, why: str | None
+) -> None:
+    f = _fact("f1", field, value, quote, url, model="gemini:gemini-3.8-flash#extract_facts.v2")
+    state = verify_quotes(_startup_bundle([f]), "US")["f1"]
+    if why is None:
+        assert state.verified, state
+    else:
+        assert (state.verified, state.why) == (False, why)
+
+
+def test_amounts_and_numbers_are_read_the_way_people_write_them() -> None:
+    assert 1_500_000 in verify.amounts_in("raised $1.5M in seed funding")
+    assert 2_000_000 in verify.amounts_in("closes a 2 million euro round")
+    assert 20_000_000 in verify.amounts_in("secures ₹2 crore from angels")
+    assert 250_000 in verify.amounts_in("a $250,000 pre-seed")
+    assert {1.5, 1500.0} <= verify.amounts_in("€1.500")  # both readings of a European thousands dot
+    assert verify.numbers_in("a team of six, founded by two") >= {6, 2}
+    assert 8 in verify.numbers_in("8-person team")
+
+
+def test_a_wrong_value_in_a_moved_quote_is_still_caught() -> None:
+    """9.18: the quote is on the team page although the model cited the home page; the value check still runs."""
+    f = _fact("f1", "team_size", {"count": 12}, "We are a team of four.", S_HOME)
+    state = verify_quotes(_startup_bundle([f]), "US")["f1"]
+    assert (state.verified, state.why) == (False, "number_not_in_quote")
+
+
+def test_clinic_facts_are_untouched_by_the_startup_checks() -> None:
+    f = _fact("f1", "service", {"name": "Laser hair removal"}, "Advanced dermatology and laser care", HOME)
+    assert verify.value_problem(f) is None and verify_quotes(_bundle([f]), "IN")["f1"].verified
+
+
+def test_a_product_startup_selling_software_is_not_a_competitor() -> None:
+    """A SaaS startup's services are its product ("CRM for dentists"); only client services make it a vendor."""
+    services = [
+        _fact(f"s{i}", "service", {"name": n}, n, S_HOME, verified=True, verified_at=NOW)
+        for i, n in enumerate(["CRM for dentists", "AI scheduling software", "Mobile app for patients"])
+    ]
+    startup = _startup_bundle(services)
+    assert verify.competitor_hints(startup, services, EXCL) == []
+    clinic = _bundle(services)  # the same services in a clinic segment are a vendor's
+    assert any("services are software" in h for h in verify.competitor_hints(clinic, services, EXCL))
+    agency = [
+        _fact(f"a{i}", "service", {"name": n}, n, S_HOME, verified=True, verified_at=NOW)
+        for i, n in enumerate(["Custom software development", "MVP development for founders"])
+    ]
+    assert verify.competitor_hints(_startup_bundle(agency), agency, EXCL) == [
+        "2 of 2 services are software, marketing or hiring"
+    ]
+
+
+def test_the_competitor_question_for_a_startup_asks_about_client_services() -> None:
+    flag = _fact("f1", "is_agency_or_vendor", {"value": True}, "AI checkout assistant for independent shops.", S_HOME)
+    phone = _fact("f2", "email", {"email": "hello@brightcart.io"}, "hello@brightcart.io", S_HOME)
+    pages = [_page("p1", S_HOME, S_HOME_TEXT + "\nhello@brightcart.io"), _page("p2", S_TEAM, S_TEAM_TEXT)]
+    asker, router = _asker([FlaggedVerification(trusted_fact_id=None, is_competitor=False, reason="Own product.")])
+    plan = plan_business(_startup_bundle([flag, phone], pages=pages), FIRMS, EXCL, NO_SUPPRESSION, asker, DEPS)
+    assert router.calls[0].inputs["question"] == verify.STARTUP_AGENCY_QUESTION
+    assert plan.status == "researched"

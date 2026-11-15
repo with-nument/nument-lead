@@ -12,6 +12,11 @@ Batches go through `nument_engine.llm.batch` (Step 4.10.2): `submit(router, task
 reserves the money, picks a batch-capable model and falls back to up to 40 sync calls; `collect(router, task=...)`
 validates each finished item, logs batch-price costs and retries an invalid item once as a sync call through
 `rebuild_inputs`. Item keys are `extract_facts:<business_id>`.
+
+v2 (15 Nov 2026): for startups the model also reads who is on the team and who builds the product, the
+product's status, AI, money raised or earned, the stated team size and the founding year. They are stored as
+facts like the rest (`team_member`, `tech_statement`, `funding_mention`, ...), verified by code and turned into
+the startup profile by `pipeline/qualify.py`.
 """
 
 from __future__ import annotations
@@ -56,6 +61,10 @@ PAGE_BUDGET_TOKENS: dict[str, int] = {
     "booking": 800,
     "about": 1500,
     "practo": 1500,
+    # the deeper startup crawl (15 Nov 2026): funding news, launches and the legal notice
+    "press": 1500,
+    "blog": 1200,
+    "imprint": 600,
 }
 PAGE_ORDER = list(PAGE_BUDGET_TOKENS)
 REPEATED_ON_PAGES = 3
@@ -67,11 +76,15 @@ BOILERPLATE = re.compile(
 ONLY_SYMBOLS = re.compile(r"^[\W\d_]+$")
 KEEP_FIRST = re.compile(
     r"\+?\d[\d\s().-]{7,}\d|@|₹|\brs\.?\s?\d|\baed\b|\bsar\b|price|fee|\bdr\.?\s|doctor|founder|director|ceo|"
-    r"branch|centre|center|years|experience|book|appointment|whatsapp|hiring|\bjob",
+    r"branch|centre|center|years|experience|book|appointment|whatsapp|hiring|\bjob|"
+    # startups: the team and who builds, money raised or earned, the product's state
+    r"\bcto\b|engineer|developer|team of|raised|funding|seed|investor|backed by|accelerator|waitlist|"
+    r"early access|app store|google play|customers|revenue|\barr\b|\bmrr\b|[$€£]\s?\d",
     re.I,
 )
 NO_ONLINE_BOOKING = re.compile(r"call|phone|walk[- ]?in|visit|none|no online|not available", re.I)
 ONLINE_BOOKING = re.compile(r"online|form|whatsapp|\bapp\b|portal|practo|book now|calendly|widget", re.I)
+_KIND_NUMBER = re.compile(r"[_-]?\d+$")
 
 # The AI fact fields (A.13.2). Earlier rows of these fields are replaced when new results arrive.
 AI_FIELDS = (
@@ -91,12 +104,26 @@ AI_FIELDS = (
     "is_agency_or_vendor",
     "language",
     "sales_note",
+    # v2: the startup fields (15 Nov 2026)
+    "team_member",
+    "team_size",
+    "founded_year",
+    "product_status",
+    "uses_ai",
+    "funding_mention",
+    "revenue_hint",
+    "tech_statement",
 )
 
 
 # ---------------------------------------------------------------------------------------------------
 # Building the input (Step 9.11)
 # ---------------------------------------------------------------------------------------------------
+
+
+def base_kind(kind: str) -> str:
+    """'blog_2' -> 'blog': a crawl may keep several pages of one kind under numbered keys."""
+    return _KIND_NUMBER.sub("", kind)
 
 
 @dataclass
@@ -118,8 +145,13 @@ def trim_pages(pages: Sequence[PageIn], max_tokens: int = MAX_INPUT_TOKENS - INS
     carry = 0
     total_left = max_tokens * CHARS_PER_TOKEN
     seen_repeated: set[str] = set()
-    for page in sorted(pages, key=lambda p: PAGE_ORDER.index(p.kind) if p.kind in PAGE_ORDER else len(PAGE_ORDER)):
-        budget = min(PAGE_BUDGET_TOKENS.get(page.kind, 1000) * CHARS_PER_TOKEN + carry, total_left)
+
+    def order(p: PageIn) -> int:
+        kind = base_kind(p.kind)
+        return PAGE_ORDER.index(kind) if kind in PAGE_ORDER else len(PAGE_ORDER)
+
+    for page in sorted(pages, key=order):
+        budget = min(PAGE_BUDGET_TOKENS.get(base_kind(page.kind), 1000) * CHARS_PER_TOKEN + carry, total_left)
         lines = []
         for line in split[page.url]:
             if ONLY_SYMBOLS.match(line) or (BOILERPLATE.search(line) and len(line) < 160):
@@ -314,6 +346,15 @@ FLAT: dict[str, tuple[str, tuple[str, ...]]] = {
     "is_agency_or_vendor": ("is_agency_or_vendor", ("value",)),
     "languages": ("language", ("value",)),
     "sales_notes": ("sales_note", ("value",)),
+    # v2: the startup fields (15 Nov 2026), read by pipeline/qualify.py
+    "team_members": ("team_member", ("name", "role", "is_founder", "is_engineer")),
+    "team_size": ("team_size", ("count",)),
+    "founded_year": ("founded_year", ("year",)),
+    "product_status": ("product_status", ("value", "platform")),
+    "uses_ai": ("uses_ai", ("value",)),
+    "funding_mentions": ("funding_mention", ("round", "amount", "currency", "date")),
+    "revenue_hints": ("revenue_hint", ("kind", "value")),
+    "tech_statements": ("tech_statement", ("kind",)),
 }
 
 

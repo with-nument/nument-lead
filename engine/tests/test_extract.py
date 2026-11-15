@@ -16,8 +16,9 @@ from nument_engine.pipeline import extract
 from nument_engine.pipeline.extract import PageIn, flatten, page_for, pages_block, trim_pages
 
 from .sources_helpers import FakeRouter, clean_db, insert_business, no_network, run_context
+from .startup_fakes import firms_us
 
-__all__ = ["clean_db", "no_network"]
+__all__ = ["clean_db", "firms_us", "no_network"]
 
 SITE = "https://extractclinic-nlead.in"
 NAV = "Home | About | Doctors | Contact\nCall +91 98765 43210\n© 2026 Extract Clinic. All rights reserved."
@@ -282,3 +283,169 @@ def test_without_a_router_nothing_is_submitted(clean_db: str, monkeypatch: pytes
     monkeypatch.setattr("nument_engine.sources.base.router_for_run", lambda rc: None)
     out = extract.submit(run_context(segments=["clinics-in"]))
     assert out["skipped"] == "no AI router"
+
+
+# ---------------------------------------------------------------------------------------------------
+# extract_facts v2: the startup fields (15 Nov 2026)
+# ---------------------------------------------------------------------------------------------------
+
+STARTUP = "https://brightcart-nlead.io"
+STARTUP_TEAM = (
+    "Our team\nMaya Chen, Co-founder and CEO, ex-McKinsey\nTom Price, Co-founder and COO\n"
+    "We are a team of 4 building the checkout for small shops."
+)
+STARTUP_HOME = (
+    "BrightCart\nAI checkout assistant for independent shops.\nJoin the waitlist for early access.\n"
+    "Backed by Pioneer Fund: we raised a $400K pre-seed round in March 2026.\nFounded in 2025.\n"
+    "We are looking for a technical co-founder to build the first version."
+)
+
+
+def startup_json() -> dict[str, Any]:
+    team = f"{STARTUP}/team"
+    return {
+        "business_name": {"quote": "BrightCart", "url": f"{STARTUP}/", "value": "BrightCart"},
+        "team_members": [
+            {"quote": "Maya Chen, Co-founder and CEO", "url": team, "name": "Maya Chen", "role": "Co-founder and CEO",
+             "is_founder": True, "is_engineer": False},
+            {"quote": "Tom Price, Co-founder and COO", "url": team, "name": "Tom Price", "role": "Co-founder and COO",
+             "is_founder": True, "is_engineer": False},
+        ],
+        "team_size": {"quote": "We are a team of 4 building the checkout", "url": team, "count": 4},
+        "founded_year": {"quote": "Founded in 2025.", "url": f"{STARTUP}/", "year": 2025},
+        "product_status": {"quote": "Join the waitlist for early access.", "url": f"{STARTUP}/", "value": "waitlist"},
+        "uses_ai": {"quote": "AI checkout assistant for independent shops.", "url": f"{STARTUP}/", "value": True},
+        "funding_mentions": [
+            {"quote": "we raised a $400K pre-seed round in March 2026", "url": f"{STARTUP}/", "round": "pre-seed",
+             "amount": 400000, "currency": "USD", "date": "March 2026"}
+        ],
+        "revenue_hints": [],
+        "tech_statements": [
+            {"quote": "We are looking for a technical co-founder to build the first version.", "url": f"{STARTUP}/",
+             "kind": "no_technical_team"}
+        ],
+    }  # fmt: skip
+
+
+def test_v2_startup_fields_flatten_into_facts() -> None:
+    rows = flatten(FactsExtraction.model_validate(startup_json()))
+    by_field: dict[str, list[dict[str, Any]]] = {}
+    for f, v, _, _ in rows:
+        by_field.setdefault(f, []).append(v)
+    assert by_field["team_member"][0] == {
+        "name": "Maya Chen", "role": "Co-founder and CEO", "is_founder": True, "is_engineer": False
+    }  # fmt: skip
+    assert len(by_field["team_member"]) == 2
+    assert by_field["team_size"] == [{"count": 4}] and by_field["founded_year"] == [{"year": 2025}]
+    assert by_field["product_status"] == [{"value": "waitlist", "platform": None}]
+    assert by_field["uses_ai"] == [{"value": True}]
+    assert by_field["funding_mention"] == [
+        {"round": "pre-seed", "amount": 400000.0, "currency": "USD", "date": "March 2026"}
+    ]
+    assert by_field["tech_statement"] == [{"kind": "no_technical_team"}]
+    assert {f for f in by_field} <= set(extract.AI_FIELDS)  # replaced on the next extraction
+
+
+def test_v1_answers_still_parse_and_leave_the_startup_fields_empty() -> None:
+    old = FactsExtraction.model_validate(facts_json())
+    assert old.team_members == [] and old.funding_mentions == [] and old.product_status is None
+    assert not {f for f, *_ in flatten(old)} & {"team_member", "funding_mention", "product_status"}
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"team_members": [{"quote": "Maya Chen, CEO", "url": "u", "name": "Maya Chen", "is_founder": True}]},
+        {"product_status": {"quote": "Join the waitlist", "url": "u", "value": "beta"}},
+        {"revenue_hints": [{"quote": "Paid plans from $9", "url": "u", "kind": "income", "value": "$9"}]},
+        {"funding_mentions": [{"quote": "We raised 1M", "url": "u", "amount": -5}]},
+        {"founded_year": {"quote": "Since 1066 and all that", "url": "u", "year": 1066}},
+        {"tech_statements": [{"quote": "x" * 301, "url": "u", "kind": "no_code"}]},
+    ],
+)
+def test_v2_output_validation_refuses_bad_values(bad: dict[str, Any]) -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        FactsExtraction.model_validate(bad)
+
+
+def test_v2_prompt_asks_for_startup_fields_only_in_startup_segments() -> None:
+    from nument_engine.llm import prompts
+    from nument_engine.llm.health import SMOKE_INPUTS
+
+    prompt = prompts.load("extract_facts.md", directory=extract_prompt_dir())
+    assert prompt.version == 2
+    startup, _ = prompt.render(**{**SMOKE_INPUTS["extract_facts"], "domain": "firms"})
+    clinic, _ = prompt.render(**SMOKE_INPUTS["extract_facts"])
+    assert "team_members: the people the pages list as the team" in startup and "Leave the startup" not in startup
+    assert "Leave the startup fields empty" in clinic and "team_members: the people" not in clinic
+
+
+def extract_prompt_dir() -> Any:
+    from pathlib import Path
+
+    return Path(extract.__file__).resolve().parents[3] / "prompts"
+
+
+def test_startup_pages_get_their_own_budgets_and_numbered_kinds_count_as_their_kind() -> None:
+    assert extract.base_kind("blog_2") == "blog" and extract.base_kind("press") == "press"
+    trimmed = trim_pages(
+        [
+            PageIn("blog_2", f"{STARTUP}/blog/launch", "We launched on Product Hunt today.", "b2"),
+            PageIn("imprint", f"{STARTUP}/imprint", "Managing director: Maya Chen", "i1"),
+            PageIn("press", f"{STARTUP}/press", "BrightCart raises $400K pre-seed", "p9"),
+            PageIn("home", f"{STARTUP}/", STARTUP_HOME, "h1"),
+        ]
+    )
+    assert [p.kind for p in trimmed] == ["home", "press", "blog_2", "imprint"]
+
+
+def test_startup_key_lines_survive_trimming() -> None:
+    filler = "\n".join(f"Paragraph {i} about how much shop owners love a calm checkout." for i in range(400))
+    page = PageIn("home", f"{STARTUP}/", filler + "\nWe raised a $400K pre-seed round\n" + filler, "h1")
+    assert "We raised a $400K pre-seed round" in trim_pages([page])[0].text
+
+
+def seed_startup(**kw: Any) -> str:
+    bid = insert_business(
+        segment_id="firms-us",
+        country="us",
+        city="San Francisco",
+        name="BrightCart",
+        website=f"{STARTUP}/",
+        web_domain="brightcart-nlead.io",
+        status="queued",
+        queued_at=datetime.now(UTC),
+        queue_priority=10,
+        **kw,
+    )
+    crawl = {}
+    for kind, url, text in (("home", f"{STARTUP}/", STARTUP_HOME), ("team", f"{STARTUP}/team", STARTUP_TEAM)):
+        db.execute("insert into public.pages (business_id, url, text) values (%s, %s, %s)", [bid, url, text])
+        crawl[kind] = url
+    db.execute(
+        "update public.businesses set extra = jsonb_set(extra, '{crawl}', %s) where id = %s",
+        [db.Jsonb({"state": "ok", "pages": crawl, "at": datetime.now(UTC).isoformat()}), bid],
+    )
+    return bid
+
+
+def test_collect_stores_the_startup_fields_as_facts(firms_us: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    bid = seed_startup()
+    out = FactsExtraction.model_validate(startup_json())
+    batch(monkeypatch, FakeBatch([item(bid, out)]))
+    stats = extract.collect(run_context(segments=["firms-us"]), router=FakeRouter())
+    assert stats["businesses"] == 1
+    facts = db.fetch_all(
+        "select field, value, url, page_id from public.facts where business_id = %s and model <> 'rule'", [bid]
+    )
+    fields = sorted(f["field"] for f in facts)
+    assert fields.count("team_member") == 2 and "funding_mention" in fields and "tech_statement" in fields
+    team = [f for f in facts if f["field"] == "team_member"]
+    assert all(f["url"] == f"{STARTUP}/team" and f["page_id"] for f in team)
+    # a second answer replaces the first one's startup facts instead of piling up
+    batch(monkeypatch, FakeBatch([item(bid, out)]))
+    db.execute("update public.businesses set status = 'queued' where id = %s", [bid])
+    extract.collect(run_context(segments=["firms-us"]), router=FakeRouter())
+    assert db.scalar("select count(*) from public.facts where business_id = %s and field = 'team_member'", [bid]) == 2

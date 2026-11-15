@@ -66,7 +66,7 @@ def test_extraction_batch_goes_to_gemini_when_openai_is_off(llm_db: str) -> None
     assert float(reserved) == pytest.approx(job.reserved_inr) and job.reserved_inr > 0
     assert store.items_in_flight("extract_facts", KEYS) == set(KEYS)
     meta = store.batch_meta(job.llm_batch_id)
-    assert meta is not None and meta["model"] == "gemini-3.8-flash" and meta["prompt_version"] == 1
+    assert meta is not None and meta["model"] == "gemini-3.8-flash" and meta["prompt_version"] == 2
     assert meta["fallback_from"] is None and meta["keys"] == KEYS
 
 
@@ -100,7 +100,7 @@ def test_failed_submissions_fall_back_to_a_few_sync_calls(llm_db: str) -> None:
     result = batch.submit(router, "extract_facts", _items(), sync_fallback_limit=2)
     assert result.jobs == []
     assert [r.key for r in result.sync_results] == KEYS[:2] and all(r.ok and r.sync for r in result.sync_results)
-    assert result.sync_results[0].tag == "gemini:gemini-3.8-flash#extract_facts.v1"
+    assert result.sync_results[0].tag == "gemini:gemini-3.8-flash#extract_facts.v2"
     assert result.deferred == KEYS[2:]
     assert router.stats["batches"]["extract_facts"] == {"submitted": 0, "sync": 2, "deferred": 1}
 
@@ -137,7 +137,7 @@ def test_collect_ingests_results_logs_batch_costs_and_releases_the_reservation(l
     out = batch.collect(router, "extract_facts")
     assert [r.key for r in out.results] == KEYS and all(r.ok and not r.sync for r in out.results)
     assert isinstance(out.results[0].output, FactsExtraction)
-    assert out.results[0].tag == "gemini:gemini-3.8-flash#extract_facts.v1"
+    assert out.results[0].tag == "gemini:gemini-3.8-flash#extract_facts.v2"
     assert out.failed_keys == [] and out.pending == []
 
     row = _batches()[0]
