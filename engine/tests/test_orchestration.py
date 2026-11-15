@@ -273,3 +273,23 @@ def test_health_failure_stops_the_morning_run(clean_costs: None, monkeypatch: py
     with pytest.raises(EssentialPhaseFailed, match="health"), run_context("morning", Options()) as rc:
         runs.morning(rc)
     assert _row(rc.run_id)["status"] == "failed"
+
+
+@pytest.mark.parametrize(
+    ("setting", "runs_phases"),
+    [(None, False), ("off", False), ("OFF", False), ("bogus", False), ("manual", True), ("auto", True)],
+)
+def test_outreach_does_nothing_while_it_is_off(
+    monkeypatch: pytest.MonkeyPatch, setting: str | None, runs_phases: bool
+) -> None:
+    """15 Nov 2026: the email autopilot is off until the founder switches it on; off means no phase runs."""
+    from nument_engine import db
+
+    monkeypatch.setattr(db, "get_setting", lambda key, default=None, **_: setting if setting is not None else default)
+    called: list[list[str]] = []
+    monkeypatch.setattr(runs, "execute", lambda rc, phases: called.append([p.name for p in phases]))
+    rc = runs.RunContext(run_id="r1", kind="outreach", opts=Options(), started_at=dt.datetime.now(dt.UTC))
+    runs.outreach(rc)
+    assert bool(called) is runs_phases
+    if not runs_phases:
+        assert rc.stats["outreach"] == "off"

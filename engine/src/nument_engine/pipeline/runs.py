@@ -451,8 +451,23 @@ def midday(rc: RunContext) -> None:
     execute(rc, midday_phases())
 
 
+OUTREACH_MODES: Final = ("off", "manual", "auto")
+
+
+def outreach_mode() -> str:
+    """settings outreach.mode: off (the default), manual (a person approves every send) or auto (only threads
+    that meet the quality bar send on their own). Anything else counts as off."""
+    mode = str(db.get_setting("outreach.mode", "off") or "off").strip().lower()
+    return mode if mode in OUTREACH_MODES else "off"
+
+
 def outreach(rc: RunContext) -> None:
-    """Every 15 minutes while outreach is on: mail in, replies, briefs, proposals, checks, plans, sends."""
+    """Every 15 minutes while outreach is on: mail in, replies, briefs, proposals, checks, plans, sends.
+    While outreach.mode is off the run does nothing at all."""
+    if outreach_mode() == "off":
+        rc.stats["outreach"] = "off"
+        log.info("outreach.off")
+        return
     execute(rc, outreach_phases())
 
 
