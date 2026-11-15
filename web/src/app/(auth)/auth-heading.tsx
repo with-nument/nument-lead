@@ -1,15 +1,12 @@
 import { Mark } from '@/components/brand/logo'
 
-/** Small brand above the title on phones (the art panel carries it on larger screens). */
+/** The Nument mark, the page title and one line of help, centred at the top of the glass panel. */
 export function AuthHeading({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
-    <div className="mb-7 text-center">
-      <div className="mb-5 flex items-center justify-center gap-2 md:hidden">
-        <Mark className="size-6" />
-        <span className="wordmark text-[20px]">nument</span>
-      </div>
-      <h1 className="font-display text-title font-medium text-[var(--color-ink-auth)]">{title}</h1>
-      {subtitle ? <p className="mt-2 text-base text-tx-3">{subtitle}</p> : null}
+    <div className="mb-7 flex flex-col items-center text-center">
+      <Mark className="size-12 shadow-[var(--ui-shadow-panel)]" />
+      <h1 className="mt-5 text-[28px] leading-[34px] font-bold tracking-[-0.021em] text-label-1">{title}</h1>
+      {subtitle ? <p className="type-body mt-2 max-w-[30ch] text-balance text-label-2">{subtitle}</p> : null}
     </div>
   )
 }
