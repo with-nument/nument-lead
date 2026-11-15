@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "../styles/tokens.css";
+@import "../styles/theme.css";
 
 /*
   Tailwind theme mapped onto the Nument kit tokens.
@@ -94,6 +95,69 @@
   --text-kpi--line-height: 36px;
 
   --ease-ui: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/*
+  New design (v2) names, mapped onto src/styles/theme.css. This block must stay after the v1 theme:
+  its `--color-*: initial` reset would wipe anything defined before it. Names never reuse a v1 name.
+*/
+@theme inline {
+  --color-label-1: var(--ui-label-1);
+  --color-label-2: var(--ui-label-2);
+  --color-label-3: var(--ui-label-3);
+  --color-label-4: var(--ui-label-4);
+  --color-fill-1: var(--ui-fill-1);
+  --color-fill-2: var(--ui-fill-2);
+  --color-fill-3: var(--ui-fill-3);
+  --color-separator: var(--ui-separator);
+  --color-separator-strong: var(--ui-separator-strong);
+  --color-thumb: var(--ui-thumb);
+  --color-scrim: var(--ui-scrim);
+  --color-accent: var(--ui-accent);
+  --color-accent-fill: var(--ui-accent-fill);
+  --color-accent-fill-hover: var(--ui-accent-fill-hover);
+  --color-on-accent: var(--ui-on-accent);
+  --color-status-ok: var(--ui-ok);
+  --color-status-warn: var(--ui-warn);
+  --color-status-bad: var(--ui-bad);
+  --color-stage-new: var(--ui-stage-new);
+  --color-stage-contacted: var(--ui-stage-contacted);
+  --color-stage-replied: var(--ui-stage-replied);
+  --color-stage-call-booked: var(--ui-stage-call-booked);
+  --color-stage-call-done: var(--ui-stage-call-done);
+  --color-stage-proposal: var(--ui-stage-proposal);
+  --color-stage-won: var(--ui-stage-won);
+  --color-stage-retainer: var(--ui-stage-retainer);
+  --color-stage-lost: var(--ui-stage-lost);
+  --color-stage-not-now: var(--ui-stage-not-now);
+  --color-stage-not-a-fit: var(--ui-stage-not-a-fit);
+  --color-stage-wrong-contact: var(--ui-stage-wrong-contact);
+  --color-grade-a: var(--ui-grade-a);
+  --color-grade-a-ink: var(--ui-grade-a-ink);
+  --color-grade-b: var(--ui-grade-b);
+  --color-grade-b-ink: var(--ui-grade-b-ink);
+  --color-grade-c: var(--ui-grade-c);
+  --color-grade-c-ink: var(--ui-grade-c-ink);
+  --color-grade-d: var(--ui-grade-d);
+  --color-grade-d-ink: var(--ui-grade-d-ink);
+  --color-line-owner: var(--ui-line-owner);
+  --color-line-front-desk: var(--ui-line-front-desk);
+  --color-line-bot: var(--ui-line-bot);
+  --color-line-other: var(--ui-line-other);
+  --color-panel: var(--ui-panel-bg);
+  --color-bar: var(--ui-bar-bg);
+  --color-overlay: var(--ui-overlay-bg);
+  --color-field: var(--ui-field);
+
+  --font-ui: var(--ui-font);
+
+  --radius-control: 10px;
+  --radius-panel: 16px;
+  --radius-sheet: 22px;
+  --radius-window: 28px;
+
+  --ease-glide: var(--ui-ease-glide);
+  --ease-snap: var(--ui-ease);
 }
 
 @layer base {
