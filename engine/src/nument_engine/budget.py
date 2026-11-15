@@ -19,6 +19,7 @@ to see spend from other processes. All methods are safe to call from several thr
 
 from __future__ import annotations
 
+import calendar
 import math
 import threading
 import time
@@ -221,6 +222,16 @@ def ist_day_start(now: datetime | None = None) -> datetime:
 def ist_month_start(now: datetime | None = None) -> datetime:
     today = ist_today(now)
     return datetime(today.year, today.month, 1, tzinfo=IST)
+
+
+def month_pace(free_left_at_day_start: int, now: datetime | None = None) -> int:
+    """Today's share of the month's free grounded queries: what was left when the IST day began, divided evenly
+    over the days left in the month (today included) and rounded up. 0 once the month's allowance is spent."""
+    if free_left_at_day_start <= 0:
+        return 0
+    today = ist_today(now)
+    days_left = calendar.monthrange(today.year, today.month)[1] - today.day + 1
+    return math.ceil(free_left_at_day_start / days_left)
 
 
 def estimate_tokens(text: str, script: str = "latin") -> int:
@@ -728,24 +739,55 @@ class Budget:
         usd = places_cost_usd(sku, calls, used_this_month=used, region=self.places_billing_region(), prices=self.prices)
         return self.record("google_places", sku, places_task(kind, country), calls=calls, usd=usd)
 
+    def _searches(self, since: datetime, tasks: Iterable[str] | None) -> int:
+        task_list = None if tasks is None else list(tasks)
+        value = db.scalar(
+            "select coalesce(sum(calls), 0) from public.costs where provider = 'google_search' and at >= %s "
+            "and (%s::text[] is null or task = any(%s::text[]))",
+            [since, task_list, task_list],
+        )
+        return int(value or 0)
+
+    def searches_today(self, tasks: Iterable[str] | None = None) -> int:
+        """Grounded-search queries logged today (IST): every AI task, or only these tasks."""
+        return self._searches(ist_day_start(self.clock()), tasks)
+
+    def searches_this_month(self, tasks: Iterable[str] | None = None) -> int:
+        """Grounded-search queries logged this month (IST): every AI task, or only these tasks."""
+        return self._searches(ist_month_start(self.clock()), tasks)
+
     def grounding_quota_left(self) -> int:
-        """Grounded-search queries still allowed today: settings cap per day, free allowance per month."""
+        """Grounded-search queries still allowed today, the smallest of four rooms: the daily cap in settings,
+        Gemini's own daily limit, the free allowance left this month, and the month's pace (15 Nov 2026): the
+        free queries left when the IST day began, spread evenly over the days left in the month. A busy first
+        week can then never leave the last days of the month without searches."""
         g = self.prices.search.gemini_grounding
         per_day = self._first_setting(("grounding_daily_cap", "grounded_search.per_day"), 160)
         assert per_day is not None
-        return self.quota_left(
-            "google_search", GROUNDING_TASK, per_day=min(per_day, g.daily_limit), per_month=g.free_per_month
-        )
+        used_today = self.searches_today()
+        used_month = self.searches_this_month()
+        pace = month_pace(g.free_per_month - (used_month - used_today), self.clock())
+        room = min(min(per_day, g.daily_limit) - used_today, g.free_per_month - used_month, pace - used_today)
+        return max(0, room)
 
     def record_search(
-        self, provider: str, model: str | None, queries: int, *, fallback_from: str | None = None
+        self,
+        provider: str,
+        model: str | None,
+        queries: int,
+        *,
+        fallback_from: str | None = None,
+        task: str | None = None,
     ) -> float:
-        """Log the web-search queries of one call as provider google_search. Returns INR."""
+        """Log the web-search queries of one call as provider google_search, under the AI task that made them
+        (`pipeline/grounding.py` counts each use by its tasks). Returns INR."""
         if queries <= 0:
             return 0.0
-        used = self.calls_this_month("google_search", [GROUNDING_TASK]) if provider == "gemini" else 0
+        used = self.searches_this_month() if provider == "gemini" else 0
         usd = search_cost_usd(provider, queries, used_this_month=used, prices=self.prices)
-        return self.record("google_search", model, GROUNDING_TASK, calls=queries, usd=usd, fallback_from=fallback_from)
+        return self.record(
+            "google_search", model, task or GROUNDING_TASK, calls=queries, usd=usd, fallback_from=fallback_from
+        )
 
     def pagespeed_quota_left(self) -> int:
         per_day = self._first_setting(("pagespeed_daily_cap",), 600)

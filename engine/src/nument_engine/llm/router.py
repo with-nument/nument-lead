@@ -574,7 +574,7 @@ class Router:
             cost.append(self._log(cfg, ref, resp.usage, fallback_from))
             cost.append(
                 self.budget.record_search(
-                    ref.provider, ref.model, resp.usage.search_queries, fallback_from=fallback_from
+                    ref.provider, ref.model, resp.usage.search_queries, fallback_from=fallback_from, task=cfg.name
                 )
             )
             usage.append(resp.usage)
