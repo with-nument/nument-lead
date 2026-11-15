@@ -411,6 +411,7 @@ def _fit(lines: Sequence[str], limit: int) -> list[str]:
 TASK = "classify_startup_item"
 MIN_CONFIDENCE = 0.6
 TEXT_CHARS = 3500
+CONTEXT_CHARS = 1800  # the homepage excerpt the AI may read on top of the item
 EVENT_TO_TYPE = {"funding": "funding", "launch": "launch", "hiring": "news", "ask": "news", "other": "news"}
 # Round words of the classifier that `startup.normalize_round` does not know as written.
 MODEL_ROUNDS = {"series_b_plus": "series_b"}
@@ -424,10 +425,13 @@ _FOLD = str.maketrans({"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"
 class StartupItem:
     """One item that may be about a startup, ready for `classify_startup_item`.
 
-    `text` is what the AI reads and what quotes, names and websites are checked against. `website` is a site the
-    source itself gives (a Show HN post's link, a BetaList visit link); otherwise only a site the AI names and
-    the item shows is kept. `signal_type` fixes the type (a launch post is a launch whatever else it says);
-    None lets the event decide (funding news)."""
+    `text` is what the AI reads and what quotes, names and websites are checked against. `context` is more for
+    the AI to read (the opening lines and footer of the startup's homepage, from `context_url`): it helps the
+    classifier see what the company does and where it is, but quotes always come from the item itself, and a
+    founder named only there cites `context_url`. `website` is a site the source itself gives (a Show HN post's
+    link, a BetaList visit link); otherwise only a site the AI names and the item shows is kept. `signal_type`
+    fixes the type (a launch post is a launch whatever else it says); None lets the event decide (funding
+    news)."""
 
     source: str
     key: str  # source_records key and the signal's evidence key
@@ -440,6 +444,16 @@ class StartupItem:
     feed: str = ""
     signal_type: str | None = None
     details: dict[str, Any] = field(default_factory=dict)
+    context: str = ""
+    context_url: str | None = None
+    site_url: str | None = None  # the page to read for `context`: the root of the exact link the source gave
+
+
+def root_of(url: str) -> str:
+    """`https://www.acme.com/` for any page of that host (scheme and host kept as given: some sites answer only
+    on www)."""
+    parts = urlsplit(url)
+    return urlunsplit((parts.scheme or "https", parts.netloc, "/", "", ""))
 
 
 def _squash(text: str) -> str:
@@ -514,8 +528,19 @@ class ItemJudge:
             "url": item.url,
             "published": item.published.date().isoformat() if item.published else None,
             "title": item.title,
-            "text": mask_contacts(item.text)[:TEXT_CHARS],
+            "text": self.ai_text(item),
         }
+
+    @staticmethod
+    def ai_text(item: StartupItem) -> str:
+        """The item's text for the AI (contacts masked), then the homepage excerpt when there is one."""
+        text = mask_contacts(item.text)[:TEXT_CHARS]
+        if item.context:
+            room = max(0, TEXT_CHARS + CONTEXT_CHARS - len(text))
+            text = f"{text}\n\nFrom the company's homepage ({item.context_url}):\n{mask_contacts(item.context)}"[
+                : len(text) + room
+            ]
+        return text
 
     def judge(self, item: StartupItem) -> tuple[Signal | None, str]:
         """(signal or None, why) for one item: one AI call, then the checks of `signal_from`."""
@@ -582,11 +607,12 @@ class ItemJudge:
         investors = names_in(field_of(result, "investors") or [], source_text, limit=MAX_INVESTORS)
         if investors:
             details["investors"] = investors
+        named = field_of(result, "founders") or []
+        in_item = names_in(named, source_text, limit=5)
+        on_site = names_in(named, item.context, limit=5) if item.context and item.context_url else []
         founders = startup.founders_detail(
-            [
-                {"name": n, "role": "Founder"}
-                for n in names_in(field_of(result, "founders") or [], source_text, limit=5)
-            ],
+            [{"name": n, "role": "Founder", "source_url": item.url} for n in in_item]
+            + [{"name": n, "role": "Founder", "source_url": item.context_url} for n in on_site],
             source_url=item.url,
         )
         if founders:
