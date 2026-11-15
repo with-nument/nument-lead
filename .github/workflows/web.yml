@@ -68,3 +68,8 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      # First-load JavaScript per page, gzipped, against its budget (scripts/check-bundles.mjs). Pages still on
+      # the first design are listed there as TODO and only reported.
+      - name: JavaScript budgets
+        run: node scripts/check-bundles.mjs
