@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 // The sign-in pages are v2 as well.
 
 const SRC = path.join(__dirname, '../../src')
-const V2_DIRS = ['app/(v2)', 'components/ui2', 'components/shell2', 'app/(auth)']
+const V2_DIRS = ['app/(v2)', 'components/ui2', 'components/shell2'] // sign-in is classic again until the kit-based redesign (16 Nov 2026)
 
 function files(dir: string): string[] {
   const out: string[] = []

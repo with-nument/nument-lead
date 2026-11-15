@@ -1,72 +1,24 @@
-'use client'
+import { cn } from '@/lib/cn'
 
-import { useFormStatus } from 'react-dom'
-import { ActivityIndicator } from '@/components/ui2/activity-indicator'
-import { buttonClass } from '@/components/ui2/button'
-import { cx } from '@/components/ui2/cx'
-import { useHydrated } from '@/lib/use-hydrated'
+export const authInput =
+  'h-11 w-full rounded-full border border-line bg-surface px-4 text-lg text-tx-1 transition-[border-color,box-shadow] duration-150 sm:text-md ' +
+  'placeholder:text-tx-4 focus-visible:outline-none focus-visible:focus-ring aria-invalid:border-red-300 aria-invalid:shadow-[var(--shadow-focus-error)]'
 
-// The sign-in pages are the first thing anyone loads, so they stay lean: no icon library and plain
-// links between these static pages (next/link and lucide would add about 3.5 KB).
+export const authPrimary =
+  'relative inline-flex h-11 w-full items-center justify-center rounded-full bg-[var(--color-ink-auth)] px-4 text-md font-medium text-white transition-[background-color,transform] duration-300 ease-ui ' +
+  'hover:bg-[var(--color-ink)] active:scale-[0.98] [&:disabled:not([data-hydrating]):not([aria-busy])]:bg-surface-3 [&:disabled:not([data-hydrating]):not([aria-busy])]:text-tx-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400'
 
-/** A short message under the fields: an error (announced at once) or a quiet confirmation. */
-export function AuthAlert({ children, tone = 'error', id, className }: { children: React.ReactNode; tone?: 'error' | 'info'; id?: string; className?: string }) {
+export function AuthAlert({ children, tone = 'error', className }: { children: React.ReactNode; tone?: 'error' | 'info'; className?: string }) {
   return (
-    <p id={id} role={tone === 'error' ? 'alert' : 'status'} className={cx('type-subhead px-4', tone === 'error' ? 'text-status-bad' : 'text-label-2', className)}>
-      {children}
-    </p>
-  )
-}
-
-/**
- * The form's one primary button. It stays disabled until the page is interactive: with partial
- * prerendering, a form posted before hydration would get the cached shell back instead of running
- * its Server Action.
- */
-export function AuthSubmit({ children, pendingLabel }: { children: string; pendingLabel: string }) {
-  const { pending } = useFormStatus()
-  const hydrated = useHydrated()
-  return (
-    <button
-      type="submit"
-      className={buttonClass('primary', 'large')}
-      disabled={pending || !hydrated}
-      data-hydrating={hydrated ? undefined : true}
-      aria-busy={pending || undefined}
-    >
-      {pending ? <ActivityIndicator label={pendingLabel} /> : children}
-    </button>
-  )
-}
-
-/** Small text link under the button (a plain link: these pages are static and tiny). */
-export function AuthLink({ href, children }: { href: string; children: React.ReactNode }) {
-  return (
-    <p className="mt-5 text-center">
-      <a href={href} className="type-body rounded-[6px] text-accent underline-offset-4 hover:underline">
-        {children}
-      </a>
-    </p>
-  )
-}
-
-/** The eye in the password field (lucide's eye and eye-off, inlined). */
-export function EyeIcon({ off }: { off: boolean }) {
-  return (
-    <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-[18px]">
-      {off ? (
-        <>
-          <path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" />
-          <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
-          <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" />
-          <path d="m2 2 20 20" />
-        </>
-      ) : (
-        <>
-          <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
-          <circle cx="12" cy="12" r="3" />
-        </>
+    <div
+      role={tone === 'error' ? 'alert' : 'status'}
+      className={cn(
+        'rounded-xl border px-3 py-2.5 text-sm',
+        tone === 'error' ? 'border-[rgb(184_21_20/0.3)] bg-red-50 text-red-600' : 'border-indigo-200 bg-indigo-50 text-indigo-900',
+        className,
       )}
-    </svg>
+    >
+      {children}
+    </div>
   )
 }

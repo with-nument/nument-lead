@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: 'Reset password' }
 export default function ResetPasswordPage() {
   return (
     <>
-      <AuthHeading title="Reset password" subtitle="We will email you a link to choose a new one." />
+      <AuthHeading title="Reset your password" subtitle="We will email you a link to choose a new one." />
       <ResetRequestForm />
     </>
   )

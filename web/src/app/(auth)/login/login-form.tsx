@@ -1,9 +1,22 @@
 'use client'
 
-import { useActionState, useId, useState, useSyncExternalStore } from 'react'
-import { FieldGroup, FieldRow, fieldInput } from '@/components/ui2/field-group'
+import Link from 'next/link'
+import { useActionState, useId, useSyncExternalStore } from 'react'
+import { useFormStatus } from 'react-dom'
+import { useHydrated } from '@/lib/use-hydrated'
+import { Spinner } from '@/components/ui/spinner'
 import { login, type AuthFormState } from '../actions'
-import { AuthAlert, AuthLink, AuthSubmit, EyeIcon } from '../auth-ui'
+import { AuthAlert, authInput, authPrimary } from '../auth-ui'
+
+function Submit() {
+  const { pending } = useFormStatus()
+  const hydrated = useHydrated()
+  return (
+    <button type="submit" className={authPrimary} disabled={pending || !hydrated} data-hydrating={hydrated ? undefined : true} aria-busy={pending || undefined}>
+      {pending ? <Spinner label="Signing in" /> : 'Sign in'}
+    </button>
+  )
+}
 
 const noop = () => () => {}
 
@@ -21,70 +34,57 @@ function useQuery() {
 export function LoginForm() {
   const [state, action] = useActionState<AuthFormState, FormData>(login, undefined)
   const { next, linkError } = useQuery()
-  const [show, setShow] = useState(false)
   const id = useId()
-  const invalid = state?.message ? true : undefined
-  const describedBy = state?.message ? `${id}-error` : undefined
   return (
-    <form action={action} className="flex flex-col" noValidate>
+    <form action={action} className="flex flex-col gap-3" noValidate>
       <input type="hidden" name="next" value={next} />
-      {linkError && !state?.message ? <AuthAlert className="mb-4">That link has expired. Ask for a new one.</AuthAlert> : null}
-      <FieldGroup>
-        <FieldRow label="Email" htmlFor={`${id}-email`}>
-          <input
-            id={`${id}-email`}
-            name="email"
-            type="email"
-            autoComplete="username"
-            inputMode="email"
-            autoCapitalize="none"
-            spellCheck={false}
-            required
-            placeholder="name@nument.in"
-            className={fieldInput}
-            aria-invalid={invalid}
-            aria-describedby={describedBy}
-          />
-        </FieldRow>
-        <FieldRow
-          label="Password"
-          htmlFor={`${id}-password`}
-          trailing={
-            <button
-              type="button"
-              onClick={() => setShow((s) => !s)}
-              aria-label={show ? 'Hide password' : 'Show password'}
-              aria-pressed={show}
-              aria-controls={`${id}-password`}
-              className="grid size-9 shrink-0 place-items-center rounded-full text-label-3 transition-colors hover:bg-fill-3 hover:text-label-1"
-            >
-              <EyeIcon off={show} />
-            </button>
-          }
-        >
-          <input
-            id={`${id}-password`}
-            name="password"
-            type={show ? 'text' : 'password'}
-            autoComplete="current-password"
-            required
-            placeholder="Required"
-            className={fieldInput}
-            aria-invalid={invalid}
-            aria-describedby={describedBy}
-          />
-        </FieldRow>
-      </FieldGroup>
-      {state?.message ? (
-        <AuthAlert id={`${id}-error`} className="mt-3">
-          {state.message}
-        </AuthAlert>
-      ) : null}
-      <div className="mt-6">
-        <AuthSubmit pendingLabel="Signing in">Sign in</AuthSubmit>
+      {linkError && !state?.message ? <AuthAlert>That link has expired. Ask for a new one.</AuthAlert> : null}
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor={`${id}-email`} className="text-sm font-medium text-tx-2">
+          Email
+        </label>
+        <input
+          id={`${id}-email`}
+          name="email"
+          type="email"
+          autoComplete="username"
+          inputMode="email"
+          required
+          placeholder="name@nument.in"
+          className={authInput}
+          aria-invalid={state?.message ? true : undefined}
+          aria-describedby={state?.message ? `${id}-error` : undefined}
+        />
       </div>
-      <AuthLink href="/reset-password">Forgot password?</AuthLink>
-      <p className="type-caption mt-7 text-center text-label-3">There is no public sign-up.</p>
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-baseline justify-between">
+          <label htmlFor={`${id}-password`} className="text-sm font-medium text-tx-2">
+            Password
+          </label>
+          <Link href="/reset-password" className="text-sm text-tx-3 underline-offset-2 hover:text-indigo-800 hover:underline">
+            Forgot password?
+          </Link>
+        </div>
+        <input
+          id={`${id}-password`}
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          required
+          className={authInput}
+          aria-invalid={state?.message ? true : undefined}
+          aria-describedby={state?.message ? `${id}-error` : undefined}
+        />
+      </div>
+      {state?.message ? (
+        <div id={`${id}-error`}>
+          <AuthAlert>{state.message}</AuthAlert>
+        </div>
+      ) : null}
+      <div className="mt-2">
+        <Submit />
+      </div>
+      <p className="mt-4 text-center text-sm text-tx-3">New accounts are created by an admin. There is no public sign-up.</p>
     </form>
   )
 }
