@@ -29,7 +29,7 @@ services:
       - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
         sync: false
       - key: NEXT_PUBLIC_APP_URL
-        sync: false              # https://leads.nument.in once the domain is live, else the onrender.com URL
+        sync: false              # https://lead.nument.in (live since 15 Nov 2026); the onrender.com URL still works
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY

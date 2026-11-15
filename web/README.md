@@ -130,7 +130,7 @@ Screenshots for a visual review: `SHOTS_DIR=/abs/path pnpm exec playwright test 
 
 The free plan sleeps after 15 idle minutes, so the first visit after a quiet spell takes up to a minute. Move to the starter plan at go-live.
 
-**Custom domain** `leads.nument.in`: add it under the service's Custom Domains, create a `CNAME` named `leads` pointing to the `onrender.com` host at the DNS provider, wait for the certificate, then update `NEXT_PUBLIC_APP_URL` and the Supabase URLs and redeploy.
+**Custom domain** `lead.nument.in` (live since 15 Nov 2026): a Custom Domain on the Render service and a `CNAME` named `lead` pointing to `nument-leads-web.onrender.com` at GoDaddy. `NEXT_PUBLIC_APP_URL`, the Supabase site URL and redirect list, and the engine's `APP_URL` repository variable point to it; the `onrender.com` address still works (the keep-awake ping uses it).
 
 Password reset emails use Supabase's built-in mailer, which has a low hourly limit and needs a real mailbox. Until custom SMTP is set up, an admin resets passwords from **Settings, Users and roles**.
 

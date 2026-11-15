@@ -29,7 +29,11 @@ const nextConfig: NextConfig = {
     serverActions: {
       // Proposal uploads are up to 10 MB, plus multipart overhead.
       bodySizeLimit: '11mb',
-      allowedOrigins: [...new Set([appHost, 'leads.nument.in', 'nument-leads-web.onrender.com'].filter((h): h is string => Boolean(h)))],
+      allowedOrigins: [
+        ...new Set(
+          [appHost, 'lead.nument.in', 'leads.nument.in', 'nument-leads-web.onrender.com'].filter((h): h is string => Boolean(h)),
+        ),
+      ],
     },
     proxyClientMaxBodySize: '11mb',
   },
