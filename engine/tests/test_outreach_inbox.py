@@ -307,6 +307,33 @@ def test_a_failing_message_keeps_the_cursor_and_the_rest_go_on(
     assert len(world.incoming()) == 2 and _cursor(world) == "2"
 
 
+def test_a_message_that_keeps_failing_is_left_for_the_founder(
+    outreach_on: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world = make_world(outreach_on)
+    real = inbox.handle
+
+    def poison(conn: Any, msg: Incoming, ours: set[str]) -> str:
+        if msg.gmail_message_id.endswith("-1"):
+            raise ValueError("cannot store this one")
+        return real(conn, msg, ours)
+
+    monkeypatch.setattr(inbox, "handle", poison)
+    box = world.box()
+    box.incoming += [world.reply("broken", n=1), world.reply("fine", n=2)]
+    for attempt in range(inbox.MAX_ATTEMPTS):
+        again = world.box()
+        again.incoming = list(box.incoming)
+        stats = _run(again)
+        assert stats["error"] == 1 and _cursor(world) is None, attempt
+    again = world.box()
+    again.incoming = list(box.incoming)
+    stats = _run(again)
+    assert stats == {"fetched": 2, "skipped_after_errors": 1, "duplicate": 1}
+    assert _cursor(world) == "2" and again.read == set()  # it stays unread in Gmail
+    assert len(world.incoming()) == 1
+
+
 def test_outreach_off_reads_nothing(engine_db: str) -> None:
     db.set_setting("outreach.mode", "off")
     box = FakeMailbox("off-test@nument.example")

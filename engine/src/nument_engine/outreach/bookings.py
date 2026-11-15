@@ -24,7 +24,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from psycopg import Connection
+from psycopg import Connection, errors
 
 from .. import db
 from ..logging import get_logger
@@ -483,10 +483,14 @@ def apply(
         if kind == "rescheduled" and current is not None and current.start is not None:
             payload["previous_start"] = current.start.isoformat()
         conn.execute("update public.leads set meeting_at = %s where id = %s", [event.start, match.lead_id])
-        conn.execute(
-            "update public.leads set stage = 'discovery_booked' where id = %s and stage = any(%s)",
-            [match.lead_id, list(BOOKABLE_STAGES)],
-        )
+        try:
+            with conn.transaction():
+                conn.execute(
+                    "update public.leads set stage = 'discovery_booked' where id = %s and stage = any(%s)",
+                    [match.lead_id, list(BOOKABLE_STAGES)],
+                )
+        except errors.UniqueViolation:  # a closed lead whose business has another open lead keeps its stage
+            payload["stage_kept"] = True
         if match.thread_id:
             if stop is not None:
                 stop(conn, match.thread_id, "booking")

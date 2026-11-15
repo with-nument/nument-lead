@@ -15,8 +15,9 @@ cursor in `settings outreach.gmail_history:<mailbox>`. Each message is handled i
 - a calendar invite goes to `bookings` (booked, rescheduled, cancelled).
 
 Nothing is ever lost: the cursor moves only after every message was handled, and a re-run skips what is already
-stored. Mail that matches nothing stays unread in Gmail for the founder. Only machine mail the engine fully
-handled (bounces and booking notices) is marked read; replies are never marked read, the founder reads them.
+stored. A message that fails three runs in a row is left unread in Gmail for the founder, so one broken message
+cannot hold the cursor forever. Mail that matches nothing stays unread in Gmail too. Only machine mail the engine
+fully handled (bounces and booking notices) is marked read; replies are never marked read, the founder reads them.
 """
 
 from __future__ import annotations
@@ -45,6 +46,9 @@ DOMAIN_MATCH_DAYS: Final = 180
 OPT_OUT_SUBJECTS: Final = frozenset({"unsubscribe", "unsubscribe me", "please unsubscribe"})
 RULE_CONFIDENCE: Final = 1.0
 MARK_READ: Final = frozenset({"bounced", "bounce_duplicate"})
+FAILURES_KEY: Final = "outreach.inbox_failures:{address}"
+MAX_ATTEMPTS: Final = 3  # a message that fails this often is left unread for the founder, so the cursor moves on
+FAILURES_KEPT: Final = 200
 
 _REPLY_HEADER: Final = re.compile(
     r"^(?:on\b.{0,200}\b(?:wrote|escribi[oó]|a écrit|schrieb|scritto|schreef)\s*:\s*$"
@@ -466,13 +470,24 @@ def run(rc: RunContext, *, mailbox: MailboxClient | None = None, **_: Any) -> di
     ours = our_addresses(mailbox.address)
     to_mark: list[str] = []
     epoch = datetime.min.replace(tzinfo=UTC)
+    fail_key = FAILURES_KEY.format(address=addr(mailbox.address))
+    failures: dict[str, int] = dict(db.get_setting(fail_key, {}) or {})
     for msg in sorted(messages, key=lambda m: (m.received_at or epoch, m.gmail_message_id)):
+        if failures.get(msg.gmail_message_id, 0) >= MAX_ATTEMPTS:
+            stats["skipped_after_errors"] += 1  # still unread in Gmail; the founder handles it by hand
+            continue
         try:
             with db.tx("engine", {"run_id": rc.run_id, "stage": "inbox"}) as conn:
                 outcome = handle(conn, msg, ours)
         except Exception as exc:  # one bad message must not stop the others; the cursor stays put
             stats["error"] += 1
-            log.error("inbox.message_failed", gmail_message_id=msg.gmail_message_id, error=type(exc).__name__)
+            failures[msg.gmail_message_id] = failures.get(msg.gmail_message_id, 0) + 1
+            log.error(
+                "inbox.message_failed",
+                gmail_message_id=msg.gmail_message_id,
+                attempt=failures[msg.gmail_message_id],
+                error=type(exc).__name__,
+            )
             continue
         stats[outcome] += 1
         if outcome == "unmatched":
@@ -482,6 +497,7 @@ def run(rc: RunContext, *, mailbox: MailboxClient | None = None, **_: Any) -> di
     result: dict[str, Any] = dict(sorted(stats.items()))
     if stats["error"]:
         result["cursor"] = "kept"  # the next run reads these messages again; stored ones are skipped
+        db.set_setting(fail_key, dict(list(failures.items())[-FAILURES_KEPT:]))
     else:
         db.set_setting(key, new_cursor)
     for gmail_id in to_mark:

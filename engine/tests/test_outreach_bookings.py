@@ -274,6 +274,22 @@ def test_unmatched_invite_is_left_for_the_founder(outreach_on: str) -> None:
     assert world.lead()["meeting_at"] is None and _bookings(world) == []
 
 
+def test_a_closed_lead_whose_business_has_another_open_lead_keeps_its_stage(outreach_on: str) -> None:
+    world = make_world(outreach_on, stage="not_now")
+    score = world.one("select score_id from public.leads where id = %s", [world.lead_id])["score_id"]
+    world.run_sql(
+        "insert into public.leads (business_id, segment_id, score_id, grade, pitch_mode, channel) "
+        "values (%s, 'firms-us', %s, 'A', 'stated_need', 'email')",
+        [world.business_id, score],
+    )
+    box = world.box()
+    box.incoming.append(_invite(world, "calcom_booking.ics", 1))
+    assert _run(box)["booking.booked"] == 1  # no error: the call is recorded, the stage stays
+    lead = world.lead()
+    assert lead["stage"] == "not_now" and lead["meeting_at"] == T1
+    assert _bookings(world)[0]["stage_kept"] is True
+
+
 def test_a_lead_past_discovery_keeps_its_stage(outreach_on: str) -> None:
     world = make_world(outreach_on, stage="proposal_sent")
     box = world.box()
