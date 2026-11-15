@@ -822,8 +822,10 @@ def offer_numbers(*offers: Mapping[str, Any] | None) -> set[str]:
 
 
 def claim_text(text: str) -> str:
-    """The text the claim check reads: '1-page plan' and '20-minute call' are our offer, not claims about them."""
-    return _OUR_NUMBERS.sub(lambda m: m.group(1).lower(), text or "")
+    """The text the claim check reads: '1-page plan' and '20-minute call' are our offer, not claims about them,
+    and a placeholder ends a sentence (the word after a link starts a new one)."""
+    plain = _PLACEHOLDER.sub(". ", text or "")
+    return _OUR_NUMBERS.sub(lambda m: m.group(1).lower(), plain)
 
 
 # ---- who the sequence goes to, and whether a thread may be opened (contract 4.6) -------------------------
@@ -1025,7 +1027,7 @@ def build_sequence_input(
     ctx = ClaimContext(
         known_ids=known,
         evidence_text=evidence_text(facts, active, now),
-        trusted_words=trusted_words(seg, b, [name, person or "", greeting, seen, place, *offer_copy, "MVP"]),
+        trusted_words=trusted_words(seg, b, [name, person or "", greeting, seen, place, *offer_copy, "MVP MVPs"]),
         trusted_numbers=trusted_numbers(seg) | offer_numbers(offer, backup),
     )
     basis = evidence.basis_hash([f["id"] for f in facts], [s["id"] for s in active], offer["offer_key"])

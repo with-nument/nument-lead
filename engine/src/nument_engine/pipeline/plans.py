@@ -65,6 +65,7 @@ _MARKUP: Final = re.compile(r"<\s*/?\s*[A-Za-z!][^>]*>|&[a-z]+;|\]\(")
 _MONEY: Final = re.compile(r"[$₹€£]\s*\d|\b(?:usd|inr|eur|gbp|aed)\b|\blakh\b|\bcrore\b", re.I)
 _FILLER: Final = re.compile(r"\blorem\b|\bipsum\b|\bplaceholder\b|\btbd\b|[{}]|\[[^\]]*\]", re.I)
 _NUMBER: Final = re.compile(r"\d+")
+_WEEKS: Final = re.compile(r"\b(\d+)\s*(?:weeks?|wks?)\b|\bweek\s*(\d+)\b", re.I)
 
 
 # ---------------------------------------------------------------------------
@@ -141,11 +142,16 @@ def plan_problems(plan: PlanContent, ctx: ClaimContext, offer: Mapping[str, Any]
         problems.append(f"timeline runs to week {max(weeks)}, past the offer's {offer.get('timeline')}")
     if "nument" in plan.first_screen.app_name.lower():
         problems.append("first_screen.app_name must be their product, not Nument")
+    for where, text in plan_texts(plan):
+        for m in _WEEKS.finditer(text):
+            n = int(m.group(1) or m.group(2))
+            if longest is not None and n > longest:
+                problems.append(f"{where} promises {n} weeks, past the offer's {offer.get('timeline')}")
     known = list(ctx.known_ids.values())
     problems += [
         f"{where}: {p}"
         for where, text in (("headline", plan.headline), ("their_goal", plan.their_goal))
-        for p in claim_problems([text], [known], ctx, need_claim=False)
+        for p in claim_problems([_WEEKS.sub("weeks", text)], [known], ctx, need_claim=False)
     ]
     return list(dict.fromkeys(problems))
 
@@ -224,7 +230,7 @@ def build_plan_input(
             **{str(s["id"]).lower(): str(s["id"]) for s in active},
         },
         evidence_text=evidence_text(facts, active, now),
-        trusted_words=trusted_words(seg, b, [name, *offer_copy, "MVP"]),
+        trusted_words=trusted_words(seg, b, [name, *offer_copy, "MVP MVPs"]),
         trusted_numbers=trusted_numbers(seg) | offer_numbers(offer, backup),
     )
     return PlanInput(thread_id, lead_id, b, seg, offer, country, inputs, ctx)
