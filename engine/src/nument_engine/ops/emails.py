@@ -163,6 +163,7 @@ class LeadCard:
     phone: str = ""
     wa: str = ""
     tel: str = ""
+    reaches: str = ""  # who answers the number (15 Nov 2026): "Owner's own line", "Front desk" ...
 
     @property
     def grade_bg(self) -> str:
@@ -199,7 +200,7 @@ select l.id::text as lead_id, l.grade, l.message, l.created_at,
        b.name, b.city, b.locality, b.segment_id, b.subcategory, b.rating::float as rating, b.review_count,
        b.staff_count, b.branches_count,
        s.total::float as total, s.judge_note, s.reasons,
-       pc.phone_e164, pc.phone_type,
+       pc.phone_e164, pc.phone_type, pc.line, pc.line_why,
        sig.type as sig_type, sig.quote as sig_quote, sig.details ->> 'summary' as sig_summary,
        sig.observed_at as sig_at,
        bk.value as booking
@@ -322,7 +323,16 @@ def lead_card(r: Mapping[str, Any], now: datetime) -> LeadCard:
         facts=key_facts(r),
         url=f"{app_url()}/leads/{r['lead_id']}",
         **_links(contact_links(r.get("phone_e164"), r.get("phone_type"), r.get("message"))),
+        reaches=LINE_LABEL.get(str(r.get("line") or ""), ""),
     )
+
+
+LINE_LABEL: Final[dict[str, str]] = {
+    "owner": "Reaches the owner directly",
+    "front_desk": "Front desk: ask them to pass it to the owner",
+    "bot": "Bot or call centre: try another route first",
+    "other": "",
+}
 
 
 class Links(TypedDict):
@@ -426,6 +436,8 @@ def morning_text(m: Morning, headline: str, intro: str, *, admin: bool) -> str:
             lines.append(f"   WhatsApp: {lead.wa}")
         elif lead.tel:
             lines.append(f"   Call: {lead.phone}")
+        if lead.reaches:
+            lines.append(f"   Contact: {lead.reaches}")
         lines.append("")
     if len(m.leads) > TOP_LEADS:
         lines += [f"See all {len(m.leads)} in the app: {base}/", ""]

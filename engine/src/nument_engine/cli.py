@@ -288,6 +288,14 @@ def lookup(ctx: typer.Context) -> None:
 
 
 @app.command()
+def lines(ctx: typer.Context) -> None:
+    """Who answers each published number: owner, front desk, bot or call centre (15 Nov 2026)."""
+    from .pipeline import lines as m
+
+    _execute(ctx, "manual", lambda rc: dict(m.refresh_all()))
+
+
+@app.command()
 def people(ctx: typer.Context) -> None:
     """The founder or owner of new A and B leads, from Google Search (plan 5.11.4)."""
     from .pipeline import people as m

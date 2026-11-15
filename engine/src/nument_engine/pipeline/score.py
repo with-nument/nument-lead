@@ -23,7 +23,7 @@ import math
 import re
 import uuid
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
@@ -539,34 +539,46 @@ def reach_of(
     *,
     email_first: bool = False,
 ) -> Reach:
-    """How we can reach the decision maker, as a multiplier from 0 to 1 (11.5)."""
+    """How directly we reach the person who decides, as a share from 0 to 1 (11.5). Since 15 Nov 2026 the line
+    decides: the owner's own mobile or address first, a front-desk WhatsApp or a bot line far lower."""
     usable = usable_contacts(contacts, now, suppressed)
     if email_first:
         return _reach_email_first(usable, facts, cfg)
-    phones = [c for c in usable if c.get("phone_e164")]
-    for kind, test in (
-        (
-            "decision_maker_mobile",
-            lambda c: c.get("is_decision_maker") and c.get("phone_type") == "mobile" and c.get("source") == "website",
-        ),
-        ("business_mobile", lambda c: c.get("phone_type") == "mobile"),
-        ("landline", lambda c: True),
-    ):
-        hit = next((c for c in phones if test(c)), None)
+    ladder: tuple[tuple[str, Callable[[Row], bool]], ...] = (
+        ("decision_maker_mobile", lambda c: line_of(c) == "owner" and bool(c.get("phone_e164"))
+         and c.get("phone_type") == "mobile"),
+        ("decision_maker_email", lambda c: line_of(c) == "owner" and bool(c.get("email"))),
+        ("business_mobile", lambda c: line_of(c) == "other" and c.get("phone_type") == "mobile"),
+        ("front_desk_mobile", lambda c: line_of(c) == "front_desk" and c.get("phone_type") == "mobile"),
+        ("landline", lambda c: line_of(c) != "bot" and bool(c.get("phone_e164"))),
+        ("email", lambda c: line_of(c) != "bot" and bool(c.get("email"))),
+        ("bot_line", lambda c: bool(c.get("phone_e164") or c.get("email"))),
+    )  # fmt: skip
+    for kind, test in ladder:
+        hit = next((c for c in usable if test(c)), None)
         if hit is not None:
+            why = str(hit.get("line_why") or hit.get("source") or "")
             return Reach(
-                cfg.reach[kind],
+                cfg.reach.get(kind, 0.0),
                 kind,
                 hit,
-                f"{kind.replace('_', ' ')} (contact {evidence.short_id(hit['id'])}, {hit.get('source')})",
+                f"{kind.replace('_', ' ')} (contact {evidence.short_id(hit['id'])}{', ' + why if why else ''})",
             )
-    mail = next((c for c in usable if c.get("email")), None)
-    if mail is not None:
-        return Reach(cfg.reach["email"], "email", mail, f"email only (contact {evidence.short_id(mail['id'])})")
     form = evidence.by_field(facts, "contact_form_url")
     if form:
         return Reach(cfg.reach["form"], "form", None, f"contact form only (fact {evidence.short_id(form[0]['id'])})")
     return Reach(cfg.reach["none"], "none", None, "no usable contact")
+
+
+def line_of(c: Row) -> str:
+    """The contact's line (lines.py). Rows written before 15 Nov 2026 have none: a decision maker's number
+    from their own site counts as the owner's, anything else as an unknown business line."""
+    line = c.get("line")
+    if line:
+        return str(line)
+    if c.get("is_decision_maker") and (c.get("source") == "website" or c.get("email")):
+        return "owner"
+    return "front_desk" if c.get("phone_type") == "landline" else "other"
 
 
 def _reach_email_first(usable: Sequence[Row], facts: Sequence[Row], cfg: ScoringConfig) -> Reach:
@@ -574,8 +586,9 @@ def _reach_email_first(usable: Sequence[Row], facts: Sequence[Row], cfg: Scoring
     phone (a call). Never a guessed address."""
     share = {**{"decision_maker_email": 1.0, "email": 0.7, "phone": 0.4, "form": 0.3, "none": 0.0},
              **cfg.reach_email_first}  # fmt: skip
+    usable = [c for c in usable if line_of(c) != "bot"]
     mails = [c for c in usable if c.get("email")]
-    boss = next((c for c in mails if c.get("is_decision_maker")), None)
+    boss = next((c for c in mails if line_of(c) == "owner"), None)
     if boss is not None:
         why = f"decision maker email (contact {evidence.short_id(boss['id'])}, {boss.get('source')})"
         return Reach(share["decision_maker_email"], "decision_maker_email", boss, why)

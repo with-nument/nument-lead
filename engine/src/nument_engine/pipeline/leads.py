@@ -77,7 +77,7 @@ class Candidate:
     @property
     def channel(self) -> str:
         """whatsapp for a mobile; email when only a landline or an email; form for a contact form only."""
-        if self.reach_kind in ("decision_maker_mobile", "business_mobile"):
+        if self.reach_kind in ("decision_maker_mobile", "business_mobile", "front_desk_mobile", "bot_line"):
             return "whatsapp"
         if self.reach_kind in ("email", "decision_maker_email") or (self.reach_kind == "landline" and self.has_email):
             return "email"

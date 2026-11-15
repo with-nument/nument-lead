@@ -30,6 +30,7 @@ EXPECTED_FILES = [
     "0015_partners_professional.sql",
     "0016_outcomes.sql",
     "0017_midday_run.sql",
+    "0018_contact_lines.sql",
 ]
 
 

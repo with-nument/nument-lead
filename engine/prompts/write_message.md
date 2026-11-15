@@ -1,6 +1,6 @@
 ---
 task: write_message
-version: 1
+version: 2
 output: MessageDraft
 inputs: [segment_id, pitch_mode, angle, business_name, seen_where, facts, signals, associate_name]
 description: First WhatsApp message in the founder's approved casual voice, an alternate, and two follow-ups.
@@ -23,6 +23,19 @@ Pitch modes:
 - stated_need: they said what they need. Offer to solve exactly that, as an agency.
 - visible_pain: they did not ask, but the evidence shows a problem. Name it gently using the evidence (never "your reviews are bad"), then offer the packaged outcome in plain words: every enquiry answered in seconds, followed up until it books.
 - fit_only: no signal. Be brief and ask a light question about how they handle enquiries today.
+
+Who reads it (15 Nov 2026: most published numbers are a front desk, not the owner):
+{% if recipient is defined and recipient == "front_desk" %}
+- This number or address is the front desk of {{ business_name }}: a reception or booking line, their WhatsApp chat button or a shared inbox. An auto-reply or a receptionist reads it first, never the owner. Do not write as if the owner is reading, and never ask the receptionist about their own work.
+- Start with "Hi," then say in a few words who it is for: {% if owner_name is defined and owner_name %}"for {{ owner_name }}"{% else %}"for the owner"{% endif %}.
+- Then the one idea in a single plain line, so the receptionist can forward the message as it is.
+- End by asking them to pass it on, or for the best number or email to reach {% if owner_name is defined and owner_name %}{{ owner_name }}{% else %}the owner{% endif %}.
+- 25 to 50 words. The follow-ups also ask for the owner, politely.
+{% elif recipient is defined and recipient == "owner" %}
+- This is the owner's own number or address: write to them directly.
+{% else %}
+- Nothing says who reads this number; in a small business it is often the owner. Write to the owner, and keep it short enough to forward.
+{% endif %}
 
 Every specific detail (a number, a name, a place, a role, a tool) must come from the facts or signals listed. In claims, list each specific claim you made in `message` and `message_alt`, with the ids that prove it, exactly as shown in square brackets.
 

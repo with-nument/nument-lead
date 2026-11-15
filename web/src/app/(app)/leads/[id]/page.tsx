@@ -64,7 +64,11 @@ async function Lead({ params, searchParams }: Pick<PageProps<'/leads/[id]'>, 'pa
   const myFeedback = feedback.find((f) => f.user_id === user.id) ?? null
   const primary = { phone: lead.phone_e164, phoneType: lead.phone_type, email: lead.email }
 
-  const contactViews: ContactView[] = contacts.map((c) => ({
+  // Who answers (15 Nov 2026): the owner's own line first, a front desk next, bots and call centres last.
+  const LINE_ORDER: Record<string, number> = { owner: 0, other: 1, front_desk: 2, bot: 3 }
+  const contactViews: ContactView[] = [...contacts]
+    .sort((a, b) => (LINE_ORDER[a.line ?? 'other'] ?? 1) - (LINE_ORDER[b.line ?? 'other'] ?? 1))
+    .map((c) => ({
     id: c.id,
     name: c.name,
     role: c.role,
@@ -75,6 +79,8 @@ async function Lead({ params, searchParams }: Pick<PageProps<'/leads/[id]'>, 'pa
     source: c.source,
     sourceUrl: safeUrl(c.source_url),
     isDecisionMaker: c.is_decision_maker,
+    line: c.line ?? 'other',
+    lineWhy: c.line_why ?? null,
     verified: c.verified,
     blocked: c.do_not_contact || (c.phone_e164 ? blocked.has(c.phone_e164) : false),
     blockReason: c.do_not_contact ? 'marked on the contact' : c.phone_e164 && blocked.has(c.phone_e164) ? 'on the list' : null,

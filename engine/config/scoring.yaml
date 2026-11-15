@@ -37,10 +37,14 @@ intent:                         # shown as "Need" in the app and the email
   stack_bonus_max: 6
 
 reach:                          # share of the reach points: how directly we can reach the decision maker
-  decision_maker_mobile: 1.00
-  business_mobile: 0.90
-  landline: 0.60
-  email: 0.40
+  # 15 Nov 2026 (founder: "most of them are automation numbers"): who answers decides the share, see lines.py
+  decision_maker_mobile: 1.00   # the owner's own mobile
+  decision_maker_email: 0.85    # the owner's own address
+  business_mobile: 0.75         # a business mobile, nothing says who answers (often the owner of a small one)
+  front_desk_mobile: 0.55       # reception, booking or the WhatsApp chat button: an auto-reply, then staff
+  landline: 0.45
+  email: 0.40                   # a shared inbox or a business address
+  bot_line: 0.20                # a WhatsApp bot vendor, toll-free or helpline, a call centre, another country
   form: 0.20
   none: 0.00                    # no usable contact: grade D
 

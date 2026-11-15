@@ -19,9 +19,38 @@ export type ContactView = {
   source: string
   sourceUrl: string | null
   isDecisionMaker: boolean
+  /** Who answers it (15 Nov 2026): owner, front_desk, bot or other. */
+  line: string
+  lineWhy: string | null
   verified: boolean
   blocked: boolean
   blockReason: string | null
+}
+
+const LINE_TAG: Record<string, { label: string; tone: 'ok' | 'warn' | 'bad' }> = {
+  owner: { label: 'Owner direct', tone: 'ok' },
+  front_desk: { label: 'Front desk', tone: 'warn' },
+  bot: { label: 'Bot or call centre', tone: 'bad' },
+}
+
+function LineNote({ line, why }: { line: string; why: string | null }) {
+  const tag = LINE_TAG[line]
+  if (!tag) return null
+  return (
+    <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-tx-3">
+      <Tag tone={tag.tone}>{tag.label}</Tag>
+      {why ? <span>{why}</span> : null}
+    </p>
+  )
+}
+
+function isLinkedIn(url: string | null): boolean {
+  if (!url) return false
+  try {
+    return new URL(url).hostname.replace(/^www\./, '').endsWith('linkedin.com')
+  } catch {
+    return false
+  }
 }
 
 export function ContactCard({
@@ -65,6 +94,7 @@ export function ContactCard({
                         {c.verified ? ' · verified' : ''}
                       </span>
                     </div>
+                    <LineNote line={c.line} why={c.lineWhy} />
                     {c.blocked ? (
                       <p className="mt-1 text-sm text-bad">Do not contact{c.blockReason ? `: ${c.blockReason}` : ''}</p>
                     ) : canEdit ? (
@@ -82,9 +112,10 @@ export function ContactCard({
                     {c.email}
                   </a>
                 ) : null}
+                {c.email && !c.phone ? <LineNote line={c.line} why={c.lineWhy} /> : null}
                 {c.sourceUrl ? (
                   <a href={c.sourceUrl} target="_blank" rel="noopener noreferrer" className="mt-1 block text-xs text-tx-3 hover:text-indigo-800">
-                    Where we found it
+                    {isLinkedIn(c.sourceUrl) ? 'LinkedIn profile (message them there)' : 'Where we found it'}
                   </a>
                 ) : null}
               </li>

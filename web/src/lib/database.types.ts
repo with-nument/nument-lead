@@ -237,6 +237,8 @@ export type Database = {
           email: string | null
           id: string
           is_decision_maker: boolean
+          line: string
+          line_why: string | null
           name: string | null
           phone_e164: string | null
           phone_type: string
@@ -255,6 +257,8 @@ export type Database = {
           email?: string | null
           id?: string
           is_decision_maker?: boolean
+          line?: string
+          line_why?: string | null
           name?: string | null
           phone_e164?: string | null
           phone_type?: string
@@ -273,6 +277,8 @@ export type Database = {
           email?: string | null
           id?: string
           is_decision_maker?: boolean
+          line?: string
+          line_why?: string | null
           name?: string | null
           phone_e164?: string | null
           phone_type?: string
@@ -1997,6 +2003,8 @@ export type Database = {
           contact_id: string | null
           email: string | null
           is_decision_maker: boolean | null
+          line: string | null
+          line_why: string | null
           name: string | null
           phone_e164: string | null
           phone_type: string | null

@@ -108,9 +108,10 @@ def test_example_1_ivf_clinic_pune_is_b() -> None:
     ]
     signals = [sig("s1", "hiring_frontdesk", 8, 5, 30), sig("s2", "review_pain", 6, 40, 90)]
     r = score_business(b, facts, signals, [mobile()], SEGMENTS["clinics-in"], cfg("clinics-in"), EXCL, NOW)
-    assert (r.fit, r.can_pay, r.intent, r.reach) == (3, 30, 24, 0.9)  # two visible pains: at the cap of 24
-    assert (r.total, r.grade) == (87, "A")
-    assert r.reasons["parts"] == {"need": 24.0, "can_pay": 35.0, "fit": 10.0, "reach": 18.0}
+    # two visible pains: at the cap of 24; an unlabelled business mobile is 0.75 since 15 Nov 2026 (lines.py)
+    assert (r.fit, r.can_pay, r.intent, r.reach) == (3, 30, 24, 0.75)
+    assert (r.total, r.grade) == (84, "A")
+    assert r.reasons["parts"] == {"need": 24.0, "can_pay": 35.0, "fit": 10.0, "reach": 15.0}
     # The learning loop reads the earned proxies as keys, not by parsing the reason text (16.2).
     assert {"branches_2plus", "reviews_300plus", "premium_price", "pays_for_software"} <= set(
         r.reasons["can_pay_proxies"]
@@ -163,8 +164,8 @@ def test_example_3_coaching_institute_fit_only_is_d() -> None:
         fact("f2", "in_house_tech", {"value": True}),
     ]
     r = score_business(b, facts, [], [LANDLINE], SEGMENTS["education-in"], cfg("education-in"), EXCL, NOW)
-    assert (r.fit, r.can_pay, r.intent, r.reach) == (2, 13, 0, 0.6)
-    assert (r.total, r.grade, r.pitch_mode) == (33, "D", "fit_only")
+    assert (r.fit, r.can_pay, r.intent, r.reach) == (2, 13, 0, 0.45)
+    assert (r.total, r.grade, r.pitch_mode) == (30, "D", "fit_only")
 
 
 DENTAL_DUBAI = {
@@ -187,9 +188,10 @@ DENTAL_FACTS = [
 @pytest.mark.parametrize(
     ("signals", "intent", "total", "grade"),
     [
-        ([], 0, 63, "B"),  # a strong business without a signal is a real B lead (s2.0)
-        ([sig("s1", "review_pain", 6, 5, 90)], 13.2, 76, "A"),
-        ([sig("s1", "review_pain", 6, 5, 90), sig("s2", "hiring_frontdesk", 8, 2, 30)], 24, 87, "A"),
+        ([], 0, 60, "B"),  # a strong business without a signal is a real B lead (s2.0)
+        # 15 Nov 2026: one pain and a number nobody tied to the owner is a B, not an A
+        ([sig("s1", "review_pain", 6, 5, 90)], 13.2, 73, "B"),
+        ([sig("s1", "review_pain", 6, 5, 90), sig("s2", "hiring_frontdesk", 8, 2, 30)], 24, 84, "A"),
     ],
 )
 def test_example_4_dubai_dental_chain_needs_a_reason_to_buy(
@@ -198,7 +200,7 @@ def test_example_4_dubai_dental_chain_needs_a_reason_to_buy(
     r = score_business(
         DENTAL_DUBAI, DENTAL_FACTS, signals, [mobile()], SEGMENTS["clinics-ae"], cfg("clinics-ae"), EXCL, NOW
     )
-    assert (r.fit, r.can_pay, r.intent, r.reach) == (3, 30, intent, 0.9)
+    assert (r.fit, r.can_pay, r.intent, r.reach) == (3, 30, intent, 0.75)
     assert (r.total, r.grade) == (total, grade)
 
 
@@ -285,9 +287,15 @@ def test_reach_ladder() -> None:
     email = {"id": "c3", "email": "hi@x.in", "source": "website", "verified": True, "do_not_contact": False}
     form = [fact("f9", "contact_form_url", {"url": "https://x.in/contact"})]
     assert reach_of([mobile(dm=True)], [], c, NOW).value == 1.0
-    assert reach_of([mobile(dm=True, source="google_listing")], [], c, NOW).value == 0.9
-    assert reach_of([LANDLINE], [], c, NOW).value == 0.6
+    assert reach_of([mobile(dm=True, source="google_listing")], [], c, NOW).value == 0.75
+    assert reach_of([LANDLINE], [], c, NOW).value == 0.45
     assert reach_of([email], [], c, NOW).value == 0.4
+    # 15 Nov 2026: who answers decides (lines.py)
+    desk = {**mobile(), "line": "front_desk", "line_why": "the WhatsApp chat button on their site"}
+    assert (reach_of([desk], [], c, NOW).kind, reach_of([desk], [], c, NOW).value) == ("front_desk_mobile", 0.55)
+    assert reach_of([{**mobile(), "line": "bot"}], [], c, NOW).value == 0.2
+    boss_mail = {**email, "line": "owner", "is_decision_maker": True}
+    assert reach_of([desk, boss_mail], [], c, NOW).kind == "decision_maker_email"  # the owner beats the desk
     assert reach_of([], form, c, NOW).value == 0.2
     assert reach_of([{**mobile(), "do_not_contact": True}], [], c, NOW).value == 0.0
     old_listing = {**mobile(source="google_listing"), "verified_at": NOW - timedelta(days=31)}

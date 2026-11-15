@@ -33,7 +33,7 @@ from .evidence import Row
 from .judge import evidence_text, fact_inputs, signal_inputs, trusted_numbers, trusted_words
 from .lint import ClaimContext, claim_problems, closing_question, lint, opener, similarity
 from .runs import RunContext
-from .verify import bare_name
+from .verify import DM_ROLE, bare_name
 
 log = get_logger()
 IST: Final = ZoneInfo("Asia/Kolkata")
@@ -169,6 +169,22 @@ def greeting_contact(contacts: Sequence[Row]) -> Row | None:
     return people[0] if people else None
 
 
+def owner_name(contacts: Sequence[Row]) -> str | None:
+    """The owner's name for a message the front desk passes on: a decision maker named on their own site, even
+    when the number next to the name turned out to be the business line ("Dr. Rao" or "Asha Rao")."""
+    for c in contacts:
+        name = str(c.get("name") or "").strip()
+        if not name or c.get("do_not_contact") or not c.get("verified"):
+            continue
+        if c.get("is_decision_maker") or DM_ROLE.search(str(c.get("role") or "")):
+            _, person, _ = greeting_for({"name": name, "role": c.get("role")})
+            if person:
+                doctor = bool(re.match(r"^dr\.?\s", name, re.I)) or bool(_DOCTOR_ROLE.search(str(c.get("role") or "")))
+                parts = [p for p in re.split(r"\s+", bare_name(name)) if p.strip(".")]
+                return f"Dr. {_cap(parts[-1].strip('.'))}" if doctor and parts else name
+    return None
+
+
 def seen_where(signal: Mapping[str, Any] | None, business: Mapping[str, Any]) -> str:
     """Where we saw them, in everyday words."""
     if signal is None:
@@ -226,6 +242,13 @@ def build_input(
     mode, angle_key = str(lead["pitch_mode"]), str(lead.get("angle") or seg.fit_only_angle())
     top = strongest(kept, mode)
     greeting, person, role = greeting_for(greeting_contact(contacts))
+    # Who reads it (15 Nov 2026): a front desk or a bot line gets a short message to pass on to the owner.
+    reach = score.reach_of(contacts, facts, cfg, now, email_first=seg.outreach_channel == "email")
+    line = score.line_of(reach.contact) if reach.contact is not None else "other"
+    recipient = "owner" if line == "owner" else "front_desk" if line in ("front_desk", "bot") else "business"
+    owner = person or owner_name(contacts)
+    if recipient == "front_desk":
+        greeting, person, role = "Hi,", None, None
     angle = next((a for a in seg.angles if a.key == angle_key), None)
     shown = [f for f in facts if f["field"] not in HIDDEN_FIELDS]
     sigs = signal_inputs(active, now)
@@ -251,6 +274,8 @@ def build_input(
         "person_name": person,
         "person_role": role,
         "greeting": greeting,
+        "recipient": recipient,
+        "owner_name": owner,
         "seen_where": seen_where(top, b),
         "need": str(details.get("need") or ""),
         "what_we_saw": signal_summary(top, now) if top else "",
@@ -271,7 +296,7 @@ def build_input(
     ctx = ClaimContext(
         known_ids=known,
         evidence_text=evidence_text(facts, active, now),
-        trusted_words=trusted_words(seg, b, [name, person or "", greeting, *SEEN_WHERE.values()]),
+        trusted_words=trusted_words(seg, b, [name, person or "", owner or "", greeting, *SEEN_WHERE.values()]),
         trusted_numbers=trusted_numbers(seg),
     )
     basis = evidence.basis_hash([f["id"] for f in facts], [s["id"] for s in active], angle_key)

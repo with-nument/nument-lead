@@ -26,7 +26,7 @@ from ..logging import get_logger
 from ..models import FlaggedVerification
 from ..segments import Segment, load_segments, load_yaml_config
 from ..settings import get_settings
-from . import ai, evidence
+from . import ai, evidence, lines
 from .evidence import CODE_MODELS, Row, fact_count, fact_flag, fact_text, on_domain, vget
 from .phones import (
     deobfuscate_email,
@@ -1620,6 +1620,8 @@ def run(rc: RunContext, router: ai.AIRouter | None = None, deps: VerifyDeps | No
         if plans and not rc.opts.dry_run:
             with db.tx("engine", {"run_id": rc.run_id, "stage": "verify"}) as conn:
                 apply_plans(conn, plans, deps.now())
+                # who answers each number: owner, front desk, bot or call centre (15 Nov 2026)
+                stats.update({f"lines.{k}": v for k, v in lines.refresh([p.business_id for p in plans], conn).items()})
         stats["businesses"] += len(plans)
     stats.update(asker.stats)
     result = dict(sorted(stats.items()))

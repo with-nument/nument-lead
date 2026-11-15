@@ -16,16 +16,18 @@ snippet-only. Each business is looked up once (`extra.dm_lookup_at`).
 
 from __future__ import annotations
 
+import asyncio
 import re
 from collections import Counter
 from datetime import UTC, datetime
 from typing import Any, Final
 
 from .. import db
+from ..http import PoliteClient, host_of
 from ..logging import get_logger
 from ..segments import country_name
 from . import ai, score
-from .reviews import supported_line
+from .reviews import REDIRECT_HOSTS, supported_line
 from .runs import RunContext
 from .verify import DM_ROLE, distinctive_words
 
@@ -75,6 +77,24 @@ def accepted(output: Any, grounding: dict[str, Any] | None, business_name: str) 
     return {"name": name[:120], "role": role[:80], "quote": backed[0], "url": backed[1] or ""}
 
 
+def resolve_url(url: str) -> str:
+    """A grounding redirect becomes the page it points at (the owner's LinkedIn profile, say), read from the
+    Location header only: nothing at the target is fetched, so LinkedIn stays snippet-only (15 Nov 2026: the
+    founder messages the owner there himself instead of the clinic's front desk)."""
+    if not url or host_of(url) not in REDIRECT_HOSTS:
+        return url
+
+    async def follow() -> str:
+        async with PoliteClient("review_citations", policy="public", min_gap_s=0.2) as http:
+            return await http.location(url) or url
+
+    try:
+        return asyncio.run(follow())
+    except Exception as exc:  # a nicety: never lose the person over it
+        log.info("people.url_unresolved", error=type(exc).__name__)
+        return url
+
+
 def run(rc: RunContext, router: Any = None) -> dict[str, Any]:
     """`nlead people`: the founder or owner of new A and B leads that have no named decision maker."""
     now = datetime.now(UTC)
@@ -121,6 +141,9 @@ def run(rc: RunContext, router: Any = None) -> dict[str, Any]:
         spent += float(getattr(res, "inr", 0) or 0)
         stats["looked_up"] += 1
         person = accepted(res.output, res.grounding, str(b["name"]))
+        if person and person["url"]:
+            person["url"] = resolve_url(person["url"])
+            stats["linkedin"] += "linkedin.com/" in person["url"]
         with db.tx("engine", {"run_id": rc.run_id, "stage": "people"}) as conn:
             if person:
                 conn.execute(

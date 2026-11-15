@@ -7,7 +7,7 @@ const LEAD_COLUMNS =
 
 const BUSINESS_COLUMNS = 'name, website, web_domain, address, place_id, branches_count, staff_count, rating, review_count'
 const CONTACT_COLUMNS =
-  'id, name, role, phone_e164, phone_type, email, source, source_url, quote, is_decision_maker, verified, do_not_contact, created_at'
+  'id, name, role, phone_e164, phone_type, email, source, source_url, quote, is_decision_maker, verified, do_not_contact, created_at, line, line_why'
 const SIGNAL_COLUMNS = 'id, type, category, points, observed_at, expires_at, source, url, quote'
 const FACT_COLUMNS = 'id, field, value, quote, url, model, verified, created_at'
 const SCORE_COLUMNS = 'fit, can_pay, intent, reach, total, grade, pitch_mode, reasons, judge_grade, judge_note, judge_model, version, computed_at'

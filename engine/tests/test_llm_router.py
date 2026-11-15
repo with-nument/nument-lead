@@ -161,7 +161,7 @@ def test_lead_outputs_record_an_ai_output_activity(llm_db: str) -> None:
         "provider": "gemini",
         "model": "gemini-3.8-flash",
         "fallback_from": "openai:gpt-6.1-terra",
-        "prompt_version": 1,
+        "prompt_version": 2,
         "tag": res.tag,
     }
 

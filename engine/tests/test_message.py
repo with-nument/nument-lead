@@ -264,3 +264,30 @@ def test_email_first_countries_get_the_compliance_footer(monkeypatch: pytest.Mon
     assert us is not None and "Team Nument\nNument, 1 Example Road" in us
     assert m.with_footer(us, segs["firms-us"]) == us  # never twice
     assert m.with_footer(None, segs["firms-us"]) is None
+
+
+def test_a_front_desk_number_gets_a_message_to_pass_on_to_the_owner() -> None:
+    """15 Nov 2026: the clinic's WhatsApp button reaches a receptionist or an auto-reply, so the message says who
+    it is for and asks them to pass it on, instead of greeting the doctor as if she were reading it."""
+    from datetime import UTC, datetime
+
+    from nument_engine.llm import prompts
+    from nument_engine.pipeline import message as m
+    from nument_engine.pipeline import score
+    from nument_engine.segments import load_segments
+
+    seg = load_segments()["clinics-in"]
+    cfg = score.ScoringConfig.build(score.scoring_config(seg), seg.id)
+    now = datetime.now(UTC)
+    desk = {"id": "c1", "phone_e164": "+919584584111", "phone_type": "mobile", "source": "website", "verified": True,
+            "do_not_contact": False, "is_decision_maker": False, "name": "Dr. Asha Rao", "role": "Founder",
+            "line": "front_desk", "line_why": "the WhatsApp chat button on their site", "verified_at": now}  # fmt: skip
+    lead = {"id": "l1", "pitch_mode": "fit_only", "angle": None, "channel": "whatsapp", "message": None}
+    business = {"id": "b1", "name": "Clear Skin Clinic", "website": "https://clearskin.in/", "city": "Pune"}
+    li = m.build_input(lead, business, seg, [], [], [desk], cfg, now)
+    assert li.inputs["recipient"] == "front_desk" and li.greeting == "Hi,"
+    assert li.inputs["owner_name"] == "Dr. Rao" and li.inputs["person_name"] is None
+    system, _user = prompts.load("write_message.md").render(**li.inputs)
+    assert '"for Dr. Rao"' in system and "front desk" in system  # the brief tells the writer who reads it
+    owner = {**desk, "line": "owner", "is_decision_maker": True, "line_why": "next to the owner's name"}
+    assert m.build_input(lead, business, seg, [], [], [owner], cfg, now).inputs["recipient"] == "owner"

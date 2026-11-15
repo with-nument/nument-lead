@@ -133,7 +133,10 @@ def test_scoring_defaults_shape() -> None:
     assert scoring["fit"]["gate"] == 2 and set(scoring["fit"]["bonus"]) == {0, 1, 2, 3}
     assert scoring["can_pay"]["cap"] == 30 and scoring["intent"]["cap"] == 35  # s2.0
     assert scoring["can_pay"]["points"] + scoring["intent"]["cap"] + 10 + scoring["total"]["reach_points"] == 100
-    assert set(scoring["reach"]) == {"decision_maker_mobile", "business_mobile", "landline", "email", "form", "none"}
+    assert set(scoring["reach"]) == {
+        "decision_maker_mobile", "decision_maker_email", "business_mobile", "front_desk_mobile", "landline", "email",
+        "bot_line", "form", "none",
+    }  # fmt: skip
     assert scoring["reach"]["none"] == 0 and scoring["fit_only_max_pct"] == 50
 
 
