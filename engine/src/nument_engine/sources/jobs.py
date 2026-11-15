@@ -4,6 +4,10 @@ A job post becomes `hiring_frontdesk` or `hiring_builder` only when the classifi
 business in one of our domains is hiring for that role, with a quote that code finds again in the post.
 Recruiter names and personal phone numbers are never kept: contact details are masked before the text is sent to
 the AI or used as a quote.
+
+The startup segments (`firms-<country>`, 15 Nov 2026) take only startups of at most `startup.max_team` people
+(`startup_fit`): an employer the classifier calls no startup, or with more people, is dropped; a builder role of a
+business in another industry reaches the startup segment only when the classifier says it is a startup.
 """
 
 from __future__ import annotations
@@ -19,6 +23,7 @@ from dateutil import parser as dateparser
 
 from ..normalize import EMAIL_RE, PHONE_RUN, city_for_text, clean_text, locality_for, web_domain
 from ..segments import Segment
+from . import startup
 from .base import QUOTE_MAX, Signal, SourceContext, field_of
 
 # SignalClassification.employer_domain to our segment domains (models.Domain).
@@ -292,6 +297,23 @@ def pick_quote(candidate: str | None, post: JobPost) -> str:
     return clean_text(post.title, QUOTE_MAX)
 
 
+def startup_fit(result: Any, *, limits: tuple[int, float] | None = None, stated: bool = False) -> str | None:
+    """None when a classified employer may be a startup lead, else why not: `not_startup` (the classifier says it
+    is no startup, or `stated` asks for a clear yes and there is none) or `too_big` (more people than
+    startup.max_team). Unknown passes: qualification decides. `limits` is (most people, most money raised);
+    without it the settings are read, only when there is a team size to compare."""
+    flag = field_of(result, "is_startup")
+    is_startup = flag if isinstance(flag, bool) else None
+    if is_startup is False or (stated and is_startup is not True):
+        return "not_startup"
+    team = field_of(result, "team_size")
+    if not isinstance(team, int) or isinstance(team, bool):
+        return None
+    max_team, max_raise = limits or startup.limits()
+    gate = startup.startup_gate(is_startup=is_startup, team_size=team, max_team=max_team, max_raise_usd=max_raise)
+    return None if gate.ok else gate.reason
+
+
 def classify_job(
     ctx: SourceContext,
     post: JobPost,
@@ -299,9 +321,11 @@ def classify_job(
     *,
     country: str,
     default_segment: Segment,
+    limits: tuple[int, float] | None = None,
 ) -> Signal | None:
     """Run `classify_signal` on a post and apply the rules of Step 7.5.1. Returns the signal, routed to the
-    segment of the employer's domain, or None (with the reason counted in `ctx.stats`)."""
+    segment of the employer's domain, or None (with the reason counted in `ctx.stats`). A startup segment takes
+    the post only from a startup (`startup_fit`)."""
     inputs = {
         "segment_id": default_segment.id,
         "domain": default_segment.domain,
@@ -336,10 +360,16 @@ def classify_job(
     if DOMAIN_MAP.get(domain) == "partners" and role != "builder":
         ctx.add("jobs.partner_not_builder")  # an agency hiring a receptionist is not a partner lead
         return None
-    seg = segments.get(f"{DOMAIN_MAP.get(domain, domain)}-{country}")
-    if seg is None and role == "builder" and DOMAIN_MAP.get(domain) != "partners":
-        # A business hiring a developer is a need-first lead whatever its industry (13 Nov 2026).
-        seg = segments.get(f"firms-{country}")
+    home = DOMAIN_MAP.get(domain, domain)
+    seg = segments.get(f"{home}-{country}")
+    if home == "firms" or (seg is None and role == "builder" and home != "partners"):
+        # A business hiring a developer is a need-first lead whatever its industry (13 Nov 2026); since 15 Nov
+        # only a startup, and one from another industry only when the classifier says it is a startup.
+        why = startup_fit(result, limits=limits, stated=home != "firms")
+        if why:
+            ctx.add(f"jobs.{why}")
+            return None
+        seg = startup.startup_segment(country, segments)
     if seg is None:
         ctx.add("jobs.domain_not_enabled")
         return None

@@ -1,6 +1,6 @@
 ---
 task: classify_signal
-version: 2
+version: 3
 output: SignalClassification
 inputs: [segment_id, domain, country, source, url, text]
 description: Decide whether one job post or public text is a hiring or buying signal from a business we target.
@@ -22,6 +22,8 @@ How to fill each field:
 - city: the city of the job or of the business, if written.
 - evidence_quote: one exact sentence or phrase copied from the text that proves the role or the ask.
 - confidence: from 0 to 1, how sure you are about role_category and employer_domain together.
+- is_startup: true when the business is a young, founder-led startup building its own product or brand (for example "our 3-person team", "pre-seed startup", "founded in 2025"). False when the text shows an established business, a company of more than 50 people, a public company, an agency or a non-profit. Null when the text does not show either.
+- team_size: the business's total number of people when the text states it (for example "we are 6 people"). Null otherwise; never guess it.
 
 [user]
 Segment: {{ segment_id }} ({{ domain }}, {{ country }})
