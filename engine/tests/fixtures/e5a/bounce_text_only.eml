@@ -1,0 +1,18 @@
+From: postmaster@legacy.example.net
+To: hello.nument@gmail.com
+Subject: Undeliverable: Quick question about Legacy
+Date: Wed, 18 Nov 2026 10:00:00 +0000
+Message-ID: <ndr.0001@legacy.example.net>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="us-ascii"
+
+Delivery has failed to these recipients or groups:
+
+pat@legacy.example.net
+The email address you entered couldn't be found.
+
+Original message headers:
+
+From: Nument <hello.nument@gmail.com>
+Subject: Quick question about Legacy
+Message-ID: <7e7e7e7e-aaaa-bbbb-cccc-ddddeeeeffff@nument.in>

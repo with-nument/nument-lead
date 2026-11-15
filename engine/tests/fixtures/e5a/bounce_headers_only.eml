@@ -1,0 +1,40 @@
+From: MAILER-DAEMON@mail.acme.example.org (Mail Delivery System)
+To: hello.nument@gmail.com
+Subject: Undelivered Mail Returned to Sender
+Date: Tue, 17 Nov 2026 09:12:00 +0000
+Message-ID: <20261117091200.ABC123@mail.acme.example.org>
+MIME-Version: 1.0
+Content-Type: multipart/report; report-type=delivery-status; boundary="pfx-1"
+
+--pfx-1
+Content-Description: Notification
+Content-Type: text/plain; charset=us-ascii
+
+This is the mail system at host mail.acme.example.org.
+
+I'm sorry to have to inform you that your message could not
+be delivered to one or more recipients.
+
+--pfx-1
+Content-Description: Delivery report
+Content-Type: message/delivery-status
+
+Reporting-MTA: dns; mail.acme.example.org
+
+Final-Recipient: rfc822; sam@acme.example.org
+Original-Recipient: rfc822;sam@acme.example.org
+Action: failed
+Status: 5.2.1
+Diagnostic-Code: X-Postfix; mailbox disabled
+
+--pfx-1
+Content-Description: Undelivered Message Headers
+Content-Type: text/rfc822-headers
+
+From: Nument <hello.nument@gmail.com>
+To: sam@acme.example.org
+Subject: Re: Quick question about Acme
+Message-ID: <CAGbN7xq-replaced-by-gmail@mail.gmail.com>
+X-Google-Original-Message-ID: <a6c1e4d2-5b3f-4a7e-8c9d-112233445566@nument.in>
+
+--pfx-1--

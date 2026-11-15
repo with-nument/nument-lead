@@ -1,0 +1,10 @@
+From: Lee Park <lee@park.example.io>
+To: hello.nument@gmail.com
+Subject: Re: Quick question about Park
+Date: Tue, 17 Nov 2026 10:00:00 +0900
+Message-ID: <lee-html-002@park.example.io>
+In-Reply-To: <11111111-2222-3333-4444-555555555555@nument.in>
+MIME-Version: 1.0
+Content-Type: text/html; charset="utf-8"
+
+<html><head><style>p { color: red; }</style></head><body><p>Not right now,</p><p>maybe next quarter.<br>Lee</p></body></html>
