@@ -190,10 +190,10 @@ def test_hook_adds_the_role_and_name_from_the_profile(db_conn: Conn, rls_world: 
     out = _hook(db_conn, {"user_id": rls_world.caller, "claims": claims, "authentication_method": "password"})
     assert out["claims"] == {**claims, "user_role": "caller", "full_name": "RLS caller"}
     assert out["user_id"] == rls_world.caller and out["authentication_method"] == "password"
-    # A blank name is no name: the app falls back to the email.
+    # A blank name is no name claim (the app falls back to the email), and a claim from elsewhere never survives.
     db_conn.execute("update public.profiles set full_name = '  ' where user_id = %s", [rls_world.admin])
-    out = _hook(db_conn, {"user_id": rls_world.admin, "claims": {"sub": rls_world.admin}})
-    assert out["claims"] == {"sub": rls_world.admin, "user_role": "admin", "full_name": None}
+    out = _hook(db_conn, {"user_id": rls_world.admin, "claims": {"sub": rls_world.admin, "full_name": "Someone"}})
+    assert out["claims"] == {"sub": rls_world.admin, "user_role": "admin"}
 
 
 def test_hook_leaves_the_token_alone_without_a_profile_and_never_fails(db_conn: Conn) -> None:

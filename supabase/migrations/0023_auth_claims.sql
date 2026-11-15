@@ -51,11 +51,15 @@ begin
   exception when others then
     return event;
   end;
-  if v_role is null then
-    -- No profile (yet): no claim at all, so the app reads the profile instead of trusting a guess.
-    claims := claims - 'user_role' - 'full_name';
-  else
-    claims := claims || jsonb_build_object('user_role', v_role, 'full_name', v_name);
+  -- Never a stale or made-up value: both claims come from the profile or are left out. Without a profile (yet)
+  -- there is no role claim at all, so the app reads the profile instead of trusting a guess; without a name the
+  -- app shows the part of the email before the @.
+  claims := claims - 'user_role' - 'full_name';
+  if v_role is not null then
+    claims := claims || jsonb_build_object('user_role', v_role);
+    if v_name is not null then
+      claims := claims || jsonb_build_object('full_name', v_name);
+    end if;
   end if;
   return jsonb_set(event, '{claims}', claims);
 end;
@@ -99,3 +103,6 @@ $$;
 
 revoke all on function public.revoke_user_sessions(uuid) from public, anon, authenticated;
 grant execute on function public.revoke_user_sessions(uuid) to service_role;
+
+-- PostgREST picks up revoke_user_sessions at once (Supabase also reloads on DDL by itself).
+notify pgrst, 'reload schema';
