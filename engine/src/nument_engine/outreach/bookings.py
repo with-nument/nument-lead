@@ -469,6 +469,8 @@ def apply(
         "thread_id": match.thread_id,
         "matched_by": match.matched_by,
         "gmail_message_id": gmail_message_id,
+        "notes": booking_notes(event.description) if kind != "cancelled" else None,
+        "location": event.location if event.location.startswith("https://") and kind != "cancelled" else None,
     }
     if kind == "cancelled":
         payload["cancelled_start"] = current.start.isoformat() if current and current.start else None
@@ -500,6 +502,19 @@ def apply(
     )
     log.info("bookings.applied", kind=kind, lead_id=match.lead_id, matched_by=match.matched_by)
     return kind
+
+
+NOTES_MAX_CHARS: Final = 600
+_NOTES: Final = re.compile(
+    r"(?:additional notes|notes)\s*:?\s*\n(?P<notes>.+?)(?:\n\s*\n[A-Z][^\n]{0,40}:\s*\n|\Z)", re.I | re.S
+)
+
+
+def booking_notes(description: str) -> str | None:
+    """What the person wrote in the booking form (Cal.com's "Additional notes"), for the pre-call brief."""
+    m = _NOTES.search(description or "")
+    text = " ".join(m.group("notes").split()) if m else ""
+    return text[:NOTES_MAX_CHARS] or None
 
 
 def bookable(events: Sequence[CalendarEvent]) -> list[CalendarEvent]:

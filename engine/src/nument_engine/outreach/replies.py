@@ -768,9 +768,7 @@ ALERT_HTML: Final = """{% extends "base.html" %}
 @lru_cache
 def _env() -> jinja2.Environment:
     return jinja2.Environment(
-        loader=jinja2.ChoiceLoader(
-            [jinja2.DictLoader({"reply_alert.html": ALERT_HTML}), jinja2.FileSystemLoader(emails.TEMPLATES)]
-        ),
+        loader=jinja2.FileSystemLoader(emails.TEMPLATES),
         autoescape=True,
         undefined=jinja2.StrictUndefined,
         trim_blocks=True,
@@ -778,10 +776,15 @@ def _env() -> jinja2.Environment:
     )
 
 
-def render(name: str, **context: Any) -> str:
-    """A template that extends the founder-approved base.html (the same look as every engine email)."""
+@lru_cache(maxsize=8)
+def _template(source: str) -> jinja2.Template:
+    return _env().from_string(source)
+
+
+def render(source: str, **context: Any) -> str:
+    """An email body that extends the founder-approved base.html (the same look as every engine email)."""
     base = {"app_url": emails.app_url(), "preheader": "", "date_label": ""}
-    return _env().get_template(name).render(**{**base, **context})
+    return _template(source).render(**{**base, **context})
 
 
 def alert_email(reply: Reply, category: str, summary: str, draft: str | None) -> notify.Email:
@@ -792,7 +795,7 @@ def alert_email(reply: Reply, category: str, summary: str, draft: str | None) ->
     lead_url = f"{emails.app_url()}/leads/{reply.lead_id}"
     text = reply.text
     html = render(
-        "reply_alert.html",
+        ALERT_HTML,
         subject=subject,
         preheader=emails.cut(text, 120),
         date_label=emails.day_label(datetime.now(UTC).astimezone(ZoneInfo("Asia/Kolkata")).date()),

@@ -19,6 +19,7 @@ from .outreach_world import World, add_offer, add_plan_page, make_world, rc_for
 from .pipeline_fakes import AllProvidersDown, BudgetExceeded, FakeRouter
 
 NY = ZoneInfo("America/New_York")
+EM = chr(0x2014)  # written as a code point: no dash ever sits in a source file
 MONDAY = datetime(2026, 11, 16, 12, 0, tzinfo=UTC)  # 07:00 in New York, 17:30 in India
 
 
@@ -160,8 +161,8 @@ def _ctx(**over: Any) -> DraftContext:
 
 def test_finish_adds_the_link_times_and_one_sign_off() -> None:
     ctx = _ctx()
-    body = replies.finish("Hi Maya,\n\nGreat to hear from you — happy to help.\n\nBest,\nTeam Nument", ctx)
-    assert "—" not in body and "you, happy to help" in body
+    body = replies.finish(f"Hi Maya,\n\nGreat to hear from you {EM} happy to help.\n\nBest,\nTeam Nument", ctx)
+    assert EM not in body and "you, happy to help" in body
     assert ctx.link in body and "Tue 17 Nov, 9:00 am, Wed 18 Nov, 9:00 am or Thu 19 Nov, 9:00 am" in body
     assert body.endswith("\n\nTeam Nument") and body.count("Team Nument") == 1 and "Best," not in body
     bare = replies.finish(f"Hi Maya,\n\nBook here: {BOOKING_URL}\nTimes: Tue 17 Nov, 9:00 am", ctx)
