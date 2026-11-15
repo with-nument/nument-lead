@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { cookies } from 'next/headers'
 import { Suspense } from 'react'
 import { KeyRound } from 'lucide-react'
 import { NameForm, PasswordForm, SessionButtons } from '@/components/settings/profile-forms'
@@ -6,6 +7,8 @@ import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { requireUser } from '@/lib/auth'
 import { ROLE_HINT, ROLE_LABEL } from '@/lib/roles'
+import { isV2, UI_COOKIE } from '@/lib/ui-flag'
+import { DesignToggle } from './design-toggle'
 
 export const metadata: Metadata = { title: 'Settings' }
 
@@ -18,7 +21,7 @@ export default function SettingsPage({ searchParams }: PageProps<'/settings'>) {
 }
 
 async function Profile({ searchParams }: Pick<PageProps<'/settings'>, 'searchParams'>) {
-  const [user, sp] = await Promise.all([requireUser(), searchParams])
+  const [user, sp, jar] = await Promise.all([requireUser(), searchParams, cookies()])
   const forced = user.mustChangePassword || sp.change_password === '1'
   return (
     <div className="flex max-w-3xl flex-col gap-6">
@@ -47,6 +50,12 @@ async function Profile({ searchParams }: Pick<PageProps<'/settings'>, 'searchPar
         <CardHeader id="sessions-title" title="Sessions" description="Lost a phone or used a shared computer? Sign out everywhere else." />
         <CardBody>
           <SessionButtons />
+        </CardBody>
+      </Card>
+      <Card aria-labelledby="design-title">
+        <CardHeader id="design-title" title="Design" />
+        <CardBody>
+          <DesignToggle on={isV2(jar.get(UI_COOKIE)?.value)} />
         </CardBody>
       </Card>
     </div>
