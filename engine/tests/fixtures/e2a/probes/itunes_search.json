@@ -1,0 +1,6 @@
+{
+ "resultCount":2,
+ "results": [
+{"kind":"software", "trackId":6447000099, "trackName":"Tally Counter Pro", "bundleId":"com.example.tallycounter", "sellerName":"Counter Apps Ltd", "artistName":"Counter Apps Ltd", "sellerUrl":"https://counterapps.example", "trackViewUrl":"https://apps.apple.com/in/app/tally-counter-pro/id6447000099?uo=4", "releaseDate":"2021-01-05T08:00:00Z"},
+{"kind":"software", "trackId":6447000001, "trackName":"TallyHQ: Invoices", "bundleId":"io.tallyhq.app", "sellerName":"TallyHQ Technologies Private Limited", "artistName":"TallyHQ Technologies Private Limited", "sellerUrl":"https://www.tallyhq-nlead.io/", "trackViewUrl":"https://apps.apple.com/in/app/tallyhq-invoices/id6447000001?uo=4", "releaseDate":"2025-06-20T07:00:00Z"}]
+}

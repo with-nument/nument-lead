@@ -1,0 +1,9 @@
+{
+  "applinks": {
+    "details": [
+      {"appIDs": ["LBQJ96FQ8D.so.notion.NotionAI.Prod"], "components": [{"/": "/native/loginwithemail", "?": {"app": "sai"}}]},
+      {"appIDs": ["LBQJ96FQ8D.notion.id"], "components": [{"/": "*", "?": {"notionApp": "classic"}, "exclude": true}]}
+    ]
+  },
+  "webcredentials": {"apps": ["LBQJ96FQ8D.notion.id", "LBQJ96FQ8D.so.notion.NotionAI.Prod"]}
+}

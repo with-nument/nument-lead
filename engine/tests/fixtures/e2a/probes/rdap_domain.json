@@ -1,0 +1,22 @@
+{
+  "objectClassName": "domain",
+  "handle": "2034187_DOMAIN_COM-VRSN",
+  "ldhName": "STRIPE.COM",
+  "status": ["client delete prohibited", "client transfer prohibited", "client update prohibited"],
+  "entities": [
+    {
+      "objectClassName": "entity",
+      "handle": "447",
+      "roles": ["registrar"],
+      "publicIds": [{"type": "IANA Registrar ID", "identifier": "447"}],
+      "vcardArray": ["vcard", [["version", {}, "text", "4.0"], ["fn", {}, "text", "SafeNames Ltd."]]]
+    }
+  ],
+  "events": [
+    {"eventAction": "registration", "eventDate": "1995-09-12T04:00:00Z"},
+    {"eventAction": "expiration", "eventDate": "2027-09-11T04:00:00Z"},
+    {"eventAction": "last changed", "eventDate": "2025-10-01T01:39:51Z"},
+    {"eventAction": "last update of RDAP database", "eventDate": "2026-11-15T19:15:07Z"}
+  ],
+  "rdapConformance": ["rdap_level_0", "icann_rdap_technical_implementation_guide_0", "icann_rdap_response_profile_0"]
+}
