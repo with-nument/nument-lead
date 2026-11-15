@@ -588,3 +588,13 @@ def test_a_founder_who_asks_for_the_plan_gets_one(startup_db: str) -> None:
     stats = plans.run(rc(), router=FakeRouter({"write_plan": plan_answer}))
     assert stats["plans.written"] == 1 and "links.plan" not in stats  # cancelled steps are never touched
     assert db.scalar("select count(*) from public.plan_pages where lead_id = %s", [ids["lead"]]) == 1
+
+
+def test_an_ai_outage_is_not_a_failed_plan_try(startup_db: str) -> None:
+    ids = _sent_thread(startup_db)
+    stats = plans.run(rc(), router=FakeRouter({"write_plan": [AllProvidersDown("down")]}))
+    assert stats["plans.ai.failed"] == 1
+    tries = "select count(*) from public.activities where lead_id = %s and payload ->> 'kind' = 'plan_failed'"
+    assert db.scalar(tries, [ids["lead"]]) == 0
+    stats = plans.run(rc(), router=FakeRouter({"write_plan": [{"headline": "not a plan"}]}))
+    assert stats["plans.ai.failed"] == 1 and db.scalar(tries, [ids["lead"]]) == 1

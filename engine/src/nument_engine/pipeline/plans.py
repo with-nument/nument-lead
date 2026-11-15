@@ -61,6 +61,7 @@ AI_FAILURES_BEFORE_STOP: Final = 3
 UNSENT: Final = ("draft", "review", "approved", "queued")
 WANTS_PLAN: Final = ("send_plan", "interested")
 FALLBACK_CASE_STUDY: Final = "https://nument.in"
+MALFORMED: Final = ("answer does not match", "unexpected answer type")  # ai.coerce's reasons for a bad answer
 _MARKUP: Final = re.compile(r"<\s*/?\s*[A-Za-z!][^>]*>|&[a-z]+;|\]\(")
 _MONEY: Final = re.compile(r"[$₹€£]\s*\d|\b(?:usd|inr|eur|gbp|aed)\b|\blakh\b|\bcrore\b", re.I)
 _FILLER: Final = re.compile(r"\blorem\b|\bipsum\b|\bplaceholder\b|\btbd\b|[{}]|\[[^\]]*\]", re.I)
@@ -444,7 +445,8 @@ def write_plans(rc: RunContext, router: ai.AIRouter, due: Sequence[Row], now: da
             return
         except ai.AIUnavailable as exc:
             stats["plans.ai.failed"] += 1
-            record_plan_failure(lead_id, [exc.reason], None, n + 1, rc.run_id)
+            if exc.reason.startswith(MALFORMED):  # a bad answer counts as a try; an outage does not
+                record_plan_failure(lead_id, [exc.reason], None, n + 1, rc.run_id)
             failures += 1
             if failures >= AI_FAILURES_BEFORE_STOP:
                 stats["plans.stopped.ai_down"] += 1
