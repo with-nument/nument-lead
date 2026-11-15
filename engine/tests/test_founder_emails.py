@@ -150,6 +150,8 @@ def startup(
     founders: tuple[tuple[str, str], ...] = (("Maya Chen", "Co-founder and CEO"),),
     grade: str = "A",
     founder_source: str = "other",
+    verified: bool = True,
+    country: str | None = None,
 ) -> str:
     """A startup business with an A lead and its founders as name-only contacts. Returns the business id."""
     tag = uuid.uuid4().hex[:6]
@@ -157,15 +159,15 @@ def startup(
         biz = conn.execute(
             "insert into public.businesses (segment_id, name, norm_name, country, website, web_domain, status) "
             "values (%s, %s, %s, %s, %s, %s, 'researched') returning id",
-            [segment, f"Brightcart {tag}", f"brightcart {tag}", segment[-2:], f"https://{domain}/", domain],
+            [segment, f"Brightcart {tag}", f"brightcart {tag}", country or segment[-2:], f"https://{domain}/", domain],
         ).fetchone()
         assert biz is not None
         for name, role in founders:
             conn.execute(
                 "insert into public.contacts (business_id, name, role, source, source_url, quote, is_decision_maker, "
                 "verified, line) values (%s, %s, %s, %s, 'https://news.example.com/brightcart-raises', %s, true, "
-                "true, 'owner')",
-                [biz["id"], name, role, founder_source, f"{name}, {role} of Brightcart, said the round"],
+                "%s, 'owner')",
+                [biz["id"], name, role, founder_source, f"{name}, {role} of Brightcart, said the round", verified],
             )
         conn.execute(
             "insert into public.leads (business_id, segment_id, grade, pitch_mode, channel) "
@@ -375,7 +377,7 @@ def test_an_old_copy_of_their_team_page(e3_db: str) -> None:
     assert row["quote"] == "Maya Chen maya.chen@brightcart.io" and row["source"] == "other"
     assert not web.asked(f"{fe.WAYBACK_WEB}/20250302")  # only contact, about and team pages are read
     index_url = web.asked(fe.WAYBACK_CDX)[0]
-    assert "url=brightcart.io%2F%2A" in index_url and "collapse=urlkey" in index_url
+    assert "url=brightcart.io&matchType=domain" in index_url and "collapse=urlkey" in index_url
 
 
 def test_a_blocked_archive_is_left_for_the_run_and_the_lead_is_retried(e3_db: str) -> None:
@@ -644,3 +646,23 @@ def test_a_dry_run_only_counts(e3_db: str) -> None:
     stats = run_stage(api=api, dry_run=True)
     assert stats == {"candidates": 1} and api.asked == []
     assert "founder_email" not in db.scalar("select extra from public.businesses where id = %s", [bid])
+
+
+def test_a_name_no_source_confirms_gets_published_addresses_but_no_guesses(e3_db: str) -> None:
+    unconfirmed = startup(verified=False)
+    api = Api({"maya@brightcart.io": DELIVERABLE})
+    run_stage(api=api)
+    assert api.asked == [] and contacts(unconfirmed) == []  # a guess would rest on the name alone
+    published = startup(domain="leafcart.io", verified=False)
+    page(published, "https://leafcart.io/team", "Maya Chen runs Leafcart: maya@leafcart.io")
+    run_stage(api=Api({"maya@leafcart.io": DELIVERABLE}))
+    [row] = contacts(published)
+    assert (row["email_origin"], row["email_status"]) == ("published", "verified")
+
+
+def test_a_country_we_never_write_to_is_left_alone(e3_db: str) -> None:
+    bid = startup(country="de")  # a German company in a US segment (should never happen): left alone
+    page(bid, f"{SITE}team", "Maya Chen maya@brightcart.io")
+    api = Api({"maya@brightcart.io": DELIVERABLE})
+    run_stage(api=api)
+    assert api.asked == [] and contacts(bid) == [] and attempt(bid)["outcome"] == "country"

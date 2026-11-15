@@ -77,6 +77,7 @@ RETRY: Final[dict[str, timedelta]] = {
     "deferred": timedelta(days=1),  # a quota, a block or the AI stopped a rung: try again tomorrow
     "no_founder": timedelta(days=1),  # the people stage may name one later
     "no_domain": timedelta(days=7),
+    "country": timedelta(days=30),  # a country we never write to (config/outreach.yaml)
 }
 SUFFIXES: Final = frozenset({"jr", "sr", "ii", "iii", "iv", "phd", "md", "mba", "cpa", "esq"})
 FREE_MAIL: Final = FREEMAIL | frozenset(
@@ -318,7 +319,7 @@ select l.id::text as lead_id, b.id::text as business_id, b.name, b.website, b.we
 """
 CONTACTS_SQL: Final = """
 select id::text as id, name, role, email, source, source_url, quote, is_decision_maker, do_not_contact, line,
-       email_status, email_origin, created_at
+       verified, email_status, email_origin, created_at
   from public.contacts where business_id = %s order by created_at
 """
 FACTS_SQL: Final = """
@@ -384,6 +385,15 @@ def _parse_time(value: Any) -> datetime | None:
     except (TypeError, ValueError):
         return None
     return when if when.tzinfo else when.replace(tzinfo=UTC)
+
+
+def writable(lead: Lead) -> bool:
+    """A country we may write to at all (allowed, not blocked: config/outreach.yaml)."""
+    cfg = outreach_config()
+    allowed = {str(c).lower() for c in cfg.get("allowed_countries", [])}
+    blocked = {str(c).lower() for c in cfg.get("blocked_countries", [])}
+    countries = {lead.country, lead.segment.country}
+    return countries <= allowed and not countries & blocked
 
 
 def published_only(lead: Lead) -> bool:
@@ -499,7 +509,7 @@ async def archive_rung(lead: Lead, env: Env) -> list[tuple[str, str | None, str 
     if "archive" in env.blocked:  # blocked earlier in this run: this lead tries again tomorrow
         lead.deferred.append("archive_blocked")
         return []
-    params = {"url": f"{lead.domain}/*", "output": "json", "fl": "timestamp,original",
+    params = {"url": lead.domain, "matchType": "domain", "output": "json", "fl": "timestamp,original",
               "filter": ["statuscode:200", "mimetype:text/html"], "collapse": "urlkey", "limit": "500"}  # fmt: skip
     try:
         index = await env.http.get(WAYBACK_CDX, params=params, max_bytes=2_000_000)
@@ -750,8 +760,8 @@ def guess_rung(lead: Lead, facts: list[Row], env: Env) -> Outcome | None:
     fallback: Outcome | None = None
     for founder in lead.founders:
         parts = name_parts(founder["name"])
-        if parts is None:
-            continue
+        if parts is None or not founder.get("verified"):
+            continue  # a guess rests on the name alone: only a name its source confirms
         for pattern in order:
             email = f"{render(pattern, *parts)}@{lead.domain}"
             if email in lead.tried or usable(email, lead, env):
@@ -791,6 +801,8 @@ def guess_rung(lead: Lead, facts: list[Row], env: Env) -> Outcome | None:
 
 async def find(lead: Lead, env: Env) -> Outcome:
     """The ladder for one lead."""
+    if not writable(lead):
+        return Outcome("country")
     if not lead.founders:
         return Outcome("no_founder")
     if not lead.domain or lead.domain in env.suppressed.domains:
