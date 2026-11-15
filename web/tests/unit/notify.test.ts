@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { NewRecipient, RecipientToggle, RECIPIENT_FIELDS, isReservedAddress, receives, testEmail } from '@/lib/notify'
+import { RECIPIENT_FIELDS, isReservedAddress, receives, testEmail } from '@/lib/notify'
+import { NewRecipient, RecipientToggle } from '@/lib/notify-schema'
 
 vi.mock('server-only', () => ({}))
 
