@@ -21,8 +21,9 @@
 --   insights_summary(from_ts, to_ts, filters)   the funnel, the groups, lead quality and, for admins, the costs
 --   engine_counts()                             the live part of the Engine page
 --
--- Who sees what does not change. Every function runs as the signed-in user (security invoker), so Row Level
--- Security applies to every table and view exactly as it did to the requests they replace. Money is read only
+-- Who sees what does not change. Every function but search_leads runs as the signed-in user (security invoker),
+-- so Row Level Security applies to every table and view exactly as it did to the requests they replace
+-- (search_leads checks the role itself, see there). Money is read only
 -- through v_leads_admin, which is empty for anyone but an admin; nothing here reads leads.deal_value_inr or the
 -- other money columns directly. Unverified facts and the cost numbers are admin-only, as on the pages. The rules
 -- each page used (which leads are on Today, which follow-ups are due, what counts as overdue, how the funnel
@@ -34,8 +35,8 @@
 -- old board read at most 1,000 rows across every stage, newest first, and once enough leads had closed, real
 -- deals fell off the end.
 --
--- Also: trigram indexes on businesses.name and businesses.web_domain (search_leads, and the Leads search box,
--- which uses ILIKE '%text%'), and an index for "sent this week".
+-- Also: trigram indexes on businesses.name and businesses.web_domain for search_leads, an index for "sent this
+-- week" and one for the leads of a business.
 
 create extension if not exists pg_trgm with schema extensions;
 
