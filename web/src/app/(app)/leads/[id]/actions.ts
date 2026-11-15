@@ -8,7 +8,8 @@ import { logActivity } from '@/lib/activity'
 import { fail, fieldErrorsOf, ok, SAVE_FAILED, type ActionResult } from '@/lib/action-result'
 import { FEEDBACK_REASONS } from '@/lib/feedback'
 import { lintMessage } from '@/lib/lint'
-import { DealInput, dealPatch, LostReasonInput, LOST_REASON_REQUIRED, needsLostReason, stageChange, StageInput, type LostReason } from '@/lib/outcomes'
+import { LOST_REASON_REQUIRED, needsLostReason, stageChange, type LostReason } from '@/lib/outcomes'
+import { DealInput, dealPatch, LostReasonInput, StageInput } from '@/lib/outcomes-schema'
 import { revalidateLead } from '@/lib/revalidate'
 import type { Stage } from '@/lib/stages'
 
@@ -176,7 +177,8 @@ export async function addNote(input: z.infer<typeof NoteInput>): Promise<ActionR
  * because callers can read the timeline.
  */
 export async function setDealValue(input: { leadId: string; value: string; retainer?: string; currency?: string }): Promise<ActionResult> {
-  const user = await requireRole(['admin'])
+  // Money, written with the service role: the role is checked with the Auth server, not the token.
+  const user = await requireRole(['admin'], { verified: true })
   const parsed = DealInput.safeParse(input)
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? 'Check the amount.')
   const admin = createAdminClient()

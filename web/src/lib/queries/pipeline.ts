@@ -1,61 +1,29 @@
 import 'server-only'
 import { createClient } from '@/lib/supabase/server'
-import { CLOSED_STAGE_LIST } from '@/lib/stages'
-import type { DealCurrency } from '@/lib/outcomes'
-import { getMoney } from './leads'
+import { boardFiltersJson, toBoard, type Board, type BoardFilters } from './page-data'
 
-export type BoardFilters = { seg: string; country: string; owner: string; overdue: boolean }
+export type { Board, BoardCard, BoardFilters } from './page-data'
 
-export type BoardCard = {
-  id: string
-  name: string
-  city: string | null
-  grade: string | null
-  stage: string
-  nextStep: string | null
-  dueAt: string | null
-  ownerId: string | null
-  dealValue?: number | null
-  retainer?: number | null
-  currency?: DealCurrency
-}
+/** Cards per open stage before the rest are left out (the counts still say how many there are). */
+export const BOARD_MAX_PER_STAGE = 500
 
 /**
- * Cards for the board: every lead past New (new leads live on Today). Runs as the user and without money,
- * so the page can start it before the role is known; admins add deal values with `withBoardDealValues`.
+ * The pipeline in one database call (deals_board, migration 0024): every lead in an open stage (Contacted to
+ * Proposal sent, at most `maxPerStage` per stage, most recently active first), a count per stage, and, only when
+ * asked for, the most recent `closedPerStage` cards of each closed stage. New leads live on Today. Runs as the
+ * user (Row Level Security), so the page can start it before the role is known; admins get the money on the
+ * cards that have any.
+ *
+ * Before, the board read 1,000 rows across every stage, newest activity first: once enough leads had closed,
+ * real deals with older activity were cut off.
  */
-export async function getBoard(f: BoardFilters, ctx: { userId: string; today: string }): Promise<BoardCard[]> {
+export async function getBoard(f: BoardFilters, opts: { maxPerStage?: number; closedPerStage?: number } = {}): Promise<Board> {
   const sb = await createClient()
-  let q = sb
-    .from('v_leads_caller')
-    .select('id, name, city, grade, stage, next_step, due_at, owner_id, segment_id, country, last_activity_at')
-    .neq('stage', 'new')
-  if (f.seg) q = q.eq('segment_id', f.seg)
-  if (f.country) q = q.eq('country', f.country)
-  if (f.owner === 'me') q = q.eq('owner_id', ctx.userId)
-  else if (f.owner === 'none') q = q.is('owner_id', null)
-  else if (f.owner) q = q.eq('owner_id', f.owner)
-  if (f.overdue) q = q.lt('due_at', ctx.today).not('stage', 'in', CLOSED_STAGE_LIST)
-  const { data, error } = await q.order('last_activity_at', { ascending: false }).limit(1000)
-  if (error) throw error
-  const rows = (data ?? []).filter((r) => r.id)
-  return rows.map((r) => ({
-    id: r.id!,
-    name: r.name ?? 'Unnamed business',
-    city: r.city,
-    grade: r.grade,
-    stage: r.stage ?? 'contacted',
-    nextStep: r.next_step,
-    dueAt: r.due_at,
-    ownerId: r.owner_id,
-  }))
-}
-
-/** Deal values, retainers and currencies on the cards. Admins only: call it after the role check. */
-export async function withBoardDealValues(cards: BoardCard[]): Promise<BoardCard[]> {
-  const money = await getMoney(await createClient(), cards.map((c) => c.id))
-  return cards.map((c) => {
-    const m = money.get(c.id)
-    return { ...c, dealValue: m?.deal ?? null, retainer: m?.retainer ?? null, currency: m?.currency ?? 'INR' }
+  const { data, error } = await sb.rpc('deals_board', {
+    filters: boardFiltersJson(f),
+    max_per_stage: opts.maxPerStage ?? BOARD_MAX_PER_STAGE,
+    closed_per_stage: opts.closedPerStage ?? 0,
   })
+  if (error) throw error
+  return toBoard(data)
 }

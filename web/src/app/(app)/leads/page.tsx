@@ -13,13 +13,13 @@ import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/ui/page-header'
 import { LeadsSkeleton } from '@/components/skeletons'
-import { claimedUserId, early, requireUser } from '@/lib/auth'
+import { early, requireUser } from '@/lib/auth'
 import { dueState, formatDate, istDate, relativeAge } from '@/lib/dates'
 import { formatNumber, hostOf } from '@/lib/format'
 import { activeFilterCount, filtersToQuery, parseLeadFilters } from '@/lib/leads-filters'
 import { canEdit, canSeeMoney } from '@/lib/roles'
 import { PHONE_TYPE_LABEL, countryLabel, pitchLabel, signalLabel } from '@/lib/signals'
-import { getCities, getLeadsPage, getSavedViews, withDealValues } from '@/lib/queries/leads'
+import { getLeadsPage } from '@/lib/queries/leads'
 import { getSegments, getTeam, segmentLabeler } from '@/lib/queries/shared'
 
 export const metadata: Metadata = { title: 'Leads' }
@@ -33,23 +33,17 @@ export default function LeadsPage({ searchParams }: PageProps<'/leads'>) {
 }
 
 async function Leads({ searchParams }: Pick<PageProps<'/leads'>, 'searchParams'>) {
-  const [sp, userId] = await Promise.all([searchParams, claimedUserId()])
+  const sp = await searchParams
   const filters = parseLeadFilters(sp)
   const now = new Date()
   const today = istDate(now)
-  // The list, cities and saved views run as the user (RLS) and start while the session is checked.
-  const pageP = early(getLeadsPage(filters, { userId: userId ?? '', today }))
-  const citiesP = early(getCities(filters.country))
-  const viewsP = early(getSavedViews(userId ?? ''))
+  // One database call (leads_page) for the list, the total, the cities and the saved views. It runs as the
+  // user (RLS) and starts while the session is checked; the deal values in it are there only for admins.
+  const pageP = early(getLeadsPage(filters))
   const user = await requireUser()
   const isAdmin = canSeeMoney(user.role)
-  const [page, segments, team, cities, views] = await Promise.all([
-    isAdmin ? pageP.then(withDealValues) : pageP,
-    getSegments(),
-    getTeam(),
-    citiesP,
-    viewsP,
-  ])
+  const [page, segments, team] = await Promise.all([pageP, getSegments(), getTeam()])
+  const { cities, views } = page
   const segmentOf = segmentLabeler(segments)
   const teamName = new Map(team.map((m) => [m.id, m.name]))
   const qs = filtersToQuery(filters, { page: 1 })

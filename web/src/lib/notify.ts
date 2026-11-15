@@ -1,7 +1,9 @@
 // Email recipients (Settings > Email recipients) and the test email. Pure: no server or DOM access, so it
 // can be unit tested. The engine sends the real emails (engine/src/nument_engine/ops/emails.py); the web
 // app only sends the test email, through lib/resend.ts.
-import { z } from 'zod'
+//
+// The Settings page's client component imports this file, so the input schemas of its actions (zod) live in
+// lib/notify-schema.ts, which is server-only, and zod never reaches the browser.
 
 export const NOTIFY_KINDS = ['morning', 'alerts', 'weekly'] as const
 export type NotifyKind = (typeof NOTIFY_KINDS)[number]
@@ -33,21 +35,6 @@ export type Recipient = {
   weekly: boolean
   active: boolean
 }
-
-export const NewRecipient = z.object({
-  email: z.string().trim().toLowerCase().max(254, 'Use at most 254 characters.').pipe(z.email('Enter a valid email.')),
-  name: z
-    .string()
-    .trim()
-    .max(80, 'Use at most 80 characters.')
-    .transform((v) => v || null),
-})
-
-export const RecipientToggle = z.object({
-  id: z.uuid(),
-  field: z.enum(RECIPIENT_FIELDS),
-  value: z.boolean(),
-})
 
 /** Addresses on reserved test domains (RFC 2606 and 6761) never get a real email. */
 export function isReservedAddress(email: string): boolean {

@@ -35,6 +35,8 @@ EXPECTED_FILES = [
     "0020_startup_contacts.sql",
     "0021_offers_plans.sql",
     "0022_outreach.sql",
+    "0023_auth_claims.sql",
+    "0024_page_reads.sql",
 ]
 
 

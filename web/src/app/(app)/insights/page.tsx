@@ -14,7 +14,7 @@ import { addDays, daysBetween, formatDate, istDate } from '@/lib/dates'
 import { formatInr, formatNumber, formatPercent } from '@/lib/format'
 import { canSeeMoney } from '@/lib/roles'
 import { countryLabel, pitchLabel, signalLabel } from '@/lib/signals'
-import { GROUPS, MIN_SAMPLE, getCosts, getInsights, type GroupKey } from '@/lib/queries/insights'
+import { GROUPS, MIN_SAMPLE, getInsights, type GroupKey } from '@/lib/queries/insights'
 import { getSegments, segmentLabeler } from '@/lib/queries/shared'
 import { cn } from '@/lib/cn'
 
@@ -52,11 +52,13 @@ async function Insights({ searchParams }: Pick<PageProps<'/insights'>, 'searchPa
     country: /^[a-z]{2}$/.test(one('country')) ? one('country') : '',
     group,
   }
-  // The funnel and quality numbers run as the user (RLS) and start while the session is checked.
+  // One database call (insights_summary): the funnel, the groups, lead quality and, for admins only, the costs.
+  // It runs as the user (RLS) and starts while the session is checked.
   const insights = early(getInsights(filters))
   const user = await requireUser()
   const isAdmin = canSeeMoney(user.role)
-  const [data, segments, costs] = await Promise.all([insights, getSegments(), isAdmin ? getCosts(filters) : Promise.resolve(null)])
+  const [data, segments] = await Promise.all([insights, getSegments()])
+  const costs = isAdmin ? data.costs : null
   const segmentOf = segmentLabeler(segments)
   const groupLabel = (id: string) =>
     id === 'unknown'

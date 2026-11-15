@@ -5,7 +5,8 @@ import { z } from 'zod'
 import { requireRole } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { fail, fieldErrorsOf, ok, SAVE_FAILED, type ActionResult } from '@/lib/action-result'
-import { FIELD_LABEL, NewRecipient, RecipientToggle, type RecipientField } from '@/lib/notify'
+import { FIELD_LABEL, type RecipientField } from '@/lib/notify'
+import { NewRecipient, RecipientToggle } from '@/lib/notify-schema'
 
 // Who gets the engine's emails. Admin only; Row Level Security enforces the same in the database.
 

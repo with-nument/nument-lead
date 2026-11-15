@@ -17,7 +17,7 @@ import { lostReasonLabel, needsLostReason } from '@/lib/outcomes'
 import { formatPhone } from '@/lib/phone'
 import { canEdit, canSeeMoney } from '@/lib/roles'
 import { countryLabel } from '@/lib/signals'
-import { getLeadDetail, getLeadMoney, getProposals } from '@/lib/queries/lead'
+import { getLeadDetail, getProposals } from '@/lib/queries/lead'
 import { getSegments, getTeam, segmentLabeler } from '@/lib/queries/shared'
 
 export const metadata: Metadata = { title: 'Lead' }
@@ -35,24 +35,24 @@ export default function LeadPage({ params, searchParams }: PageProps<'/leads/[id
 async function Lead({ params, searchParams }: Pick<PageProps<'/leads/[id]'>, 'params' | 'searchParams'>) {
   const [{ id }, sp] = await Promise.all([params, searchParams])
   if (!UUID.test(id)) notFound()
-  // Unverified facts are an admin view: ask for them only when the link asks, and drop the request
-  // below for anyone who is not an admin. Everything here runs as the user (RLS), so it starts now.
+  // Unverified facts are an admin view: ask for them only when the link asks; the database returns them
+  // only to an admin. One database call (lead_detail) for the whole lead, money included for admins; it
+  // runs as the user (RLS), so it starts now, before the session check.
   const wantsUnverified = sp.unverified === '1'
   const detailP = early(getLeadDetail(id, { includeUnverified: wantsUnverified }))
-  const verifiedOnlyP = wantsUnverified ? early(getLeadDetail(id, { includeUnverified: false })) : detailP
   const user = await requireUser()
   const isAdmin = canSeeMoney(user.role)
   const editable = canEdit(user.role)
   const includeUnverified = isAdmin && wantsUnverified
-  const [detail, team, segments, proposals, money] = await Promise.all([
-    includeUnverified ? detailP : verifiedOnlyP,
+  const [detail, team, segments, proposals] = await Promise.all([
+    detailP,
     getTeam(),
     getSegments(),
     isAdmin ? getProposals(id) : Promise.resolve([]),
-    isAdmin ? getLeadMoney(id) : Promise.resolve(null),
   ])
   if (!detail) notFound()
   const { business, contacts, signals, facts, score, activities, feedback, pages } = detail
+  const money = isAdmin ? detail.money : null
   const lead = detail.lead
   const now = new Date()
   const names = new Map(team.map((m) => [m.id, m.name]))

@@ -15,5 +15,7 @@ export async function completeTour(): Promise<ActionResult> {
   const sb = await createClient()
   const { error } = await sb.auth.updateUser({ data: { [TOUR_META_KEY]: new Date().toISOString() } })
   if (error) return fail('Could not save that the tour is done.')
+  // The app reads user_metadata from the sign-in token: a fresh token knows the tour is done at once.
+  await sb.auth.refreshSession()
   return ok()
 }

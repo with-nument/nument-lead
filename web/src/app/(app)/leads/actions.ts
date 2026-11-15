@@ -6,7 +6,8 @@ import { requireRole } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { logActivity } from '@/lib/activity'
 import { fail, ok, SAVE_FAILED, type ActionResult } from '@/lib/action-result'
-import { BulkStageInput, LeadIds as Ids, stageChange } from '@/lib/outcomes'
+import { stageChange } from '@/lib/outcomes'
+import { BulkStageInput, LeadIds as Ids } from '@/lib/outcomes-schema'
 import { revalidateLead } from '@/lib/revalidate'
 
 /**

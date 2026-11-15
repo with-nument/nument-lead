@@ -1,21 +1,21 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
-  BulkStageInput,
   canMarkReplied,
   DEAL_CURRENCIES,
-  DealInput,
-  dealPatch,
   formatMoney,
   LOST_REASON_REQUIRED,
   LOST_REASON_VALUES,
   lostReasonLabel,
   needsLostReason,
   stageChange,
-  StageInput,
 } from '@/lib/outcomes'
+import { BulkStageInput, DealInput, dealPatch, StageInput } from '@/lib/outcomes-schema'
 import type { StepInput } from '@/lib/next-step'
+
+// The schemas are server-only (they must never reach the browser); importing them here is fine.
+vi.mock('server-only', () => ({}))
 
 const MIGRATION = readFileSync(fileURLToPath(new URL('../../../supabase/migrations/0016_outcomes.sql', import.meta.url)), 'utf8')
 const checkList = (column: string) => {
