@@ -20,6 +20,7 @@ export type SessionUser = {
 
 /** The JWT claims this module reads. Anything else in the token is ignored. */
 export type TokenClaims = {
+  [claim: string]: unknown
   sub?: unknown
   email?: unknown
   app_metadata?: unknown
