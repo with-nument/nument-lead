@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+    <channel>
+        <title>YourStory RSS Feed</title>
+        <link>https://yourstory.com/</link>
+        <description>YourStory.com is India’s biggest and definitive platform for startups and entrepreneurs related stories, resources, research reports and analysis of the startup eco-system, mobile app developers and more dedicated to promote the startup ecosystem</description>
+        <lastBuildDate>Sun, 15 Nov 2026 18:40:05 GMT</lastBuildDate>
+        <docs>https://validator.w3.org/feed/docs/rss2.html</docs>
+        <generator>https://github.com/jpmonette/feed</generator>
+        <copyright>All rights reserved 2026, Yourstory Media Pvt Ltd</copyright>
+        <item>
+            <title><![CDATA[(Weekly funding roundup Nov 7-14) VC inflow drops to its lowest level in 2026
+
+]]></title>
+            <link>https://yourstory.com/2026/11/weekly-funding-roundup-nov-7-14-vc-inflow-drops-to-lowest-level-2026</link>
+            <guid>https://yourstory.com/2026/11/weekly-funding-roundup-nov-7-14-vc-inflow-drops-to-lowest-level-2026</guid>
+            <pubDate>Sun, 15 Nov 2026 14:28:16 GMT</pubDate>
+            <description><![CDATA[The second week of November saw venture capital funding into Indian startups drop to its lowest level for the year till now due to weak deal activity. 
+]]></description>
+            <content:encoded><![CDATA[<div><p>Weekly venture capital funding into Indian startups has dipped to the lowest level for the year till now due to a combination of the festive period and a lower number of deals.  </p><p>The total venture capital funding for the second week of November was just $26 million from 11 deals. In comparison, the previous week saw a total amount of $263 million.</p><p>This is the lowest ever VC funding raised by Indian startups on a weekly basis for 2026. Prior to this, the lowest level was in the last week of May when the amount was $66 million.</p></div>]]></content:encoded>
+        </item>
+<item>
+            <title><![CDATA[Spacetech startup Cosmoserve raises $6M in seed round
+]]></title>
+            <link>https://yourstory.com/2026/11/spacetech-startup-cosmoserve-raises-6-million-in-seed-round</link>
+            <guid>https://yourstory.com/2026/11/spacetech-startup-cosmoserve-raises-6-million-in-seed-round</guid>
+            <pubDate>Thu, 05 Nov 2026 13:35:19 GMT</pubDate>
+            <description><![CDATA[Cosmoserve also opened a facility in Hyderabad which will be utilised for satellite servicing and space debris recovery.
+
+]]></description>
+            <content:encoded><![CDATA[<div><p>Cosmoserve Space, a Hyderabad-based spacetech startup, has raised $6 million in a seed round of funding from Rebright Partners of Japan, Aranya Holdings, and Naandi Ventures.</p><p>The round also saw participation from existing investors AUM Ventures and Shakti VC. This funding round has seen Cosmoserve raising over $9 million.</p><p>Cosmoserve also inaugurated Base 1 - a facility to design, build, test and operate systems for satellite servicing and space debris recovery. A statement said, this facility will have an orbital rendezvous and capture lab to simulate spacecraft capture operations, a space robotics innovation Lab to develop robotic capture systems; a clean room for satellite integration, a mission simulation and control Centre to manage upcoming missions.</p></div>]]></content:encoded>
+        </item>
+    </channel>
+</rss>
