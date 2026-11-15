@@ -4,6 +4,11 @@ From the homepage links (same site only) the best link per group is chosen: team
 pricing, booking, about. At most 7 pages plus the homepage. When fewer than 3 groups are found, the sitemap
 fills the gaps. `tel:`, `mailto:` and WhatsApp links are collected on the way: they are published contact
 routes even when they are not pages.
+
+Startups (15 Nov 2026, segments in the `firms` domain with a `signals_only` universe) are read deeper, up to
+`research.startup_max_pages` (12) pages: also privacy, terms, imprint, press and the blog, then the latest posts
+listed on the blog page. Their links to a GitHub organisation, the App Store and Google Play are kept for the
+night probes (the links only: those sites are never crawled).
 """
 
 from __future__ import annotations
@@ -16,6 +21,7 @@ from urllib.parse import parse_qs, unquote, urljoin, urlsplit
 from selectolax.lexbor import LexborHTMLParser
 
 from ..normalize import canonical_url, web_domain
+from ..segments import Segment
 
 GROUPS: dict[str, list[str]] = {
     "team": [
@@ -67,6 +73,31 @@ GROUPS: dict[str, list[str]] = {
 GROUP_ORDER = list(GROUPS)
 MAX_PAGES = 8  # homepage + 7
 SITEMAP_MAX_URLS = 500
+
+# Startups only. Legal pages name the company and its address; press and blog posts date what it is doing now.
+STARTUP_GROUPS: dict[str, list[str]] = {
+    "privacy": ["privacy", "privacy policy", "data protection", "datenschutz"],
+    "terms": ["terms", "terms of service", "terms of use", "terms and conditions", "legal"],
+    "imprint": ["imprint", "impressum", "legal notice", "mentions legales"],
+    "press": ["press", "newsroom", "in the news", "media kit", "press kit", "news"],
+    "blog": ["blog", "updates", "changelog", "journal", "insights", "articles"],
+}
+STARTUP_ORDER = [
+    "about",
+    "team",
+    "careers",
+    "pricing",
+    "press",
+    "blog",
+    "contact",
+    "privacy",
+    "terms",
+    "imprint",
+    "booking",
+    "locations",
+]
+STARTUP_MAX_PAGES = 12  # default of settings research.startup_max_pages (contract 4.9)
+BLOG_POSTS = 3  # the latest posts read from the blog page, when the page budget allows
 SKIP = re.compile(
     r"\.(pdf|jpe?g|png|gif|webp|svg|mp4|mp3|zip|docx?|xlsx?|pptx?)(\?|$)|/(tag|category|page|author|feed)/|"
     r"/wp-json/|login|signin|sign-in|signup|register|cart|checkout|my-account|wishlist|\?replytocom=",
@@ -84,11 +115,88 @@ class Links:
     tel: list[str] = field(default_factory=list)  # raw numbers from tel: links
     whatsapp: list[str] = field(default_factory=list)  # numbers from wa.me / api.whatsapp.com links
     mailto: list[str] = field(default_factory=list)
+    profiles: list[str] = field(default_factory=list)  # GitHub, App Store and Google Play links (never fetched)
 
 
 def same_site(url: str, home: str) -> bool:
     a, b = web_domain(url), web_domain(home)
     return a is not None and a == b
+
+
+def is_startup_segment(seg: Segment) -> bool:
+    """Startup segments (15 Nov 2026): the `firms` domain with a `signals_only` universe."""
+    return seg.domain == "firms" and seg.universe == "signals_only"
+
+
+# github.com/<owner>[/<repo>]: GitHub's own pages are not owners.
+_GITHUB_RESERVED = frozenset(
+    {
+        "about",
+        "apps",
+        "collections",
+        "contact",
+        "customer-stories",
+        "enterprise",
+        "events",
+        "explore",
+        "features",
+        "github",
+        "login",
+        "marketplace",
+        "new",
+        "notifications",
+        "orgs",
+        "pricing",
+        "readme",
+        "search",
+        "security",
+        "settings",
+        "site",
+        "sponsors",
+        "team",
+        "topics",
+        "trending",
+        "users",
+    }
+)
+_GITHUB_OWNER = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$")
+_APP_STORE_ID = re.compile(r"/id(\d{6,12})/")
+_PACKAGE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+$")
+
+
+def github_owner(url: str) -> str | None:
+    """The account a github.com link points at (`github.com/acme/app` -> `acme`), or None."""
+    parts = urlsplit(url)
+    if (parts.hostname or "").lower() not in ("github.com", "www.github.com"):
+        return None
+    segments = [s for s in parts.path.split("/") if s]
+    if segments[:1] == ["orgs"] and len(segments) > 1:
+        segments = segments[1:]
+    if not segments or segments[0].lower() in _GITHUB_RESERVED or not _GITHUB_OWNER.match(segments[0]):
+        return None
+    return segments[0]
+
+
+def app_store_id(url: str) -> str | None:
+    """The numeric App Store id of an apps.apple.com or itunes.apple.com app link, or None."""
+    parts = urlsplit(url)
+    if (parts.hostname or "").lower() not in ("apps.apple.com", "itunes.apple.com"):
+        return None
+    match = _APP_STORE_ID.search(parts.path.rstrip("/") + "/")
+    return match.group(1) if match else None
+
+
+def play_package(url: str) -> str | None:
+    """The package name of a Google Play app link (`details?id=com.acme.app`), or None."""
+    parts = urlsplit(url)
+    if (parts.hostname or "").lower() != "play.google.com" or "/store/apps/details" not in parts.path:
+        return None
+    package = (parse_qs(parts.query).get("id") or [""])[0]
+    return package if _PACKAGE.match(package) else None
+
+
+def is_profile_link(url: str) -> bool:
+    return bool(github_owner(url) or app_store_id(url) or play_package(url))
 
 
 def extract_links(html: str, base_url: str) -> Links:
@@ -116,7 +224,11 @@ def extract_links(html: str, base_url: str) -> Links:
                 out.whatsapp.append(wa)
             continue
         absolute = urljoin(base_url, href)
-        if urlsplit(absolute).scheme not in ("http", "https") or not same_site(absolute, base_url):
+        if urlsplit(absolute).scheme not in ("http", "https"):
+            continue
+        if not same_site(absolute, base_url):
+            if is_profile_link(absolute) and absolute not in out.profiles:
+                out.profiles.append(absolute)
             continue
         canon = canonical_url(absolute)
         if canon in seen:
@@ -144,8 +256,15 @@ def _hits(words: Iterable[str], hay: str) -> int:
     return sum(1 for w in words if _tokens(w).strip() and _tokens(w)[:-1] in hay)
 
 
-def choose_pages(home_url: str, links: list[tuple[str, str]], max_pages: int = MAX_PAGES) -> dict[str, str]:
-    """{"home": url, group: url, ...}: the best same-site link per group, in group priority order."""
+def choose_pages(
+    home_url: str, links: list[tuple[str, str]], max_pages: int = MAX_PAGES, *, startup: bool = False
+) -> dict[str, str]:
+    """{"home": url, group: url, ...}: the best same-site link per group, in group priority order.
+
+    For a startup the extra groups count too, in `STARTUP_ORDER`, and once the blog page is chosen up to
+    `BLOG_POSTS` of the remaining budget is kept for its latest posts (`blog_posts`)."""
+    groups = {**GROUPS, **STARTUP_GROUPS} if startup else GROUPS
+    order = STARTUP_ORDER if startup else GROUP_ORDER
     home_canon = canonical_url(home_url)
     best: dict[str, tuple[int, int, str]] = {}  # group -> (hits, -path length, url)
     for url, anchor in links:
@@ -153,7 +272,7 @@ def choose_pages(home_url: str, links: list[tuple[str, str]], max_pages: int = M
             continue
         path = urlsplit(url).path
         hay = _tokens(unquote(path) + " " + anchor)
-        for group, words in GROUPS.items():
+        for group, words in groups.items():
             hits = _hits(words, hay)
             if not hits:
                 continue
@@ -162,15 +281,44 @@ def choose_pages(home_url: str, links: list[tuple[str, str]], max_pages: int = M
                 best[group] = candidate
     chosen = {"home": home_url}
     used = {home_canon}
-    for group in GROUP_ORDER:
+    for group in order:
         if len(chosen) >= max_pages:
             break
-        if group in best:
-            url = best[group][2]
-            if canonical_url(url) not in used:
-                chosen[group] = url
-                used.add(canonical_url(url))
+        if group not in best or canonical_url(best[group][2]) in used:
+            continue
+        if startup and "blog" in chosen and len(chosen) >= max_pages - BLOG_POSTS:
+            continue  # the rest of the budget is for the blog's latest posts
+        chosen[group] = best[group][2]
+        used.add(canonical_url(best[group][2]))
     return chosen
+
+
+def blog_posts(html: str, blog_url: str, exclude: Iterable[str] = (), limit: int = BLOG_POSTS) -> list[str]:
+    """The first `limit` posts linked from a blog page, in page order (blog pages list the newest first).
+
+    A post is a same-site link below the blog page's path (or, for a blog on its own host such as blog.acme.com,
+    any deeper link on that host), and not a tag, category, author, feed or paging link."""
+    base = urlsplit(blog_url)
+    prefix = base.path.rstrip("/")
+    skip = {canonical_url(u) for u in exclude} | {canonical_url(blog_url)}
+    out: list[str] = []
+    for url, _anchor in extract_links(html, blog_url).pages:
+        parts = urlsplit(url)
+        path = parts.path.rstrip("/")
+        if parts.hostname != base.hostname or SKIP.search(url) or parts.query:
+            continue
+        if prefix and not path.startswith(prefix + "/"):
+            continue
+        if not prefix and path.count("/") < 1:
+            continue
+        canon = canonical_url(url)
+        if canon in skip:
+            continue
+        skip.add(canon)
+        out.append(url)
+        if len(out) >= limit:
+            break
+    return out
 
 
 def sitemap_locs(xml: str) -> list[str]:

@@ -14,6 +14,11 @@ For every business queued in the last day (best first, 6 hosts at a time, pages 
    (never as contacts), code writes its rating, stories, doctors, fees and claim as facts, and recent patient
    stories that complain about the front desk become a `review_pain` signal. Practo has its own 5 second pace,
    so its lookups wait outside the crawl slots.
+6. Startups (15 Nov 2026, `pagelib.is_startup_segment`): up to `research.startup_max_pages` (12) pages, adding
+   privacy, terms, imprint, press, the blog and its latest posts; the homepage HTML and headers are
+   fingerprinted (`research.fingerprint`) into the `probe.tech` fact while they are still in memory, and links
+   to a GitHub organisation, the App Store and Google Play are kept in `extra.crawl.profiles` for the night
+   probes (`pipeline.probe`).
 
 Fact models: contact routes read by verification are `model = 'code'`; the other code facts keep the A.13.2
 label `model = 'rule'`. Both mean "made by code" and are stored as verified.
@@ -40,8 +45,8 @@ from .. import db
 from ..http import FetchResult, NeverFetch, PoliteClient, SourceBlocked, host_of
 from ..logging import get_logger
 from ..normalize import canonical_url, homepage, is_ignored_host, phone, web_domain
+from ..research import fingerprint, quality, structured, techstack
 from ..research import pages as pagelib
-from ..research import quality, structured, techstack
 from ..research.browser import Browser
 from ..research.text import main_text_length, page_text
 from ..segments import Segment
@@ -63,6 +68,7 @@ BROWSER_DEFAULT = 40
 JS_SHELL_TEXT = 400
 JS_SHELL_MARKERS = ('id="root"', "id='root'", 'id="__next"', 'id="app"', "enable javascript", "you need to enable")
 RECRAWL_AFTER = timedelta(hours=20)
+STARTUP_PAGES_CEILING = 20  # research.startup_max_pages is kept between 2 and this
 JOB_MAX_AGE_DAYS = 30
 PAGESPEED_PARALLEL = 4
 PAGESPEED_RECHECK_DAYS = 60
@@ -92,6 +98,7 @@ class PageOut:
     html: str = ""
     render_mode: str = "http"
     robots_allowed: bool = True
+    headers: dict[str, str] = field(default_factory=dict)  # the response headers http.py kept (HTTP loads only)
 
     @property
     def canonical(self) -> str:
@@ -112,6 +119,9 @@ class Crawl:
     browser_used: int = 0
     forced_browser: bool = False
     practo: PractoMatch | None = None
+    startup: bool = False  # read deeper, profile links kept, homepage fingerprinted
+    profiles: list[tuple[str, str]] = field(default_factory=list)  # (GitHub or app store link, page url)
+    tech: fingerprint.TechReport | None = None  # the probe.tech fact, startups only
 
 
 @dataclass
@@ -125,6 +135,7 @@ class Loaded:
     html: str = ""
     mode: str = "http"
     reason: str = ""
+    headers: dict[str, str] = field(default_factory=dict)
 
 
 def looks_like_js_shell(html: str, links: int, url: str) -> bool:
@@ -188,7 +199,7 @@ class Crawler:
             res = await self._http("http://" + url.removeprefix("https://"))  # one http fallback (Step 9.4.1)
         if not res.ok:
             return Loaded(res.state, url, res.final_url, res.status, reason=res.reason)
-        out = Loaded("ok", url, res.final_url, res.status, res.text)
+        out = Loaded("ok", url, res.final_url, res.status, res.text, headers=dict(res.headers))
         if not force_browser and self.browser.available():
             links = len(pagelib.extract_links(res.text, res.final_url).pages)
             if looks_like_js_shell(res.text, links, res.final_url):
@@ -197,9 +208,12 @@ class Crawler:
                     out.html, out.mode = rendered.html, "browser"
         return out
 
-    async def crawl(self, business: dict[str, Any]) -> Crawl:
+    async def crawl(
+        self, business: dict[str, Any], *, startup: bool = False, max_pages: int = pagelib.STARTUP_MAX_PAGES
+    ) -> Crawl:
+        """Homepage, then the chosen pages one after another. A startup is read deeper (up to `max_pages`)."""
         home = homepage(business.get("website"))
-        crawl = Crawl(business["id"], home or "")
+        crawl = Crawl(business["id"], home or "", startup=startup)
         crawl.forced_browser = bool((business.get("extra") or {}).get("force_browser"))
         if not home:
             crawl.state = "no_website"
@@ -225,14 +239,16 @@ class Crawler:
             crawl.state = "ignored_host"
             crawl.reason = f"homepage redirects to {web_domain(first.final_url) or 'a directory'}"
             return crawl
-        self._add(crawl, PageOut("home", first.final_url, first.status, first.html, first.mode))
+        self._add(crawl, PageOut("home", first.final_url, first.status, first.html, first.mode, headers=first.headers))
         links = pagelib.extract_links(first.html, first.final_url)
-        chosen = pagelib.choose_pages(first.final_url, links.pages)
+        limit = max_pages if startup else pagelib.MAX_PAGES
+        chosen = pagelib.choose_pages(first.final_url, links.pages, limit, startup=startup)
         if len(chosen) - 1 < 3:
-            chosen = pagelib.choose_pages(first.final_url, links.pages + await self.sitemap_links(first.final_url))
-        for kind, url in chosen.items():
-            if kind == "home":
-                continue
+            more = links.pages + await self.sitemap_links(first.final_url)
+            chosen = pagelib.choose_pages(first.final_url, more, limit, startup=startup)
+        queue = [(kind, url) for kind, url in chosen.items() if kind != "home"]
+        while queue:
+            kind, url = queue.pop(0)
             try:
                 page = await self.load(url, force_browser=crawl.forced_browser)
             except SourceBlocked as err:
@@ -247,6 +263,12 @@ class Crawler:
                 self.ctx.add(f"research.page_{page.state}")
                 continue
             self._add(crawl, PageOut(kind, page.final_url, page.status, page.html, page.mode))
+            if startup and kind == "blog":
+                room = limit - len(chosen)
+                posts = pagelib.blog_posts(page.html, page.final_url, chosen.values(), min(pagelib.BLOG_POSTS, room))
+                for i, post in enumerate(posts, start=1):
+                    chosen[f"blog_post_{i}"] = post
+                    queue.append((f"blog_post_{i}", post))
         return crawl
 
     @staticmethod
@@ -258,6 +280,9 @@ class Crawler:
         for target, values in ((crawl.tel, links.tel), (crawl.whatsapp, links.whatsapp), (crawl.mailto, links.mailto)):
             known = {v for v, _ in target}
             target.extend((v, page.url) for v in values if v not in known)
+        if crawl.startup:
+            seen = {v for v, _ in crawl.profiles}
+            crawl.profiles.extend((v, page.url) for v in links.profiles if v not in seen)
 
     async def sitemap_links(self, home: str) -> list[tuple[str, str]]:
         """Up to 500 same-site URLs from /sitemap.xml and one level of nested sitemaps (Step 9.4.3)."""
@@ -436,7 +461,27 @@ def save_crawl(crawl: Crawl, seg: Segment, business: dict[str, Any], conn: Conne
                 "update public.businesses set extra = jsonb_set(extra, '{practo}', %s) where id = %s",
                 [Jsonb(practo_info), crawl.business_id],
             )
-        crawl_info = {
+        if crawl.tech is not None:
+            home_page = next((p for p in crawl.pages if p.kind == "home" and p.html), None)
+            tech_url = home_page.url if home_page is not None else (crawl.final_url or crawl.home)
+            cur.execute(
+                "delete from public.facts where business_id = %s and field = %s and model = 'rule'",
+                [crawl.business_id, fingerprint.FIELD],
+            )
+            cur.execute(
+                """insert into public.facts (business_id, field, value, quote, url, page_id, model, verified,
+                                             verify_score, verified_at)
+                   values (%s, %s, %s, %s, %s, %s, 'rule', true, 100, now())""",
+                [
+                    crawl.business_id,
+                    fingerprint.FIELD,
+                    Jsonb(crawl.tech.value()),
+                    crawl.tech.quote[:300],
+                    tech_url,
+                    page_ids.get(canonical_url(tech_url)),
+                ],
+            )
+        crawl_info: dict[str, Any] = {
             "at": datetime.now(UTC).isoformat(),
             "state": crawl.state,
             "reason": crawl.reason[:200],
@@ -445,12 +490,45 @@ def save_crawl(crawl: Crawl, seg: Segment, business: dict[str, Any], conn: Conne
             "browser": crawl.browser_used,
             "forced_browser": crawl.forced_browser,
         }
+        if crawl.profiles:
+            crawl_info["profiles"] = profile_links(crawl.profiles)
         # The browser request from verification is answered by this crawl: clear it (one forced crawl only).
         cur.execute(
             "update public.businesses set extra = jsonb_set(extra - 'force_browser', '{crawl}', %s) where id = %s",
             [Jsonb(crawl_info), crawl.business_id],
         )
     return page_ids
+
+
+PROFILE_MAX = 5  # per kind: a site linking more GitHub accounts or apps than this is listing others' work
+
+
+def profile_links(profiles: list[tuple[str, str]]) -> dict[str, list[str]]:
+    """GitHub owners, App Store ids and Google Play packages linked from the startup's own pages, for the
+    night probes (`extra.crawl.profiles`)."""
+    out: dict[str, list[str]] = {"github": [], "app_store": [], "play_store": []}
+    for url, _page in profiles:
+        for kind, value in (
+            ("github", pagelib.github_owner(url)),
+            ("app_store", pagelib.app_store_id(url)),
+            ("play_store", pagelib.play_package(url)),
+        ):
+            if value and value not in out[kind] and len(out[kind]) < PROFILE_MAX:
+                out[kind].append(value)
+    return {k: v for k, v in out.items() if v}
+
+
+async def tech_report(crawl: Crawl, rules: fingerprint.Rules | None) -> fingerprint.TechReport | None:
+    """The homepage fingerprint of a crawled startup, worked out off the event loop (other hosts keep loading).
+    None when there is no homepage HTML or the matcher failed (nothing is written then)."""
+    home = next((p for p in crawl.pages if p.kind == "home" and p.html), None)
+    if crawl.state != "ok" or home is None:
+        return None
+    try:
+        return await asyncio.to_thread(fingerprint.detect, home.url, home.html, home.headers, rules)
+    except Exception as exc:  # one odd page never stops the crawl
+        log.warning("research.fingerprint_failed", error=f"{type(exc).__name__}: {str(exc)[:200]}")
+        return None
 
 
 def job_signals(crawl: Crawl, seg: Segment, segments: dict[str, Segment], ctx: SourceContext) -> list[Signal]:
@@ -515,17 +593,29 @@ async def research_all(
     practo = PractoAdapter(ctx, time_left=time_left)
     practo_on = practo.enabled() and "clinics-in" in segments
     sem = asyncio.Semaphore(CONCURRENCY)
+    startup_ids = {seg_id for seg_id, seg in segments.items() if pagelib.is_startup_segment(seg)}
+    startup_pages = health.setting_int("research.startup_max_pages", pagelib.STARTUP_MAX_PAGES)
+    startup_pages = max(2, min(STARTUP_PAGES_CEILING, startup_pages))
+    rules: fingerprint.Rules | None = None
+    if any(b["segment_id"] in startup_ids for b in queue):
+        rules = await fingerprint.load_rules()  # cached on disk; None: the engine's own markers only
+        if rules is None:
+            stats["tech_rules_unavailable"] += 1
     try:
         async with PoliteClient("research", policy="public", min_gap_s=HOST_GAP_S, max_bytes=PAGE_MAX_BYTES) as http:
             crawler = Crawler(ctx, http, browser)
 
             async def one(b: dict[str, Any]) -> None:
                 seg = segments[b["segment_id"]]
+                startup = seg.id in startup_ids
                 async with sem:
                     if time_left is not None and time_left() <= 0:
                         stats["deadline_skipped"] += 1
                         return
-                    crawl = await crawler.crawl(b)
+                    crawl = await crawler.crawl(b, startup=startup, max_pages=startup_pages)
+                if startup:
+                    crawl.tech = await tech_report(crawl, rules)
+                    stats["probe_tech"] += crawl.tech is not None
                 # Outside the crawl slots: Practo's own 5 second pace must not hold up other sites.
                 if practo_on and seg.id == "clinics-in" and (time_left is None or time_left() > 0):
                     crawl.practo = await practo.safe_call(practo.match, b, seg)

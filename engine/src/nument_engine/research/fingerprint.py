@@ -37,6 +37,7 @@ from ..settings import get_settings
 
 log = get_logger()
 
+FIELD = "probe.tech"  # the facts row this module's report becomes (written by pipeline/research.py)
 RULES_REPO = "enthec/webappanalyzer"
 RULES_COMMIT = "9e52f10a9533c8f7f8d0703c843f7295d56c95a3"  # main on 15 Nov 2026
 RAW_URL = "https://raw.githubusercontent.com/{repo}/{commit}/{path}"
