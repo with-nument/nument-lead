@@ -36,6 +36,8 @@ DRAFT = ProposalDraft(
 def outreach_on(engine_db: str) -> Iterator[str]:
     before = db.get_setting("outreach.mode")
     db.set_setting("outreach.mode", "manual")
+    # The session database is shared: proposals other tests left empty must not be drafted here.
+    db.execute("update public.proposals set content = '{\"left_by\": \"another test\"}' where content = '{}'::jsonb")
     yield engine_db
     db.set_setting("outreach.mode", before if before is not None else "off")
 

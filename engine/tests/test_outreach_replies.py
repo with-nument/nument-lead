@@ -216,6 +216,11 @@ def outreach_on(engine_db: str) -> Iterator[str]:
     keys = ("outreach.mode", "outreach.auto_replies", "outreach.reply_templates")
     before = {k: db.get_setting(k) for k in keys}
     db.set_setting("outreach.mode", "manual")
+    # The session database is shared: replies other tests left behind must not take this test's answers.
+    db.execute(
+        "update public.email_messages set classification = coalesce(classification, 'other'), "
+        "suggested_reply = coalesce(suggested_reply, '') where direction = 'in'"
+    )
     yield engine_db
     for key, value in before.items():
         if value is None:
