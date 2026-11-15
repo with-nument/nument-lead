@@ -14,7 +14,7 @@ import { formatPhone } from '@/lib/phone'
 import { canEdit, canSeeMoney } from '@/lib/roles'
 import { CONTACT_SOURCE_LABEL, PHONE_TYPE_LABEL, signalLabel } from '@/lib/signals'
 import { getSegments, segmentLabeler } from '@/lib/queries/shared'
-import { getFollowupsDue, getSendList, getTodayCounts, getWonThisMonthIds, getWonThisMonthInr, TODAY_LIMIT, type TodayKpis } from '@/lib/queries/today'
+import { getHomeSummary, TODAY_LIMIT, type TodayKpis } from '@/lib/queries/today'
 
 export const metadata: Metadata = { title: 'Today' }
 
@@ -27,21 +27,13 @@ export default function TodayPage() {
 }
 
 async function Today() {
-  // Everything here runs as the user under RLS, so it starts together with the session check.
-  const counts = early(getTodayCounts())
-  const send = early(getSendList())
-  const due = early(getFollowupsDue())
-  const wonIds = early(getWonThisMonthIds())
+  // One database call (home_summary) for everything below. It runs as the user under RLS, so it starts
+  // together with the session check; the money in it is there only for admins.
+  const summary = early(getHomeSummary())
   const user = await requireUser()
   const withMoney = canSeeMoney(user.role)
-  const [counted, sendRows, followups, segments, wonThisMonthInr] = await Promise.all([
-    counts,
-    send,
-    due,
-    getSegments(),
-    withMoney ? wonIds.then((ids) => (ids.length ? getWonThisMonthInr(ids) : 0)) : Promise.resolve(null),
-  ])
-  const kpis: TodayKpis = { ...counted, wonThisMonthInr }
+  const [{ kpis: counted, send: sendRows, followups }, segments] = await Promise.all([summary, getSegments()])
+  const kpis: TodayKpis = { ...counted, wonThisMonthInr: withMoney ? (counted.wonThisMonthInr ?? 0) : null }
   const now = new Date()
   const today = istDate(now)
   const segmentOf = segmentLabeler(segments)
