@@ -21,6 +21,7 @@ SCHEDULED = {
     "weekly.yml": ("30 1 * * 1", 30),
     "monthly.yml": ("0 17 1 * *", 60),
     "backup.yml": ("30 17 * * 0", 15),
+    "outreach.yml": ("*/15 * * * *", 15),  # 15 Nov 2026: the email autopilot (pg_cron starts it once switched on)
 }
 PINNED = re.compile(r"^[\w.-]+/[\w.-]+@[0-9a-f]{40}$")
 
@@ -148,3 +149,33 @@ def test_email_settings_reach_the_runs(name: str) -> None:
     alert = by_name["Email new alerts"]
     assert "nlead health --notify" in alert["run"] and alert["if"] in ("always()", "failure()")
     assert by_name["Report the failure"]["uses"] == "./.github/actions/notify-failure"  # the issue stays
+
+
+def test_outreach_and_backlog_have_their_own_concurrency_groups() -> None:
+    """GitHub keeps one pending run per concurrency group and cancels the older pending one: the 15-minute
+    outreach worker or the 5-hour backlog in the pipeline's group would cancel a waiting morning run."""
+    group = {n: load(WORKFLOWS / n)["concurrency"]["group"] for n in ("night.yml", "morning.yml", "midday.yml")}
+    assert len(set(group.values())) == 1
+    pipeline = group["night.yml"]
+    outreach = load(WORKFLOWS / "outreach.yml")["concurrency"]["group"]
+    backlog = load(WORKFLOWS / "backlog.yml")["concurrency"]["group"]
+    assert len({pipeline, outreach, backlog}) == 3 and "outreach" in outreach and "backlog" in backlog
+
+
+def test_the_backlog_is_manual_and_bounded() -> None:
+    data = load(WORKFLOWS / "backlog.yml")
+    assert "schedule" not in data["on"] and "workflow_dispatch" in data["on"]
+    assert [job["timeout-minutes"] for job in data["jobs"].values()] == [300]
+    assert any("nlead run backlog" in s.get("run", "") for s in steps(data))
+
+
+def test_new_keys_reach_the_runs_that_need_them() -> None:
+    def env(name: str) -> dict[str, str]:
+        return dict(next(iter(load(WORKFLOWS / name)["jobs"].values()))["env"])
+
+    for name in ("outreach.yml", "morning.yml", "midday.yml"):  # founder email checks
+        assert env(name)["QEV_API_KEY"] == "${{ secrets.QEV_API_KEY }}", name
+        assert env(name)["MEV_API_KEY"] == "${{ secrets.MEV_API_KEY }}", name
+    assert env("outreach.yml")["GMAIL_CLIENT_SECRET"] == "${{ secrets.GMAIL_CLIENT_SECRET }}"
+    for name in ("night.yml", "midday.yml", "backlog.yml"):  # the startup sources
+        assert env(name)["SEC_USER_AGENT"] == "${{ vars.SEC_USER_AGENT }}", name

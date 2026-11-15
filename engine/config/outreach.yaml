@@ -1,0 +1,48 @@
+# engine/config/outreach.yaml : where and how the email autopilot may write (founder reset, 15 Nov 2026)
+#
+# Not legal advice: a conservative reading of each country's rules for cold B2B email to an address the
+# business published. Change a country only with the founder's OK.
+
+# Countries where a short, relevant, opt-out-able B2B email to a published business address is allowed.
+allowed_countries: [in, ae, us, gb, ie, nl, fr, se, fi, be, pt, au, nz, ca, sg, br, mx, ph, my, id]
+
+# Prior consent needed even for B2B: never cold-email these (warm channels and inbound only).
+blocked_countries: [de, at, dk, it, es, pl, il, za, vn, sa, qa, ch, no]
+
+# A guessed address (a name pattern checked without sending) is never used here: only addresses the
+# person or business published (Canada CASL; Australia and New Zealand infer consent only from publication).
+published_only_countries: [ca, au, nz]
+
+# Sending windows in the recipient's local time, weekdays only.
+windows:
+  - ["08:30", "11:30"]
+  - ["13:30", "16:30"]
+
+# Daily cap per warm-up week (week 1 = first week after the mailbox starts sending); the last value holds.
+warmup: [10, 15, 20, 25, 30, 35, 40]
+max_sends_per_run: 3
+min_seconds_between_sends: 90
+
+# One open conversation per company domain, and no new one within this many days of the last contact.
+domain_cooldown_days: 90
+
+# The 12-day sequence (days after the first email).
+sequence_days: [0, 3, 7, 12]
+
+# Auto-send only when everything here holds; anything else waits in the review queue.
+auto_send:
+  min_score: 75
+  min_critic: 9
+  email_status: verified
+
+# Pause the mailbox at this bounce rate over the last N sends.
+bounce_pause:
+  percent: 3
+  last_sends: 50
+
+# Hosts the outreach clients may call (tests/test_outreach_hosts.py).
+allowed_hosts:
+  - gmail.googleapis.com
+  - oauth2.googleapis.com
+  - api.quickemailverification.com
+  - client.myemailverifier.com

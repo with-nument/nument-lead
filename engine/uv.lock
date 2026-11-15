@@ -173,6 +173,15 @@ wheels = [
 ]
 
 [[package]]
+name = "cleanco"
+version = "2.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e9/e1/0b7b567c915ef1d619713b0caee14041536814767bad0c30b5e6542a40c9/cleanco-2.3.tar.gz", hash = "sha256:26b899b2be871be288408205686c5a1dd5f3ab085b709d041a77f3e3049d2961", size = 12311, upload-time = "2024-05-15T16:18:19.314Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f8/4e/e4a24eec01fbfda0df23582bc9be5d8c32b324d79481edf6d1ff52b03733/cleanco-2.3-py3-none-any.whl", hash = "sha256:7ab4672cdfdabe2375a608686da86005b33df6f347ebf7849c9d0e2651f27e01", size = 11139, upload-time = "2024-05-15T16:18:18.032Z" },
+]
+
+[[package]]
 name = "cloudpickle"
 version = "3.1.2"
 source = { registry = "https://pypi.org/simple" }
@@ -279,6 +288,15 @@ wheels = [
 ]
 
 [[package]]
+name = "dnspython"
+version = "2.9.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/76/49/900383b471c645a3c397f47b3211d1fcecb3a540c98f683494cdf86b33de/dnspython-2.9.2.tar.gz", hash = "sha256:8d4d39a513e649d634004ce4d39ade2352efcea472a0247535a5c2d18a9d7ba9", size = 455484, upload-time = "2026-11-03T23:56:53.601Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1e/0c/5346358b3a20275d256978c35203ddc2c8617f78c1b23795b79ba22ced6d/dnspython-2.9.2-py3-none-any.whl", hash = "sha256:af15f7d385a6ae2fb35a796fde2138004c8c42c7389090e2addc83e3b3340fd8", size = 360455, upload-time = "2026-11-03T23:56:52.088Z" },
+]
+
+[[package]]
 name = "duckdb"
 version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -310,6 +328,27 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ce/dd/5ba7345dafaa2b5ccbfd441c7bcfc74bae1176aac9acb0d746b6bb327979/extruct-0.18.0.tar.gz", hash = "sha256:b5b48d459003b27c05ee91527b14a5a31735231aaf85d2b1f331d4db879318dd", size = 44170, upload-time = "2024-11-08T14:59:24.26Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/33/00/60d3efc09d52a9e8d57b59323d7edb962daba2f1c46b89449a252f3652e7/extruct-0.18.0-py2.py3-none-any.whl", hash = "sha256:1e739985da705c3348c7614dc169e7780caf20908338fa5f4c6e48576df6f000", size = 26359, upload-time = "2024-11-08T14:59:22.806Z" },
+]
+
+[[package]]
+name = "feedparser"
+version = "6.0.14"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "feedparser-sgmllib" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/37/8a/a53da4a77352045d277978a2df322d5379369f9deb1707178899ff7e1121/feedparser-6.0.14.tar.gz", hash = "sha256:088679b0c4b543ee211a820dd544698c76a402122eae7473c04a43425f283d06", size = 286108, upload-time = "2026-07-30T14:07:40.491Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7f/61/f04912e63702e73fb2a378f9c0a1ad9eb17a334a11a6b3fe1daa593903c2/feedparser-6.0.14-py3-none-any.whl", hash = "sha256:e35e3f760151b0c3b22cac9684155cae186a233e16c49bcbc6c49e91e3131137", size = 80668, upload-time = "2026-07-30T14:07:39.175Z" },
+]
+
+[[package]]
+name = "feedparser-sgmllib"
+version = "2.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/da/df/38596299216e5c22d60ed7f97902bb2bc72cfb95f732400f4fa976fd2e62/feedparser_sgmllib-2.1.0.tar.gz", hash = "sha256:61facf2918c4389b5b00714f76c5e03431ffcd94cd1f51d657edd6cd7c396579", size = 26845, upload-time = "2026-08-02T21:27:53.891Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/85/a0/79a31f898092e145bd66e2b338fb0656979acb2bbbcae8220940fbfcd820/feedparser_sgmllib-2.1.0-py3-none-any.whl", hash = "sha256:2cab2d43b95a954f920f18aebce7a4dbbb3f539780b127e2aa114f579821e01d", size = 11652, upload-time = "2026-08-02T21:27:52.894Z" },
 ]
 
 [[package]]
@@ -840,8 +879,11 @@ name = "nument-engine"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "cleanco" },
+    { name = "dnspython" },
     { name = "duckdb" },
     { name = "extruct" },
+    { name = "feedparser" },
     { name = "google-auth" },
     { name = "google-genai" },
     { name = "gspread" },
@@ -881,8 +923,11 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cleanco", specifier = ">=2.3" },
+    { name = "dnspython", specifier = ">=2.9.2" },
     { name = "duckdb", specifier = ">=1.1" },
     { name = "extruct", specifier = ">=0.17" },
+    { name = "feedparser", specifier = ">=6.0.14" },
     { name = "google-auth", specifier = ">=2.34" },
     { name = "google-genai", specifier = ">=1.0" },
     { name = "gspread", specifier = ">=6.1" },

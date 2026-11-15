@@ -61,6 +61,14 @@ class Settings(BaseSettings):
     resend_api_key: SecretStr | None = None  # optional: morning list, alerts and weekly report by email
     backup_passphrase: SecretStr | None = None
 
+    # Startups and the email autopilot (15 Nov 2026). All optional: without them the phase that needs one
+    # reports "not configured" and changes nothing.
+    sec_user_agent: str = ""  # SEC EDGAR asks for a name and contact email in the User-Agent; empty = skip EDGAR
+    gmail_client_id: str = ""  # Google OAuth client for the Nument mailbox (the refresh token is in Supabase Vault)
+    gmail_client_secret: SecretStr | None = None
+    qev_api_key: SecretStr | None = None  # QuickEmailVerification: 100 free checks a day
+    mev_api_key: SecretStr | None = None  # MyEmailVerifier: 100 free checks a day (backup)
+
     # Paths (not from env)
     segments_dir: Path = ENGINE_DIR / "segments"
     config_dir: Path = ENGINE_DIR / "config"

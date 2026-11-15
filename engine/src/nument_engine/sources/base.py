@@ -41,7 +41,8 @@ WINDOW_DAYS: dict[str, int | None] = {
     "new_place": 60,
     "new_branch": 60,
     "news": 30,
-    "funding": 120,
+    "funding": 60,  # 15 Nov 2026: a round older than 60 days is no longer a reason to write
+    "launch": 30,
 }
 CATEGORY: dict[str, str] = dict(SIGNAL_CATEGORY)
 DEFAULT_POINTS: dict[str, float] = {
@@ -57,6 +58,7 @@ DEFAULT_POINTS: dict[str, float] = {
     "new_branch": 5,
     "news": 3,
     "funding": 0,
+    "launch": 4,
 }
 SNIPPET_ONLY_POINTS = 6.0  # a public ask seen only as a LinkedIn or X search snippet (Step 5.11.2)
 QUOTE_MAX = 300  # Step 7.4.4: quotes are 5 to 300 characters

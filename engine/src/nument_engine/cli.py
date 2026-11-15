@@ -686,6 +686,22 @@ def run_midday(ctx: typer.Context) -> None:
     _execute(ctx, "midday", runs.midday)
 
 
+@run_app.command("outreach")
+def run_outreach(ctx: typer.Context) -> None:
+    """Every 15 minutes while outreach is on: mail in, replies, briefs, proposals, checks, plans, sends."""
+    from .pipeline import runs
+
+    _execute(ctx, "outreach", runs.outreach)
+
+
+@run_app.command("backlog")
+def run_backlog(ctx: typer.Context) -> None:
+    """Once: run the startup sources over the last 60 days."""
+    from .pipeline import runs
+
+    _execute(ctx, "backlog", runs.backlog)
+
+
 @run_app.command("sheet")
 def run_sheet(ctx: typer.Context, light: Annotated[bool, typer.Option("--light", help=LIGHT_HELP)] = False) -> None:
     """Daytime: late batch items at 09:00, then the two-way sheet sync (Step 14)."""

@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from psycopg import errors, sql
 
+from . import seed
 from .helpers import Conn
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -125,7 +126,7 @@ def test_seed_source_health(db_conn: Conn) -> None:
         r["source"]: r["enabled"]
         for r in db_conn.execute("select source, enabled from public.source_health").fetchall()
     }
-    assert len(rows) == 15
+    assert len(rows) == 21  # 0019 added the six startup sources
     assert {s for s, on in rows.items() if not on} == {"adzuna", "llm:openai"}
 
 
@@ -377,3 +378,153 @@ def test_kpis_and_source_health_views(db_conn: Conn) -> None:
 def test_db_size_mb(db_conn: Conn) -> None:
     row = db_conn.execute("select public.db_size_mb() as mb").fetchone()
     assert row is not None and float(row["mb"]) > 0
+
+
+# ---------------------------------------------------------------------------
+# 15 Nov 2026: startups, founder emails, offers and the email autopilot (0019 to 0022)
+# ---------------------------------------------------------------------------
+
+STARTUP_SOURCES = ("funding_rss", "hn_launches", "betalist", "sec_edgar", "ats_jobs", "startup_lists")
+
+
+def _constraint(conn: Conn, name: str) -> str:
+    row = conn.execute("select pg_get_constraintdef(oid) as d from pg_constraint where conname = %s", [name]).fetchone()
+    assert row is not None, name
+    return str(row["d"])
+
+
+def test_startup_sources_and_the_launch_signal(db_conn: Conn) -> None:
+    sources = _constraint(db_conn, "source_records_source_known")
+    assert all(f"'{s}'" in sources for s in STARTUP_SOURCES)
+    assert "'launch'" in _constraint(db_conn, "signals_type_check")
+    health = {r["source"]: r["enabled"] for r in db_conn.execute("select source, enabled from public.source_health")}
+    assert all(health[s] is True for s in STARTUP_SOURCES)
+
+
+def test_startup_and_outreach_settings(db_conn: Conn) -> None:
+    settings = {r["key"]: r["value"] for r in db_conn.execute("select key, value from public.settings").fetchall()}
+    assert all(settings["sources_enabled"][s] is True for s in STARTUP_SOURCES)
+    assert (settings["startup.max_team"], settings["startup.max_raise_usd"]) == (10, 2000000)
+    per_use = [settings[f"grounding.{k}_per_day"] for k in ("asks", "lookup", "people", "email_snippets")]
+    assert sum(per_use) == 145  # inside the free 5,000 grounded queries a month
+    assert settings["outreach.mode"] == "off" and settings["outreach.paused"] is False  # nothing sends until it is on
+    assert settings["outreach.sandbox_to"] is None
+    assert settings["outreach.warmup"] == [10, 15, 20, 25, 30, 35, 40]
+    assert (settings["outreach.auto_min_score"], settings["outreach.auto_min_critic"]) == (75, 9)
+    assert (settings["outreach.bounce_pause_pct"], settings["email_check.per_day"]) == (3, 150)
+
+
+def test_offers_are_seeded_in_order(db_conn: Conn) -> None:
+    rows = db_conn.execute("select key, typical_range from public.offers where active order by sort").fetchall()
+    assert [r["key"] for r in rows] == [
+        "launch_kit", "mvp_sprint", "nocode_to_app", "ai_feature", "mobile_app", "tech_team", "ai_ops", "product_care",
+    ]  # fmt: skip
+    assert all(r["typical_range"] for r in rows)
+
+
+def test_startup_profile_answers_are_from_a_fixed_list(db_conn: Conn) -> None:
+    biz = seed.business(db_conn)
+    db_conn.execute(
+        "insert into public.startup_profiles (business_id, is_startup, team_size, tech_team, can_pay, product_status) "
+        "values (%s, true, 4, 'lone_cto', 'likely', 'no_code')",
+        [biz],
+    )
+    for column, value in (("tech_team", "some"), ("can_pay", "maybe"), ("product_status", "beta"), ("team_size", -1)):
+        with pytest.raises(errors.CheckViolation), db_conn.transaction():
+            db_conn.execute(
+                sql.SQL("update public.startup_profiles set {} = %s where business_id = %s").format(
+                    sql.Identifier(column)
+                ),
+                [value, biz],
+            )
+
+
+def test_primary_contact_prefers_a_verified_founder_email_and_skips_invalid_ones(db_conn: Conn) -> None:
+    biz = seed.business(db_conn)
+
+    def contact(
+        name: str, line: str, *, email: str | None = None, phone: str | None = None, status: str = "unknown"
+    ) -> None:
+        db_conn.execute(
+            "insert into public.contacts (business_id, name, email, phone_e164, phone_type, source, line, email_status) "
+            "values (%s, %s, %s, %s, %s, 'website', %s, %s)",
+            [biz, name, email, phone, "mobile" if phone else "unknown", line, status],
+        )
+
+    def primary() -> str:
+        row = db_conn.execute("select name from public.v_primary_contact where business_id = %s", [biz]).fetchone()
+        assert row is not None
+        return str(row["name"])
+
+    contact("Front desk", "front_desk", phone="+14155550100")
+    contact("Founder phone", "owner", phone="+14155550101")
+    assert primary() == "Founder phone"
+    contact("Founder email", "owner", email="jane@seed.example.com", status="verified")
+    assert primary() == "Founder email"
+    db_conn.execute("update public.contacts set email_status = 'invalid' where name = 'Founder email'")
+    assert primary() == "Founder phone"  # a bounced or invalid address is never the primary contact
+    with pytest.raises(errors.CheckViolation), db_conn.transaction():
+        db_conn.execute("update public.contacts set email_origin = 'bought_list' where business_id = %s", [biz])
+
+
+def test_email_threads_and_messages_rules(db_conn: Conn) -> None:
+    lead_id, _ = seed.lead(db_conn, phone=None)
+
+    def thread() -> str:
+        row = db_conn.execute(
+            "insert into public.email_threads (lead_id, to_email, to_domain) "
+            "values (%s, 'jane@acme.example', 'acme.example') returning id, mode, status",
+            [lead_id],
+        ).fetchone()
+        assert row is not None and (row["mode"], row["status"]) == ("review", "open")  # review unless the bar is met
+        return str(row["id"])
+
+    def message(thread_id: str, direction: str, step: int | None, status: str, rfc: str | None = None) -> None:
+        db_conn.execute(
+            "insert into public.email_messages (thread_id, direction, step, status, rfc_message_id) "
+            "values (%s, %s, %s, %s, %s)",
+            [thread_id, direction, step, status, rfc],
+        )
+
+    first = thread()
+    with pytest.raises(errors.UniqueViolation, match="email_threads_one_open_per_lead"), db_conn.transaction():
+        thread()
+    message(first, "out", 0, "draft", "<a@nument.in>")
+    with pytest.raises(errors.UniqueViolation, match="email_messages_one_per_step"), db_conn.transaction():
+        message(first, "out", 0, "review")
+    with pytest.raises(errors.UniqueViolation, match="email_messages_rfc_idx"), db_conn.transaction():
+        message(first, "out", 3, "queued", "<a@nument.in>")
+    with pytest.raises(errors.CheckViolation), db_conn.transaction():
+        message(first, "out", 5, "draft")  # steps are day 0, 3, 7 and 12
+    message(first, "in", None, "received")
+    message(first, "in", None, "received")  # any number of replies
+    db_conn.execute("update public.email_threads set status = 'stopped', stop_reason = 'reply' where id = %s", [first])
+    thread()  # a stopped conversation allows a new one later
+
+
+def test_plan_page_tokens_are_long_and_expire(db_conn: Conn) -> None:
+    lead_id, _ = seed.lead(db_conn, phone=None)
+    with pytest.raises(errors.CheckViolation), db_conn.transaction():
+        db_conn.execute("insert into public.plan_pages (token, lead_id, content) values ('short', %s, '{}')", [lead_id])
+    row = db_conn.execute(
+        "insert into public.plan_pages (token, lead_id, content) values (%s, %s, '{}') "
+        "returning status, expires_at - created_at as ttl",
+        [uuid.uuid4().hex, lead_id],
+    ).fetchone()
+    assert row is not None and row["status"] == "live" and row["ttl"] == timedelta(days=90)
+
+
+def test_new_activity_types_and_run_kinds(db_conn: Conn) -> None:
+    activities = _constraint(db_conn, "activities_type_check")
+    for kind in (
+        "email_sent",
+        "email_received",
+        "email_bounced",
+        "sequence_stopped",
+        "booking",
+        "brief",
+        "plan_viewed",
+    ):
+        assert f"'{kind}'" in activities, kind
+    runs_kinds = _constraint(db_conn, "runs_kind_check")
+    assert "'outreach'" in runs_kinds and "'backlog'" in runs_kinds

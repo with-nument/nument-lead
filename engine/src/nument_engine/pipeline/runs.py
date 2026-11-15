@@ -40,6 +40,8 @@ DEADLINE_MIN: Final[dict[str, int]] = {
     "night": 170,  # 14 Nov 2026: signals alone took 66 minutes, so research never started in 80
     "morning": 40,
     "midday": 45,
+    "outreach": 10,  # every 15 minutes while outreach is on
+    "backlog": 280,
     "sheet_sync": 8,
     "weekly": 26,
     "monthly": 55,
@@ -49,6 +51,8 @@ STALE_MIN: Final[dict[str, int]] = {
     "night": 190,
     "morning": 50,
     "midday": 75,
+    "outreach": 20,
+    "backlog": 300,
     "sheet_sync": 15,
     "weekly": 35,
     "monthly": 65,
@@ -337,6 +341,8 @@ def night_phases() -> list[Phase]:
         Phase("prefilter", stage("pipeline.prefilter"), essential=True),
         Phase("research", stage("pipeline.research"), budget="research"),
         Phase("extract_submit", stage("pipeline.extract", "submit"), budget="extract"),
+        # startup probes: tech stack, domain age, GitHub, app stores (15 Nov 2026; free, no AI)
+        Phase("probes", stage("pipeline.probe"), budget="low_priority_research"),
         # Google Maps numbers and review pain for tonight's businesses without Places data (uses the research
         # Chromium, so it runs in the night job; after the batch submission, which must not wait for it).
         Phase("maps_reviews", stage("pipeline.maps_reviews"), budget="low_priority_research"),
@@ -348,11 +354,14 @@ def morning_phases() -> list[Phase]:
         Phase("health", stage("ops.health", "check_all", fail_fast=True), essential=True),
         Phase("extract_collect", stage("pipeline.extract", "collect")),  # already paid at submission
         Phase("verify", stage("pipeline.verify"), essential=True),
+        Phase("qualify", stage("pipeline.qualify")),  # startup gates (15 Nov 2026)
         Phase("reviews", stage("pipeline.reviews"), budget="grounded_search"),  # Places fallback before scoring
         Phase("score", stage("pipeline.score"), essential=True),
         Phase("judge", stage("pipeline.judge"), budget="judge"),
         # the founder or owner of A and B leads without a named decision maker, so messages greet a person
         Phase("people", stage("pipeline.people"), budget="grounded_search"),
+        Phase("founder_emails", stage("pipeline.founder_emails"), budget="grounded_search"),
+        Phase("offers", stage("pipeline.offers"), budget="message"),
         Phase("message", stage("pipeline.message"), budget="message"),
         Phase("sheet_sync", sheet_sync(light=False), essential=True),
         Phase("prune", stage("ops.health", "prune_run")),  # daily, so 30-day Places content never overstays
@@ -372,13 +381,36 @@ def midday_phases() -> list[Phase]:
         Phase("lookup", stage("pipeline.lookup"), budget="grounded_search"),
         Phase("extract_collect", stage("pipeline.extract", "collect")),
         Phase("verify", stage("pipeline.verify"), essential=True),
+        Phase("qualify", stage("pipeline.qualify")),  # startup gates (15 Nov 2026)
         Phase("score", stage("pipeline.score"), essential=True),
         Phase("judge", stage("pipeline.judge"), budget="judge"),
         # the founder or owner of A and B leads without a named decision maker, so messages greet a person
         Phase("people", stage("pipeline.people"), budget="grounded_search"),
+        Phase("founder_emails", stage("pipeline.founder_emails"), budget="grounded_search"),
+        Phase("offers", stage("pipeline.offers"), budget="message"),
         Phase("message", stage("pipeline.message"), budget="message"),
         Phase("hot_email", stage("ops.emails", "hot"), after_deadline=True),
     ]
+
+
+def outreach_phases() -> list[Phase]:
+    """Every 15 minutes once the founder switches outreach on (15 Nov 2026): read mail, handle replies, briefs
+    and proposals, check emails, write the plans that are due, then queue and send within the safe limits."""
+    return [
+        Phase("inbox", stage("outreach.inbox")),
+        Phase("replies", stage("outreach.replies"), budget="message"),
+        Phase("briefs", stage("outreach.briefs"), budget="message"),
+        Phase("proposals", stage("outreach.proposals"), budget="message"),
+        Phase("verify_emails", stage("outreach.verifier")),
+        Phase("plans", stage("pipeline.plans"), budget="message"),
+        Phase("send", stage("outreach.sequences"), after_deadline=True),
+        Phase("mailbox_guard", stage("outreach.mailbox"), after_deadline=True),
+    ]
+
+
+def backlog_phases() -> list[Phase]:
+    """Manual: run the startup sources over the last 60 days once (backlog.yml)."""
+    return [Phase("backlog", stage("pipeline.backlog"), budget="low_priority_research")]
 
 
 def sheet_phases(light: bool) -> list[Phase]:
@@ -417,6 +449,16 @@ def morning(rc: RunContext) -> None:
 def midday(rc: RunContext) -> None:
     """13:00 IST: the day's new signals, late batch items, lead stages and the hot-lead email."""
     execute(rc, midday_phases())
+
+
+def outreach(rc: RunContext) -> None:
+    """Every 15 minutes while outreach is on: mail in, replies, briefs, proposals, checks, plans, sends."""
+    execute(rc, outreach_phases())
+
+
+def backlog(rc: RunContext) -> None:
+    """The 60-day startup backlog."""
+    execute(rc, backlog_phases())
 
 
 def sheet(rc: RunContext, *, light: bool = False) -> None:

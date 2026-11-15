@@ -1,0 +1,103 @@
+# Outreach worker (15 Nov 2026): mail in, replies, briefs, proposals, email checks, plans, then sends within the safe limits. Does nothing while settings outreach.mode is "off".
+# Supabase pg_cron starts it every 15 minutes once the founder switches outreach on (nlead outreach schedule on). The GitHub schedule below is only a fallback: it runs when the repository variable SCHEDULES_ENABLED is "true" (off since 13 Nov 2026, it fired hours late).
+name: Outreach
+
+on:
+  schedule:
+    - cron: "*/15 * * * *" # fallback only
+  workflow_dispatch:
+    inputs:
+      env:
+        description: Environment
+        type: choice
+        options: [prod, dev]
+        default: prod
+      segment:
+        description: Segment id (empty = every enabled segment)
+        required: false
+        default: ""
+      limit:
+        description: Most items per stage (empty = no limit; 5 in a dry run)
+        required: false
+        default: ""
+      dry_run:
+        description: Dry run (no paid calls, no sheet writes)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Its own group: GitHub keeps one pending run per group and cancels the older pending one, so sharing the
+# pipeline's group would let this run cancel a waiting night, morning or midday run.
+concurrency:
+  group: nument-outreach-${{ inputs.env || 'prod' }}
+  cancel-in-progress: false
+
+jobs:
+  outreach:
+    if: github.event_name == 'workflow_dispatch' || vars.SCHEDULES_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Repository-level secrets and variables: GitHub environments need a paid plan on a private personal
+    # repository. Live sheet ids reach prod runs only; dev runs see only the staging sheet.
+    permissions:
+      contents: read
+      issues: write
+    env:
+      APP_ENV: ${{ inputs.env || 'prod' }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      ET_GATEWAY_KEY: ${{ secrets.ET_GATEWAY_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_API_KEY_BACKUP: ${{ secrets.GEMINI_API_KEY_BACKUP }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+      SHEET_MASTER_ID: ${{ (inputs.env || 'prod') == 'prod' && vars.SHEET_MASTER_ID || '' }}
+      SHEET_CALLER_ID: ${{ (inputs.env || 'prod') == 'prod' && vars.SHEET_CALLER_ID || '' }}
+      SHEET_STAGING_ID: ${{ (inputs.env || 'prod') == 'dev' && vars.SHEET_STAGING_ID || '' }}
+      ASSOCIATE_NAME: ${{ vars.ASSOCIATE_NAME }}
+      USER_AGENT: ${{ vars.USER_AGENT }}
+      ALERT_EMAIL: ${{ vars.ALERT_EMAIL }}
+      ALERT_EMAIL_FROM: ${{ vars.ALERT_EMAIL_FROM }} # empty = Nument Leads <leads@nument.in>
+      ALERT_REPLY_TO: ${{ vars.ALERT_REPLY_TO }} # empty = the founder's address
+      APP_URL: ${{ vars.APP_URL }} # links in emails; empty = the Render URL
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }} # morning list, alerts and weekly report by email
+      GMAIL_CLIENT_ID: ${{ vars.GMAIL_CLIENT_ID }}
+      GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
+      QEV_API_KEY: ${{ secrets.QEV_API_KEY }} # QuickEmailVerification (free 100 a day)
+      MEV_API_KEY: ${{ secrets.MEV_API_KEY }} # MyEmailVerifier (free 100 a day, backup)
+      IN_SEGMENT: ${{ inputs.segment }}
+      IN_LIMIT: ${{ inputs.limit }}
+      IN_DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: ./.github/actions/setup-engine # no Chromium: the morning run never crawls
+
+      - name: Outreach
+        working-directory: engine
+        run: |
+          args=(--env "$APP_ENV")
+          if [ -n "$IN_SEGMENT" ]; then args+=(--segment "$IN_SEGMENT"); fi
+          if [ -n "$IN_LIMIT" ]; then args+=(--limit "$IN_LIMIT"); fi
+          if [ "$IN_DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          uv run nlead run outreach "${args[@]}"
+
+      - name: Run summary
+        if: always()
+        working-directory: engine
+        run: uv run nlead health --summary --env "$APP_ENV" >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Email new alerts
+        if: always()
+        working-directory: engine
+        run: uv run nlead health --notify --env "$APP_ENV" || true # quiet without RESEND_API_KEY; recipients: Settings > Email recipients
+
+      - name: Report the failure
+        if: failure() && github.event_name == 'schedule'
+        uses: ./.github/actions/notify-failure
+        with:
+          workflow: Outreach

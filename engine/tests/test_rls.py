@@ -296,7 +296,7 @@ def test_admin_reads_operations_data(db_conn: Conn, rls_world: RlsWorld) -> None
     act_as(db_conn, "authenticated", rls_world.admin)
     assert _count(db_conn, "select count(*) from public.costs where task = 'rls_world'") == 1
     assert _count(db_conn, "select count(*) from public.settings") >= 23
-    assert _count(db_conn, "select count(*) from public.source_health") == 15
+    assert _count(db_conn, "select count(*) from public.source_health") == 21
     assert _count(db_conn, "select count(*) from public.v_costs_daily where task = 'rls_world'") == 1
     assert db_conn.execute("update public.source_health set enabled = false where source = 'gdelt'").rowcount == 1
 
@@ -464,3 +464,32 @@ def test_objects_created_after_0003_are_private_unless_granted(db_conn: Conn) ->
     query = "select has_table_privilege('authenticated', %s, 'SELECT')"
     granted = {name for name in later if _flag(db_conn, query, [f"public.{name}"])}
     assert granted == {"weight_versions", "reports"}
+
+
+def test_email_drafts_can_be_reviewed_but_sent_emails_never_change(db_conn: Conn, rls_world: RlsWorld) -> None:
+    thread = db_conn.execute(
+        "insert into public.email_threads (lead_id, to_email, to_domain) values (%s, 'jane@acme.example', "
+        "'acme.example') returning id",
+        [rls_world.lead_id],
+    ).fetchone()
+    assert thread is not None
+    for step, status in ((0, "sent"), (3, "review")):
+        db_conn.execute(
+            "insert into public.email_messages (thread_id, direction, step, status, body) values (%s, 'out', %s, %s, 'x')",
+            [thread["id"], step, status],
+        )
+    act_as(db_conn, "authenticated", rls_world.caller)
+    assert _count(db_conn, "select count(*) from public.email_messages") == 2
+    assert db_conn.execute("update public.email_messages set body = 'edited' where step = 3").rowcount == 1
+    assert db_conn.execute("update public.email_messages set status = 'approved' where step = 3").rowcount == 1
+    assert db_conn.execute("update public.email_messages set body = 'rewritten' where step = 0").rowcount == 0
+    with pytest.raises(errors.InsufficientPrivilege), db_conn.transaction():  # only the engine marks it sent
+        db_conn.execute("update public.email_messages set status = 'sent' where step = 3")
+    with pytest.raises(errors.InsufficientPrivilege), db_conn.transaction():  # the send time is the engine's
+        db_conn.execute("update public.email_messages set scheduled_for = now() where step = 3")
+    act_as(db_conn, "authenticated", rls_world.viewer)
+    assert _count(db_conn, "select count(*) from public.email_messages") == 0
+    assert _count(db_conn, "select count(*) from public.email_threads") == 0
+    assert _count(db_conn, "select count(*) from public.mailboxes") == 0
+    assert _count(db_conn, "select count(*) from public.plan_pages") == 0
+    assert _count(db_conn, "select count(*) from public.offers") == 8  # the offer list is not secret

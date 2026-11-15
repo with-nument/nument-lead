@@ -143,6 +143,18 @@ async def test_disallowed_url_is_skipped_without_fetching_it() -> None:
     assert [str(r.url) for r in seen] == ["https://s.example/robots.txt", "https://s.example/clinic/abc"]
 
 
+async def test_a_source_may_send_its_own_user_agent_but_robots_rules_stay_ours() -> None:
+    """SEC EDGAR asks for a contact address in the User-Agent (15 Nov 2026); robots.txt still binds our bot."""
+    robots = f"User-agent: {UA_TOKEN}\nDisallow: /private\n\nUser-agent: *\nAllow: /\n"
+    routes = {"https://s.example/robots.txt": (200, robots), "*": (200, "page")}
+    c, seen = client(routes, user_agent="Nument contact@example.com")
+    async with c:
+        skipped = await c.get("https://s.example/private/x")
+        ok = await c.get("https://s.example/filing")
+    assert skipped.state == "robots_skip" and ok.ok
+    assert {r.headers["user-agent"] for r in seen} == {"Nument contact@example.com"}
+
+
 @pytest.mark.parametrize(
     ("status", "allowed"),
     [(401, False), (403, False), (404, True), (410, True), (500, None), (503, None), (429, None)],

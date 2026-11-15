@@ -261,6 +261,61 @@ SMOKE_INPUTS: dict[str, dict[str, Any]] = {
         "facts": [{"id": "F1", "field": "branches", "value": {"count": 2}}],
         "signals": [{"id": "S1", "type": "hiring_frontdesk", "summary": "hiring a patient coordinator in Baner"}],
     },
+    "classify_startup_item": {
+        "source": "funding_rss",
+        "url": "https://example.com/news/brightcart-seed",
+        "title": "Brightcart raises $600K pre-seed to help grocers sell online",
+        "text": "Brightcart, a three-person Austin startup founded by Maya Chen and Leo Park, raised $600K in a "
+        "pre-seed round. The non-technical founders plan to launch their ordering app this year.",
+    },
+    "pick_offer": {
+        "company": "Brightcart",
+        "offers": [
+            {"key": "mvp_sprint", "name": "MVP sprint", "best_for": "Pre-seed, non-technical founders"},
+            {"key": "launch_kit", "name": "Launch kit", "best_for": "Idea stage, no product yet"},
+        ],
+        "facts": [{"id": "F1", "field": "product_status", "value": {"value": "waitlist"}}],
+        "signals": [{"id": "S1", "type": "funding", "summary": "raised a $600K pre-seed round 5 days ago"}],
+    },
+    "write_email_sequence": {
+        "founder_name": "Maya Chen",
+        "company": "Brightcart",
+        "offer": "MVP sprint",
+        "why_now": "Brightcart raised a $600K pre-seed round and has no engineers yet",
+        "facts": [{"id": "F1", "field": "product_status", "value": {"value": "waitlist"}}],
+        "signals": [{"id": "S1", "type": "funding", "summary": "raised a $600K pre-seed round 5 days ago"}],
+    },
+    "write_plan": {
+        "company": "Brightcart",
+        "offer": "MVP sprint",
+        "why_now": "Brightcart raised a $600K pre-seed round and has no engineers yet",
+        "facts": [{"id": "F1", "field": "product", "value": {"value": "online ordering for independent grocers"}}],
+    },
+    "classify_reply": {
+        "our_last_email": "Want me to send a 1-page plan for Brightcart?",
+        "reply": "Sure, send it over. What would something like this cost?",
+    },
+    "draft_reply": {
+        "founder_name": "Maya Chen",
+        "company": "Brightcart",
+        "reply": "Sure, send it over. What would something like this cost?",
+        "category": "send_plan",
+        "booking_link": "https://cal.com/abhigyan-numentai/intro-call",
+    },
+    "write_precall_brief": {
+        "company": "Brightcart",
+        "founder_name": "Maya Chen",
+        "offer": "MVP sprint",
+        "why_now": "Brightcart raised a $600K pre-seed round and has no engineers yet",
+        "facts": [{"id": "F1", "field": "product", "value": {"value": "online ordering for independent grocers"}}],
+        "thread": "Maya: Sure, send it over. What would something like this cost?",
+    },
+    "write_proposal": {
+        "company": "Brightcart",
+        "offer": "MVP sprint",
+        "call_notes": "Wants web ordering plus a grocer dashboard in 6 weeks; budget about $6k; Maya decides.",
+        "plan": None,
+    },
     "classify_feed_job": {
         "feed": "hn",
         "url": "https://news.ycombinator.com/item?id=1",

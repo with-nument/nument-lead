@@ -392,14 +392,17 @@ class PoliteClient:
         max_bytes: int = MAX_BYTES,
         timeout: httpx.Timeout = DEFAULT_TIMEOUT,
         transport: httpx.AsyncBaseTransport | None = None,
+        user_agent: str | None = None,
     ) -> None:
         settings = get_settings()
         self.source = source
         self.policy = policy
         self.min_gap = POLICY_GAP_S[policy] if min_gap_s is None else min_gap_s
         self.max_bytes = max_bytes
-        self.user_agent = settings.user_agent
-        self.robots_token = self.user_agent.split("/", 1)[0].strip().lower() or "*"
+        # A source may send a different User-Agent where the host asks for one (SEC EDGAR wants a contact
+        # address); robots.txt is still read for our own bot token.
+        self.user_agent = user_agent or settings.user_agent
+        self.robots_token = settings.user_agent.split("/", 1)[0].strip().lower() or "*"
         self.requests = 0  # network requests made, robots.txt included (source_health.requests_today)
         self.blocked_hosts: dict[str, str] = {}
         self._robots: dict[str, tuple[float, RobotsRules | None]] = {}  # base url -> (read at, rules or None)

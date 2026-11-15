@@ -194,17 +194,27 @@ def test_phase_tables_follow_the_plan() -> None:
     names = {k: [p.name for p in f()] for k, f in {
         "night": runs.night_phases, "morning": runs.morning_phases, "weekly": runs.weekly_phases, "monthly": runs.monthly_phases,
     }.items()}  # fmt: skip
+    # 15 Nov 2026: startup probes at night; qualify, founder emails and offers before the message
     assert names["night"] == [
-        "health", "universe", "signals", "lookup", "prefilter", "research", "extract_submit", "maps_reviews",
+        "health", "universe", "signals", "lookup", "prefilter", "research", "extract_submit", "probes", "maps_reviews",
     ]  # fmt: skip
     assert names["morning"] == [
-        "health", "extract_collect", "verify", "reviews", "score", "judge", "people", "message", "sheet_sync", "prune",
-        "summary", "email",
+        "health", "extract_collect", "verify", "qualify", "reviews", "score", "judge", "people", "founder_emails",
+        "offers", "message", "sheet_sync", "prune", "summary", "email",
     ]  # fmt: skip
     # 13 Nov 2026: the midday run (13:00 IST) and its hot-lead email
     assert [p.name for p in runs.midday_phases()] == [
-        "health", "signals", "lookup", "extract_collect", "verify", "score", "judge", "people", "message", "hot_email",
+        "health", "signals", "lookup", "extract_collect", "verify", "qualify", "score", "judge", "people",
+        "founder_emails", "offers", "message", "hot_email",
     ]  # fmt: skip
+    # 15 Nov 2026: the email autopilot every 15 minutes; sending is the point of the run, so it outlives the deadline
+    outreach = runs.outreach_phases()
+    assert [p.name for p in outreach] == [
+        "inbox", "replies", "briefs", "proposals", "verify_emails", "plans", "send", "mailbox_guard",
+    ]  # fmt: skip
+    assert [p.name for p in outreach if p.after_deadline] == ["send", "mailbox_guard"]
+    assert not [p.name for p in outreach if p.essential]
+    assert [p.name for p in runs.backlog_phases()] == ["backlog"]
     assert names["weekly"] == ["learn", "audit", "report"]  # the report includes this week's audit (16.6.2)
     assert names["monthly"] == ["universe", "prune"]
     essential = {p.name for p in runs.morning_phases() if p.essential}
@@ -216,6 +226,9 @@ def test_phase_tables_follow_the_plan() -> None:
     every = [
         *runs.night_phases(),
         *runs.morning_phases(),
+        *runs.midday_phases(),
+        *runs.outreach_phases(),
+        *runs.backlog_phases(),
         *runs.sheet_phases(True),
         *runs.weekly_phases(),
         *runs.monthly_phases(),

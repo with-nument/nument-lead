@@ -59,7 +59,7 @@ def _answer(req: LLMRequest) -> LLMResponse:
 
 def test_smoke_runs_every_task_on_gemini_and_skips_openai(llm_db: str) -> None:
     clock = FakeClock()
-    gemini = FakeProvider("gemini", [_answer] * 60)
+    gemini = FakeProvider("gemini", [_answer] * 120)  # every task, primary plus fallbacks
     router = make_router({"gemini": gemini}, clock=clock)
     report = health.llm_smoke(router)
     ok = [r for r in report.rows if r.ok]
@@ -77,7 +77,7 @@ def test_smoke_runs_every_task_on_gemini_and_skips_openai(llm_db: str) -> None:
 
 
 def test_smoke_stops_paid_calls_at_the_run_cap(llm_db: str) -> None:
-    gemini = FakeProvider("gemini", [_answer] * 60)
+    gemini = FakeProvider("gemini", [_answer] * 120)  # every task, primary plus fallbacks
     router = make_router({"gemini": gemini}, max_spend_inr=0.05, run_id=_run())
     report = health.llm_smoke(router)
     assert any("budget" in r.detail for r in report.rows)

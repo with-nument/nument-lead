@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import importlib
 from collections import Counter
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
@@ -412,6 +413,25 @@ async def job_feeds_watch(ctx: SourceContext, segments: dict[str, Segment], sink
 
 
 Watcher = Callable[[SourceContext, dict[str, Segment], SignalSink], Awaitable[None]]
+
+
+def _source_watch(name: str) -> Watcher:
+    """The watcher of a source module (`sources/<name>.py`, its async `watch(ctx, segments, sink)`), imported when
+    it runs, behind the source's own switch (sources_enabled and source_health)."""
+
+    async def watch(ctx: SourceContext, segments: dict[str, Segment], sink: SignalSink) -> None:
+        usable, why = health.source_status(name)
+        if not usable:
+            ctx.add(f"skipped.{name}")
+            ctx.stats.setdefault("skip_reasons", {})[name] = why
+            return
+        module = importlib.import_module(f"nument_engine.sources.{name}")
+        await module.watch(ctx, segments, sink)
+
+    watch.__qualname__ = f"{name}.watch"
+    return watch
+
+
 WATCHERS: tuple[tuple[str, Watcher], ...] = (
     ("careers_watch", careers_watch_run),
     ("inbox", inbox_posts_watch),
@@ -420,6 +440,13 @@ WATCHERS: tuple[tuple[str, Watcher], ...] = (
     ("gdelt", gdelt_watch),
     ("grounded_search", grounded_public_asks),
     ("job_feeds", job_feeds_watch),
+    # the startup sources (15 Nov 2026); each module's watch() fills the sink
+    ("funding_rss", _source_watch("funding_rss")),
+    ("hn_launches", _source_watch("hn_launches")),
+    ("betalist", _source_watch("betalist")),
+    ("sec_edgar", _source_watch("sec_edgar")),
+    ("ats_jobs", _source_watch("ats_jobs")),
+    ("startup_lists", _source_watch("startup_lists")),
     ("adzuna", adzuna_watch),
 )
 

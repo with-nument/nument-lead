@@ -63,6 +63,9 @@ jobs:
       ALERT_REPLY_TO: ${{ vars.ALERT_REPLY_TO }} # empty = the founder's address
       APP_URL: ${{ vars.APP_URL }} # links in emails; empty = the Render URL
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }} # morning list, alerts and weekly report by email
+      QEV_API_KEY: ${{ secrets.QEV_API_KEY }} # founder email checks (free 100 a day)
+      MEV_API_KEY: ${{ secrets.MEV_API_KEY }}
+      SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT }} # SEC EDGAR wants a contact address; empty = skip EDGAR
       IN_SEGMENT: ${{ inputs.segment }}
       IN_LIMIT: ${{ inputs.limit }}
       IN_DRY_RUN: ${{ inputs.dry_run }}

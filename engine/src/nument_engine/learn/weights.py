@@ -45,6 +45,7 @@ DEFAULT_SIGNAL_POINTS: Final[dict[str, float]] = {
     "new_branch": 5.0,
     "news": 3.0,
     "funding": 0.0,  # adds can-pay instead (the `funding` proxy)
+    "launch": 4.0,  # a public launch (Show HN, Launch HN, BetaList) in the last 30 days
 }
 TIERED_GROUPS: Final[tuple[str, ...]] = ("branches", "staff", "reviews")
 SINGLE_PROXIES: Final[tuple[str, ...]] = ("premium_price", "pays_for_software", "custom_website", "funding")

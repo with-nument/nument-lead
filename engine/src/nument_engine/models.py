@@ -85,6 +85,7 @@ SignalType = Literal[
     "new_branch",
     "news",
     "funding",
+    "launch",
 ]
 SIGNAL_TYPES: Final[tuple[str, ...]] = get_args(SignalType)
 SignalCategory = Literal["stated_need", "visible_pain", "growth", "money"]
@@ -102,6 +103,7 @@ SIGNAL_CATEGORY: Final[dict[str, str]] = {
     "new_branch": "growth",
     "news": "growth",
     "funding": "money",
+    "launch": "growth",
 }
 
 # ---- Grades, pitch modes, test groups (A.12.4, A.12.9) ----------------------
@@ -173,6 +175,14 @@ ActivityType = Literal[
     "ai_output",
     "conflict_overridden",
     "unknown_stage",
+    # the email autopilot (0022)
+    "email_sent",
+    "email_received",
+    "email_bounced",
+    "sequence_stopped",
+    "booking",
+    "brief",
+    "plan_viewed",
 ]
 ACTIVITY_TYPES: Final[tuple[str, ...]] = get_args(ActivityType)
 # The database triggers write these; code must never insert them (it labels db.tx(source, context) instead).
@@ -181,7 +191,7 @@ TRIGGER_ACTIVITY_TYPES: Final[frozenset[str]] = frozenset(
 )
 
 # ---- Operations -----------------------------------------------------------
-RunKind = Literal["night", "morning", "midday", "sheet_sync", "weekly", "monthly", "manual"]
+RunKind = Literal["night", "morning", "midday", "outreach", "backlog", "sheet_sync", "weekly", "monthly", "manual"]
 RUN_KINDS: Final[tuple[str, ...]] = get_args(RunKind)
 RunStatus = Literal["running", "ok", "partial", "failed"]
 RUN_STATUSES: Final[tuple[str, ...]] = get_args(RunStatus)
@@ -210,6 +220,12 @@ SourceName = Literal[
     "maps_reviews",
     "job_feeds",
     "startup_news",
+    "funding_rss",
+    "hn_launches",
+    "betalist",
+    "sec_edgar",
+    "ats_jobs",
+    "startup_lists",
     "legacy",
     "legacy_skip",
 ]
@@ -235,6 +251,15 @@ AITask = Literal[
     "find_decision_maker",
     "classify_reviews",
     "classify_feed_job",
+    # the startup engine and the email autopilot (15 Nov 2026)
+    "classify_startup_item",
+    "pick_offer",
+    "write_email_sequence",
+    "write_plan",
+    "classify_reply",
+    "draft_reply",
+    "write_precall_brief",
+    "write_proposal",
     "weekly_audit",
 ]
 AI_TASKS: Final[tuple[str, ...]] = get_args(AITask)
@@ -526,6 +551,133 @@ class AuditResult(BaseModel):
     notes: str = Field(max_length=400, description="at most 2 sentences")
 
 
+# ---- The startup engine and the email autopilot (15 Nov 2026) -------------------------------------------
+
+
+class StartupItemClassification(BaseModel):
+    """`classify_startup_item`: one funding, launch, filing or job item about a startup."""
+
+    is_relevant: bool  # a real startup, the item is about it, and the event is one we use
+    event: Literal["funding", "launch", "hiring", "ask", "other"]
+    company_name: str | None
+    company_website: str | None = Field(description="only a website written in the item, else null")
+    hq_country: str | None = Field(description="ISO 3166-1 alpha-2, lower case, e.g. us, gb, in")
+    city: str | None
+    is_startup: bool | None = Field(description="young, founder-led, building a product or brand; not an agency")
+    team_size: int | None = Field(description="total people when the item states it")
+    round: Literal["pre_seed", "seed", "series_a", "series_b_plus", "grant", "crowdfunding", "unknown"] | None
+    amount_usd: float | None
+    founders: list[str] = Field(default_factory=list, description="founder names written in the item")
+    evidence_quote: str = Field(description="exact phrase copied from the item that proves the event")
+    confidence: float = Field(ge=0, le=1)
+
+
+class OfferPick(BaseModel):
+    """`pick_offer`: the one offer to pitch a startup, a backup, and why now."""
+
+    offer_key: str
+    backup_offer_key: str | None = None
+    why_now: str = Field(max_length=280, description="one plain sentence, from the cited facts and signals")
+    cited_ids: list[str] = Field(min_length=1)
+    confidence: float = Field(ge=0, le=1)
+
+
+class EmailSequence(BaseModel):
+    """`write_email_sequence`: the 12-day cold email sequence for one founder."""
+
+    subject: str = Field(max_length=70)
+    day0: str = Field(description="60 to 90 words, plain text, no links, one soft question")
+    day0_alt: str | None = None
+    day3: str = Field(description="shares {plan_link}; 40 to 80 words")
+    day7: str = Field(description="shares {case_study}; 40 to 80 words")
+    day12: str = Field(description="polite close; 15 to 40 words")
+    claims: list[Claim]
+
+
+class PlanWeek(BaseModel):
+    week: int = Field(ge=1, le=26)
+    deliverable: str
+
+
+class ScreenSection(BaseModel):
+    kind: Literal["hero", "list", "cards", "form", "stats", "chat", "table", "nav"]
+    label: str
+    items: list[str] = Field(default_factory=list, max_length=8)
+
+
+class ScreenSpec(BaseModel):
+    """A first-screen mockup as data: the page renders it with its own components, never AI-written HTML."""
+
+    app_name: str
+    title: str
+    sections: list[ScreenSection] = Field(min_length=1, max_length=6)
+
+
+class PlanContent(BaseModel):
+    """`write_plan`: the personal 1-page plan behind the day-3 email."""
+
+    headline: str
+    their_goal: str
+    scope_now: list[str] = Field(min_length=1, max_length=8)
+    scope_later: list[str] = Field(default_factory=list, max_length=6)
+    timeline: list[PlanWeek] = Field(min_length=1, max_length=10)
+    typical_range: str
+    first_screen: ScreenSpec
+    next_step: str
+
+
+class ReplyClassification(BaseModel):
+    """`classify_reply`: what a founder's reply means, so the safe ones can be handled automatically."""
+
+    category: Literal[
+        "interested", "send_plan", "question", "not_now", "out_of_office", "wrong_person", "unsubscribe", "other"
+    ]
+    confidence: float = Field(ge=0, le=1)
+    summary: str = Field(max_length=200)
+    return_date: str | None = Field(default=None, description="out of office: back on, YYYY-MM-DD")
+    referral_name: str | None = None
+    referral_email: str | None = Field(default=None, description="only an address written in the reply")
+
+
+class ReplyDraft(BaseModel):
+    """`draft_reply`: a suggested answer for the founder to approve, edit or send."""
+
+    body: str
+    include_booking_link: bool = True
+
+
+class PrecallBrief(BaseModel):
+    """`write_precall_brief`: what the founder reads an hour before the call."""
+
+    summary: str
+    why_now: str
+    what_they_need: list[str] = Field(min_length=1, max_length=6)
+    questions: list[str] = Field(min_length=3, max_length=8)
+    offer_key: str
+    risks: list[str] = Field(default_factory=list, max_length=4)
+
+
+class ProposalMilestone(BaseModel):
+    name: str
+    weeks: int = Field(ge=1, le=26)
+    deliverables: list[str] = Field(min_length=1, max_length=8)
+    price_usd: float | None = None
+
+
+class ProposalDraft(BaseModel):
+    """`write_proposal`: the proposal after a call (the founder sets the final prices)."""
+
+    title: str
+    problem: str
+    scope_must: list[str] = Field(min_length=1)
+    scope_later: list[str] = Field(default_factory=list)
+    milestones: list[ProposalMilestone] = Field(min_length=1, max_length=8)
+    total_range: str
+    guarantee: str
+    retainer: str
+    next_step: str
+
+
 AI_OUTPUT_MODELS: Final[dict[str, type[BaseModel]]] = {
     "classify_signal": SignalClassification,
     "classify_news": NewsClassification,
@@ -541,5 +693,13 @@ AI_OUTPUT_MODELS: Final[dict[str, type[BaseModel]]] = {
     "find_decision_maker": DecisionMakerLookup,
     "classify_reviews": ReviewPainClassification,
     "classify_feed_job": FeedJobClassification,
+    "classify_startup_item": StartupItemClassification,
+    "pick_offer": OfferPick,
+    "write_email_sequence": EmailSequence,
+    "write_plan": PlanContent,
+    "classify_reply": ReplyClassification,
+    "draft_reply": ReplyDraft,
+    "write_precall_brief": PrecallBrief,
+    "write_proposal": ProposalDraft,
     "weekly_audit": AuditResult,
 }

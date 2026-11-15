@@ -307,6 +307,142 @@ tiers:
       daily_limit_setting: ai.classify_per_day
       daily_limit: 1500
 
+    classify_startup_item:                   # funding, launch, filing and job items (15 Nov 2026)
+      primary: g_lite
+      fallbacks: [g_flash, o_nano]
+      mode: sync
+      schema: StartupItemClassification
+      prompt: classify_startup_item.md
+      max_output_tokens: 500
+      temperature: 0.0
+      thinking: "off"
+      tools: []
+      priority: 4
+      est_input_tokens: 1500
+      est_output_tokens: 300
+      cache_ttl_days: 30
+      timeout_s: 60
+      max_retries: 3
+
+    pick_offer:                              # one offer per startup plus why now
+      primary: g_flash
+      fallbacks: [g_pro, g_lite]
+      mode: sync
+      schema: OfferPick
+      prompt: pick_offer.md
+      max_output_tokens: 500
+      temperature: 0.2
+      thinking: low
+      tools: []
+      priority: 3
+      est_input_tokens: 2500
+      est_output_tokens: 250
+      cache_ttl_days: 0
+      timeout_s: 90
+      max_retries: 2
+
+    write_email_sequence:                    # the 12-day cold email sequence
+      primary: g_flash
+      fallbacks: [g_pro, o_mini]
+      mode: sync
+      schema: EmailSequence
+      prompt: write_email_sequence.md
+      max_output_tokens: 1800
+      temperature: 0.7
+      thinking: low
+      tools: []
+      priority: 2
+      est_input_tokens: 3000
+      est_output_tokens: 1200
+      cache_ttl_days: 0
+      timeout_s: 120
+      max_retries: 2
+
+    write_plan:                              # the personal 1-page plan and first-screen spec
+      primary: g_flash
+      fallbacks: [g_pro, o_mini]
+      mode: sync
+      schema: PlanContent
+      prompt: write_plan.md
+      max_output_tokens: 1600
+      temperature: 0.5
+      thinking: low
+      tools: []
+      priority: 3
+      est_input_tokens: 2500
+      est_output_tokens: 1000
+      cache_ttl_days: 0
+      timeout_s: 120
+      max_retries: 2
+
+    classify_reply:                          # sort a founder's reply
+      primary: g_flash
+      fallbacks: [g_pro, g_lite]
+      mode: sync
+      schema: ReplyClassification
+      prompt: classify_reply.md
+      max_output_tokens: 400
+      temperature: 0.0
+      thinking: "off"
+      tools: []
+      priority: 1
+      est_input_tokens: 1200
+      est_output_tokens: 150
+      cache_ttl_days: 0
+      timeout_s: 60
+      max_retries: 3
+
+    draft_reply:                             # suggested answer to an interested founder
+      primary: g_flash
+      fallbacks: [g_pro, o_mini]
+      mode: sync
+      schema: ReplyDraft
+      prompt: draft_reply.md
+      max_output_tokens: 600
+      temperature: 0.5
+      thinking: low
+      tools: []
+      priority: 1
+      est_input_tokens: 1500
+      est_output_tokens: 300
+      cache_ttl_days: 0
+      timeout_s: 90
+      max_retries: 2
+
+    write_precall_brief:                     # brief an hour before a call
+      primary: g_flash
+      fallbacks: [g_pro, o_mini]
+      mode: sync
+      schema: PrecallBrief
+      prompt: write_precall_brief.md
+      max_output_tokens: 900
+      temperature: 0.3
+      thinking: low
+      tools: []
+      priority: 2
+      est_input_tokens: 3000
+      est_output_tokens: 600
+      cache_ttl_days: 0
+      timeout_s: 120
+      max_retries: 2
+
+    write_proposal:                          # proposal after a call
+      primary: g_pro
+      fallbacks: [g_flash, o_mini]
+      mode: sync
+      schema: ProposalDraft
+      prompt: write_proposal.md
+      max_output_tokens: 2000
+      temperature: 0.3
+      thinking: low
+      tools: []
+      priority: 2
+      est_input_tokens: 3000
+      est_output_tokens: 1500
+      cache_ttl_days: 0
+      timeout_s: 180
+      max_retries: 2
+
     weekly_audit:
       primary: g_pro
       fallbacks: [g_flash, o_top]
