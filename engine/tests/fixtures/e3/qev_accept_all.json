@@ -1,0 +1,1 @@
+{"result": "valid", "reason": "accepted_email", "disposable": "false", "accept_all": "true", "role": "false", "free": "false", "email": "accept-all@example.com", "user": "accept-all", "domain": "example.com", "mx_record": "mx.example.com", "mx_domain": "example.com", "safe_to_send": "false", "did_you_mean": "", "success": "true", "message": ""}
