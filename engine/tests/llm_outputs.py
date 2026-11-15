@@ -12,6 +12,7 @@ from nument_engine.models import (
     FactsExtraction,
     FeedJobClassification,
     FlaggedVerification,
+    FounderEmailLookup,
     LeadJudgement,
     MessageCheck,
     MessageDraft,
@@ -205,6 +206,9 @@ OUTPUTS: dict[str, BaseModel] = {
         name="Asha Rao", role="Founder", line="Decision maker: Asha Rao, Founder at Brightcart Foods"
     ),
     "find_website": WebsiteLookup(website="https://brightcart.in", website_line="Website: https://brightcart.in"),
+    "find_founder_email": FounderEmailLookup(
+        email="maya@brightcart.io", line="Email: maya@brightcart.io, written on Brightcart | Team"
+    ),
     "classify_reviews": ReviewPainClassification(
         has_pain=True,
         flags=["unanswered_calls"],
