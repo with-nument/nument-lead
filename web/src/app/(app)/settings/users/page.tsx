@@ -24,7 +24,8 @@ export default function UsersPage() {
 }
 
 async function Users() {
-  const me = await requireRole(['admin'])
+  // The list comes from the service role, so the role is checked with the Auth server, not the token.
+  const me = await requireRole(['admin'], { verified: true })
   const users = await getUsers()
   const now = new Date()
   const rows: UserRow[] = users.map((u) => ({

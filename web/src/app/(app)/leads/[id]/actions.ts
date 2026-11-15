@@ -177,7 +177,8 @@ export async function addNote(input: z.infer<typeof NoteInput>): Promise<ActionR
  * because callers can read the timeline.
  */
 export async function setDealValue(input: { leadId: string; value: string; retainer?: string; currency?: string }): Promise<ActionResult> {
-  const user = await requireRole(['admin'])
+  // Money, written with the service role: the role is checked with the Auth server, not the token.
+  const user = await requireRole(['admin'], { verified: true })
   const parsed = DealInput.safeParse(input)
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? 'Check the amount.')
   const admin = createAdminClient()

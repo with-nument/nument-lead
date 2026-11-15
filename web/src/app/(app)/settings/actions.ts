@@ -19,6 +19,8 @@ export async function updateProfile(_: unknown, formData: FormData): Promise<Act
   const sb = await createClient()
   const { error } = await sb.from('profiles').update({ full_name: parsed.data.fullName }).eq('user_id', user.id)
   if (error) return fail(SAVE_FAILED)
+  // The name travels in the sign-in token (migration 0023): a fresh token shows the new one at once.
+  await sb.auth.refreshSession()
   updateTag(TAGS.team)
   revalidatePath('/', 'layout')
   return ok('Name saved')
@@ -30,7 +32,7 @@ const NewPassword = z
 
 /** Changes the signed-in user's password and clears the temporary-password flag. */
 export async function changePassword(_: unknown, formData: FormData): Promise<ActionResult> {
-  const user = await requireUser()
+  const user = await requireUser({ verified: true })
   const parsed = NewPassword.safeParse(Object.fromEntries(formData))
   if (!parsed.success) return fail('Check the highlighted fields.', fieldErrorsOf(parsed.error))
   const sb = await createClient()

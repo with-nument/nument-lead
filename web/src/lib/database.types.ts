@@ -2269,7 +2269,29 @@ export type Database = {
     }
     Functions: {
       auth_role: { Args: never; Returns: string }
+      custom_access_token_hook: { Args: { event: Json }; Returns: Json }
       db_size_mb: { Args: never; Returns: number }
+      deals_board: {
+        Args: { closed_per_stage?: number; filters?: Json; max_per_stage?: number }
+        Returns: Json
+      }
+      engine_counts: { Args: never; Returns: Json }
+      home_summary: { Args: { list_limit?: number }; Returns: Json }
+      insights_summary: {
+        Args: { filters?: Json; from_ts: string; to_ts: string }
+        Returns: Json
+      }
+      lead_detail: {
+        Args: { include_unverified?: boolean; lead_id: string }
+        Returns: Json
+      }
+      leads_page: {
+        Args: { filters?: Json; page?: number; page_size?: number }
+        Returns: Json
+      }
+      nav_counts: { Args: never; Returns: Json }
+      revoke_user_sessions: { Args: { target_user: string }; Returns: number }
+      search_leads: { Args: { max?: number; q: string }; Returns: Json }
     }
     Enums: {
       [_ in never]: never

@@ -11,7 +11,9 @@ import { flagUpdate } from '@/lib/password-flag'
 import { ROLES } from '@/lib/roles'
 
 // User management (plan 15.3.4). Public sign-up is off: only an admin creates people, and every
-// new or reset account must change its temporary password on first sign in.
+// new or reset account must change its temporary password on first sign in. Every action here checks the
+// caller with the Auth server and reads their role from the profile now ({ verified: true }), not from the
+// sign-in token, because each one then acts with the service role.
 
 const NewUser = z.object({
   email: z.email('Enter a valid email.').max(254),
@@ -22,7 +24,7 @@ const NewUser = z.object({
 export type CreatedUser = { email: string; tempPassword: string }
 
 export async function createUser(_: unknown, formData: FormData): Promise<ActionResult<CreatedUser>> {
-  await requireRole(['admin'])
+  await requireRole(['admin'], { verified: true })
   const parsed = NewUser.safeParse({
     email: String(formData.get('email') ?? '').trim().toLowerCase(),
     fullName: formData.get('fullName'),
@@ -59,7 +61,7 @@ export async function createUser(_: unknown, formData: FormData): Promise<Action
 
 /** Admin only. An admin cannot remove their own admin role, so the team never loses its last admin by accident. */
 export async function setRole(input: { userId: string; role: string }): Promise<ActionResult> {
-  const me = await requireRole(['admin'])
+  const me = await requireRole(['admin'], { verified: true })
   const parsed = z.object({ userId: z.uuid(), role: z.enum(ROLES) }).safeParse(input)
   if (!parsed.success) return fail('Choose a role.')
   if (parsed.data.userId === me.id && parsed.data.role !== 'admin') return fail('You cannot remove your own admin role. Ask another admin.')
@@ -73,7 +75,7 @@ export async function setRole(input: { userId: string; role: string }): Promise<
 
 /** Admin only: a new temporary password, shown once. The user must change it at next sign in. */
 export async function resetPasswordForUser(input: { userId: string }): Promise<ActionResult<{ tempPassword: string }>> {
-  await requireRole(['admin'])
+  await requireRole(['admin'], { verified: true })
   const parsed = z.object({ userId: z.uuid() }).safeParse(input)
   if (!parsed.success) return fail('User not found.')
   const admin = createAdminClient()
@@ -89,15 +91,27 @@ export async function resetPasswordForUser(input: { userId: string }): Promise<A
   return ok('Password reset', { tempPassword })
 }
 
-/** Admin only: disable (ban) or re-enable an account. A disabled user is signed out everywhere. */
+/**
+ * Admin only: disable (ban) or re-enable an account. A disabled user is signed out everywhere: the ban stops
+ * new sign-ins and token refreshes, and their sessions (with every refresh token) are deleted at once
+ * (revoke_user_sessions, migration 0023), so the token they hold now is their last one.
+ */
 export async function setDisabled(input: { userId: string; disabled: boolean }): Promise<ActionResult> {
-  const me = await requireRole(['admin'])
+  const me = await requireRole(['admin'], { verified: true })
   const parsed = z.object({ userId: z.uuid(), disabled: z.boolean() }).safeParse(input)
   if (!parsed.success) return fail('User not found.')
   if (parsed.data.userId === me.id) return fail('You cannot disable your own account.')
   const admin = createAdminClient()
   const { error } = await admin.auth.admin.updateUserById(parsed.data.userId, { ban_duration: parsed.data.disabled ? '876000h' : 'none' })
   if (error) return fail('Could not change the account. Try again.')
+  if (parsed.data.disabled) {
+    // A ban alone ends no session that already exists; page renders read the token, not the Auth server.
+    const { error: revokeError } = await admin.rpc('revoke_user_sessions', { target_user: parsed.data.userId })
+    if (revokeError) {
+      console.error('revoke_user_sessions failed', revokeError.code)
+      return fail('The account is disabled, but its open sessions could not be ended. Try again.')
+    }
+  }
   revalidatePath('/settings/users')
   return ok(parsed.data.disabled ? 'User disabled' : 'User enabled')
 }

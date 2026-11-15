@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
-import { getSessionUser } from '@/lib/auth'
+import { getVerifiedUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { mustChangePassword } from '@/lib/password-flag'
 import { setPasswordFlag } from '@/lib/password-flag-server'
@@ -73,7 +73,7 @@ const NewPassword = z
 export async function updatePassword(_: AuthFormState, formData: FormData): Promise<AuthFormState> {
   const parsed = NewPassword.safeParse({ password: formData.get('password'), confirm: formData.get('confirm') })
   if (!parsed.success) return { fieldErrors: fieldErrorsOf(parsed.error), message: 'Check the highlighted fields.' }
-  const user = await getSessionUser()
+  const user = await getVerifiedUser()
   if (!user) return { message: 'That link has expired. Ask for a new one.' }
   const supabase = await createClient()
   const { error } = await supabase.auth.updateUser({ password: parsed.data.password })
