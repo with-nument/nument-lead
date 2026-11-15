@@ -1,0 +1,24 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+CALSCALE:GREGORIAN
+PRODID:calcom/ics
+METHOD:REQUEST
+X-PUBLISHED-TTL:PT1H
+BEGIN:VEVENT
+UID:8mVbQ2xLr5TnW9yHc1Jd6k
+SUMMARY:Intro call between Nument and Maya Chen
+DTSTAMP:20261116T101500Z
+DTSTART:20261120T150000Z
+DTEND:20261120T153000Z
+DESCRIPTION:What:\nIntro call between Nument and Maya Chen\n\nInvitee Time 
+ Zone:\nAmerica/New_York\n\nAdditional notes:\nWe want to rebuild our Bubbl
+ e app before the next raise\, ideally in 6 weeks.
+LOCATION:https://app.cal.com/video/8mVbQ2xLr5TnW9yHc1Jd6k
+STATUS:CONFIRMED
+ORGANIZER;CN=Nument:mailto:calls@nument.example
+ATTENDEE;RSVP=TRUE;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;CN=Maya Chen:mail
+ to:maya@brightcart.example
+SEQUENCE:0
+X-MICROSOFT-CDO-BUSYSTATUS:BUSY
+END:VEVENT
+END:VCALENDAR
