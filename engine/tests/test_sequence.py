@@ -146,7 +146,7 @@ def test_claims_catch_invented_details_but_not_our_own_offer() -> None:
     assert "cites unknown id 'S999'" in unknown.claims
     # "1-page plan", "20-minute call" and the offer's "4 to 6 weeks" are ours: no claim problem
     assert m.check_sequence(sequence(), si, m.DayLog()).claims == []
-    overpromise = m.check_sequence(sequence(day0_alt=ALT.replace("4 to 6 weeks", "2 weeks")), si, m.DayLog())
+    overpromise = m.check_sequence(sequence(day0=DAY0.replace("in weeks", "in 2 weeks")), si, m.DayLog())
     assert "number '2' is not in the cited facts" in overpromise.claims
 
 
@@ -472,3 +472,14 @@ def test_week_counts_in_a_plan_stay_inside_the_offer() -> None:
     assert plans.plan_problems(plan(headline="Brightcart ordering app in 6 weeks"), PLAN_CTX, MVP) == []
     late = plans.plan_problems(plan(headline="Brightcart ordering app in 10 weeks"), PLAN_CTX, MVP)
     assert any("promises 10 weeks" in p for p in late), late
+
+
+def test_an_invented_detail_in_the_alternative_only_drops_the_alternative() -> None:
+    checked = m.check_sequence(
+        sequence(day0_alt=ALT.replace("grocer ordering app", "Walmart app")), seq_input(), m.DayLog()
+    )
+    assert checked.claims == [] and checked.hard == [] and checked.drop_alt
+    assert any("Walmart" in p for p in checked.optional)
+    checked.score = 9
+    assert m.sequence_flags(checked) == []  # the alternative is never sent: no flag holds day 0 back
+    assert m.flags_for(checked) != []

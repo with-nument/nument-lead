@@ -1160,10 +1160,17 @@ def check_sequence(
         if alt_problems:
             drop_alt = True
             optional += [f"day0_alt: {p}" for p in alt_problems]
-    texts = [claim_text(t) for t in sequence_parts(seq).values()]
-    if not drop_alt:
-        texts.append(claim_text(alt))
-    claims = claim_problems(texts, [c.ids for c in seq.claims], si.claim_ctx)
+    claim_ids = [c.ids for c in seq.claims]
+    claims = claim_problems([claim_text(t) for t in sequence_parts(seq).values()], claim_ids, si.claim_ctx)
+    if not drop_alt:  # an invented detail in the alternative only costs the alternative (it is never sent)
+        alt_claims = [
+            p
+            for p in claim_problems([claim_text(alt)], claim_ids, si.claim_ctx, need_claim=False)
+            if p.startswith(("number ", "name "))
+        ]
+        if alt_claims:
+            drop_alt = True
+            optional += [f"day0_alt: {p}" for p in alt_claims]
     variety = variety_problems(seq.day0, si.segment.id, si.business.get("web_domain"), day)
     # canonical ids, as the lead rules compare them with the evidence (leads.decide)
     resolved = (evidence.resolve_cited_id(i, si.claim_ctx.known_ids) for c in seq.claims for i in c.ids)
@@ -1244,6 +1251,12 @@ class SequenceWriter:
 
 def pick_sequence(drafts: Sequence[SeqChecked]) -> SeqChecked:
     return max(drafts, key=lambda c: c.rank)
+
+
+def sequence_flags(best: SeqChecked) -> list[str]:
+    """What the founder should look at before day 0 goes out. A dropped alternative is not one of them: it is
+    never sent, and a flag holds the whole sequence back from sending on its own."""
+    return flags_for(SeqChecked(**{**best.__dict__, "optional": []}))
 
 
 # ---- storage: the lead, the thread and its four drafts in one transaction ------------------------------
@@ -1694,7 +1707,7 @@ def _write_startup(
             flag_unwritable_sequence(lead["id"], best.problems, best.tag, rc.run_id)
             stats["sequence.flagged.not_stored"] += 1
             continue
-        flags = flags_for(best)
+        flags = sequence_flags(best)
         outcome = store_sequence(si, best, flags, rc.run_id, rules, now)
         if outcome != "stored":
             stats[f"sequence.skipped.{outcome}"] += 1
