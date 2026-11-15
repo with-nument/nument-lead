@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import calendar
+import hashlib
 import html as htmllib
 import io
 import re
@@ -649,6 +650,16 @@ def nightly_pass(ctx: SourceContext, source: str, setting: str, default: int, *,
     return Pass(days=days, cap=left)
 
 
+def title_key(title: str | None) -> str | None:
+    """A second key for an item: its title without case and punctuation, hashed. One story is often published
+    under several URLs (syndicated press releases, a site's AMP copy); the title key keeps it to one AI call.
+    Titles under five words are too generic to identify a story (None)."""
+    words = re.findall(r"\w+", (title or "").lower())
+    if len(words) < 5:
+        return None
+    return "title:" + hashlib.sha1(" ".join(words).encode()).hexdigest()[:20]
+
+
 def unseen(source: str, keys: Sequence[str]) -> set[str]:
     """The keys not yet in `source_records` for this source (each item is judged once)."""
     if not keys:
@@ -664,19 +675,15 @@ def unseen(source: str, keys: Sequence[str]) -> set[str]:
 
 
 def record_seen(ctx: SourceContext, item: StartupItem, verdict: str) -> None:
-    """Remember a judged item, so it is never sent to the AI again (nothing is written in a dry run)."""
+    """Remember a judged item by its key and its title, so neither it nor a copy of the same story is sent to the
+    AI again (nothing is written in a dry run)."""
     if ctx.dry_run:
         return
+    payload = {"url": item.url, "title": item.title[:200], "verdict": verdict}
+    keys = [k for k in dict.fromkeys((item.key, title_key(item.title))) if k]
     db.upsert(
         "source_records",
-        [
-            {
-                "source": item.source,
-                "source_key": item.key,
-                "payload": {"url": item.url, "title": item.title[:200], "verdict": verdict},
-                "fetched_at": health.now_utc(),
-            }
-        ],
+        [{"source": item.source, "source_key": k, "payload": payload, "fetched_at": health.now_utc()} for k in keys],
         conflict=["source", "source_key"],
         update=["payload", "fetched_at"],
     )

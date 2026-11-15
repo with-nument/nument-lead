@@ -384,7 +384,12 @@ def test_contacts_are_masked_before_the_ai() -> None:
 
 
 def test_judge_items_counts_records_and_stops_at_the_cap(clean_db: str) -> None:
-    items = [news_item(key=f"https://news.example.com/{i}", url=f"https://news.example.com/{i}") for i in range(4)]
+    items = [
+        news_item(
+            key=f"https://news.example.com/{i}", url=f"https://news.example.com/{i}", title=f"Story {i} of a seed round"
+        )
+        for i in range(4)
+    ]
     router = FakeRouter({"classify_startup_item": [answer(), RuntimeError("bad json"), answer(is_relevant=False)]})
     context = ctx(router)
     run = Pass(days=3, cap=2)
@@ -392,7 +397,13 @@ def test_judge_items_counts_records_and_stops_at_the_cap(clean_db: str) -> None:
     assert len(sigs) == 1 and len(router.calls) == 3  # the failed call does not use the allowance
     assert context.stats["funding_rss.no_answer"] == 1 and context.stats["funding_rss.cap_reached"] == 1
     seen = {r["source_key"]: r["payload"]["verdict"] for r in db.fetch_all("select * from public.source_records")}
-    assert seen == {"https://news.example.com/0": "signal", "https://news.example.com/2": "not_relevant"}
+    assert seen == {
+        "https://news.example.com/0": "signal",
+        rss.title_key("Story 0 of a seed round"): "signal",  # a copy of the story under another URL is seen too
+        "https://news.example.com/2": "not_relevant",
+        rss.title_key("Story 2 of a seed round"): "not_relevant",
+    }
+    assert rss.title_key("Too short a title") is None
     assert context.budget.calls_today("other", ["funding_rss_item"]) == 2
     assert rss.unseen("funding_rss", [i.key for i in items]) == {
         "https://news.example.com/1",
