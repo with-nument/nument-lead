@@ -1165,7 +1165,9 @@ def check_sequence(
         texts.append(claim_text(alt))
     claims = claim_problems(texts, [c.ids for c in seq.claims], si.claim_ctx)
     variety = variety_problems(seq.day0, si.segment.id, si.business.get("web_domain"), day)
-    cited = [i for c in seq.claims for i in c.ids]
+    # canonical ids, as the lead rules compare them with the evidence (leads.decide)
+    resolved = (evidence.resolve_cited_id(i, si.claim_ctx.known_ids) for c in seq.claims for i in c.ids)
+    cited = list(dict.fromkeys(i for i in resolved if i is not None))
     return SeqChecked(seq, tag, model, hard, claims, variety, optional, drop_alt, cited)
 
 
