@@ -1,6 +1,7 @@
 // Database types for the public schema.
 // Generated: run `pnpm db:types` (needs SUPABASE_ACCESS_TOKEN and SUPABASE_PROJECT_REF) after every migration.
-// Do not edit by hand.
+// Do not edit by hand. (16 Nov 2026: migrations 0019 to 0028 and 0033 were added from a migrated local Postgres in the
+// same format; the next `pnpm db:types` replaces this with the live schema.)
 
 export type Json =
   | string
@@ -229,12 +230,60 @@ export type Database = {
           },
         ]
       }
+      case_studies: {
+        Row: {
+          body: Json
+          client: string | null
+          created_at: string
+          id: string
+          offer_key: string | null
+          published: boolean
+          slug: string
+          summary: string
+          title: string
+        }
+        Insert: {
+          body?: Json
+          client?: string | null
+          created_at?: string
+          id?: string
+          offer_key?: string | null
+          published?: boolean
+          slug: string
+          summary: string
+          title: string
+        }
+        Update: {
+          body?: Json
+          client?: string | null
+          created_at?: string
+          id?: string
+          offer_key?: string | null
+          published?: boolean
+          slug?: string
+          summary?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "case_studies_offer_key_fkey"
+            columns: ["offer_key"]
+            isOneToOne: false
+            referencedRelation: "offers"
+            referencedColumns: ["key"]
+          },
+        ]
+      }
       contacts: {
         Row: {
           business_id: string
           created_at: string
           do_not_contact: boolean
           email: string | null
+          email_checked_at: string | null
+          email_origin: string | null
+          email_pattern: string | null
+          email_status: string
           id: string
           is_decision_maker: boolean
           line: string
@@ -398,6 +447,189 @@ export type Database = {
             columns: ["segment_id"]
             isOneToOne: false
             referencedRelation: "segments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_checks: {
+        Row: {
+          checked_at: string
+          email: string
+          provider: string
+          raw: Json
+          result: string
+        }
+        Insert: {
+          checked_at?: string
+          email: string
+          provider: string
+          raw?: Json
+          result: string
+        }
+        Update: {
+          checked_at?: string
+          email?: string
+          provider?: string
+          raw?: Json
+          result?: string
+        }
+        Relationships: []
+      }
+      email_domains: {
+        Row: {
+          catch_all: boolean | null
+          checked_at: string
+          domain: string
+          mx_provider: string | null
+        }
+        Insert: {
+          catch_all?: boolean | null
+          checked_at?: string
+          domain: string
+          mx_provider?: string | null
+        }
+        Update: {
+          catch_all?: boolean | null
+          checked_at?: string
+          domain?: string
+          mx_provider?: string | null
+        }
+        Relationships: []
+      }
+      email_messages: {
+        Row: {
+          body: string | null
+          classification: string | null
+          classification_confidence: number | null
+          created_at: string
+          direction: string
+          error: string | null
+          gmail_message_id: string | null
+          id: string
+          rfc_message_id: string | null
+          scheduled_for: string | null
+          sent_at: string | null
+          status: string
+          step: number | null
+          subject: string | null
+          suggested_reply: string | null
+          thread_id: string
+          updated_at: string
+        }
+        Insert: {
+          body?: string | null
+          classification?: string | null
+          classification_confidence?: number | null
+          created_at?: string
+          direction: string
+          error?: string | null
+          gmail_message_id?: string | null
+          id?: string
+          rfc_message_id?: string | null
+          scheduled_for?: string | null
+          sent_at?: string | null
+          status: string
+          step?: number | null
+          subject?: string | null
+          suggested_reply?: string | null
+          thread_id: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string | null
+          classification?: string | null
+          classification_confidence?: number | null
+          created_at?: string
+          direction?: string
+          error?: string | null
+          gmail_message_id?: string | null
+          id?: string
+          rfc_message_id?: string | null
+          scheduled_for?: string | null
+          sent_at?: string | null
+          status?: string
+          step?: number | null
+          subject?: string | null
+          suggested_reply?: string | null
+          thread_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "email_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_threads: {
+        Row: {
+          contact_id: string | null
+          created_at: string
+          gmail_thread_id: string | null
+          id: string
+          lead_id: string
+          mailbox_id: string | null
+          mode: string
+          paused_until: string | null
+          status: string
+          stop_reason: string | null
+          to_domain: string
+          to_email: string
+          updated_at: string
+        }
+        Insert: {
+          contact_id?: string | null
+          created_at?: string
+          gmail_thread_id?: string | null
+          id?: string
+          lead_id: string
+          mailbox_id?: string | null
+          mode?: string
+          paused_until?: string | null
+          status?: string
+          stop_reason?: string | null
+          to_domain: string
+          to_email: string
+          updated_at?: string
+        }
+        Update: {
+          contact_id?: string | null
+          created_at?: string
+          gmail_thread_id?: string | null
+          id?: string
+          lead_id?: string
+          mailbox_id?: string | null
+          mode?: string
+          paused_until?: string | null
+          status?: string
+          stop_reason?: string | null
+          to_domain?: string
+          to_email?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_threads_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_threads_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: true
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_threads_mailbox_id_fkey"
+            columns: ["mailbox_id"]
+            isOneToOne: false
+            referencedRelation: "mailboxes"
             referencedColumns: ["id"]
           },
         ]
@@ -727,6 +959,51 @@ export type Database = {
           },
         ]
       }
+      lead_offers: {
+        Row: {
+          cited_ids: string[]
+          created_at: string
+          lead_id: string
+          model: string | null
+          offer_key: string
+          rank: number
+          why_now: string | null
+        }
+        Insert: {
+          cited_ids?: string[]
+          created_at?: string
+          lead_id: string
+          model?: string | null
+          offer_key: string
+          rank: number
+          why_now?: string | null
+        }
+        Update: {
+          cited_ids?: string[]
+          created_at?: string
+          lead_id?: string
+          model?: string | null
+          offer_key?: string
+          rank?: number
+          why_now?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_offers_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_offers_offer_key_fkey"
+            columns: ["offer_key"]
+            isOneToOne: false
+            referencedRelation: "offers"
+            referencedColumns: ["key"]
+          },
+        ]
+      }
       leads: {
         Row: {
           angle: string | null
@@ -975,6 +1252,51 @@ export type Database = {
         }
         Relationships: []
       }
+      mailboxes: {
+        Row: {
+          connected_at: string | null
+          display_name: string
+          email: string
+          id: string
+          last_error: string | null
+          paused_reason: string | null
+          provider: string
+          sent_day: string | null
+          sent_today: number
+          status: string
+          updated_at: string
+          warmup_started_on: string | null
+        }
+        Insert: {
+          connected_at?: string | null
+          display_name?: string
+          email: string
+          id?: string
+          last_error?: string | null
+          paused_reason?: string | null
+          provider?: string
+          sent_day?: string | null
+          sent_today?: number
+          status?: string
+          updated_at?: string
+          warmup_started_on?: string | null
+        }
+        Update: {
+          connected_at?: string | null
+          display_name?: string
+          email?: string
+          id?: string
+          last_error?: string | null
+          paused_reason?: string | null
+          provider?: string
+          sent_day?: string | null
+          sent_today?: number
+          status?: string
+          updated_at?: string
+          warmup_started_on?: string | null
+        }
+        Relationships: []
+      }
       notify_recipients: {
         Row: {
           active: boolean
@@ -1018,6 +1340,39 @@ export type Database = {
             referencedColumns: ["user_id"]
           },
         ]
+      }
+      offers: {
+        Row: {
+          active: boolean
+          best_for: string
+          key: string
+          name: string
+          promise: string
+          sort: number
+          timeline: string
+          typical_range: Json
+        }
+        Insert: {
+          active?: boolean
+          best_for: string
+          key: string
+          name: string
+          promise: string
+          sort?: number
+          timeline: string
+          typical_range?: Json
+        }
+        Update: {
+          active?: boolean
+          best_for?: string
+          key?: string
+          name?: string
+          promise?: string
+          sort?: number
+          timeline?: string
+          typical_range?: Json
+        }
+        Relationships: []
       }
       pages: {
         Row: {
@@ -1073,6 +1428,53 @@ export type Database = {
           },
         ]
       }
+      plan_pages: {
+        Row: {
+          content: Json
+          created_at: string
+          expires_at: string
+          first_viewed_at: string | null
+          kind: string
+          last_viewed_at: string | null
+          lead_id: string
+          status: string
+          token: string
+          views: number
+        }
+        Insert: {
+          content: Json
+          created_at?: string
+          expires_at?: string
+          first_viewed_at?: string | null
+          kind?: string
+          last_viewed_at?: string | null
+          lead_id: string
+          status?: string
+          token: string
+          views?: number
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          expires_at?: string
+          first_viewed_at?: string | null
+          kind?: string
+          last_viewed_at?: string | null
+          lead_id?: string
+          status?: string
+          token?: string
+          views?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_pages_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -1093,6 +1495,57 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      proposals: {
+        Row: {
+          call_notes: string | null
+          content: Json
+          created_at: string
+          id: string
+          lead_id: string
+          model: string | null
+          plan_token: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          call_notes?: string | null
+          content?: Json
+          created_at?: string
+          id?: string
+          lead_id: string
+          model?: string | null
+          plan_token?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          call_notes?: string | null
+          content?: Json
+          created_at?: string
+          id?: string
+          lead_id?: string
+          model?: string | null
+          plan_token?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "proposals_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "proposals_plan_token_fkey"
+            columns: ["plan_token"]
+            isOneToOne: false
+            referencedRelation: "plan_pages"
+            referencedColumns: ["token"]
+          },
+        ]
       }
       reports: {
         Row: {
@@ -1538,6 +1991,86 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_sheet_leads"
             referencedColumns: ["business_id"]
+          },
+        ]
+      }
+      startup_profiles: {
+        Row: {
+          business_id: string
+          can_pay: string
+          can_pay_evidence: string[]
+          checked_at: string | null
+          domain_created_at: string | null
+          evidence: Json
+          first_seen_at: string | null
+          funding_at: string | null
+          funding_round: string | null
+          funding_usd: number | null
+          is_startup: boolean | null
+          is_startup_why: string | null
+          no_code_platform: string | null
+          product_status: string
+          team_size: number | null
+          team_size_evidence: string[]
+          team_size_source: string | null
+          tech_team: string
+          tech_team_evidence: string[]
+          updated_at: string
+          uses_ai: boolean | null
+        }
+        Insert: {
+          business_id: string
+          can_pay?: string
+          can_pay_evidence?: string[]
+          checked_at?: string | null
+          domain_created_at?: string | null
+          evidence?: Json
+          first_seen_at?: string | null
+          funding_at?: string | null
+          funding_round?: string | null
+          funding_usd?: number | null
+          is_startup?: boolean | null
+          is_startup_why?: string | null
+          no_code_platform?: string | null
+          product_status?: string
+          team_size?: number | null
+          team_size_evidence?: string[]
+          team_size_source?: string | null
+          tech_team?: string
+          tech_team_evidence?: string[]
+          updated_at?: string
+          uses_ai?: boolean | null
+        }
+        Update: {
+          business_id?: string
+          can_pay?: string
+          can_pay_evidence?: string[]
+          checked_at?: string | null
+          domain_created_at?: string | null
+          evidence?: Json
+          first_seen_at?: string | null
+          funding_at?: string | null
+          funding_round?: string | null
+          funding_usd?: number | null
+          is_startup?: boolean | null
+          is_startup_why?: string | null
+          no_code_platform?: string | null
+          product_status?: string
+          team_size?: number | null
+          team_size_evidence?: string[]
+          team_size_source?: string | null
+          tech_team?: string
+          tech_team_evidence?: string[]
+          updated_at?: string
+          uses_ai?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "startup_profiles_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: true
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -2269,6 +2802,8 @@ export type Database = {
     }
     Functions: {
       auth_role: { Args: never; Returns: string }
+      _call_item: { Args: { lead_id: string }; Returns: Json }
+      calls_page: { Args: never; Returns: Json }
       custom_access_token_hook: { Args: { event: Json }; Returns: Json }
       db_size_mb: { Args: never; Returns: number }
       deals_board: {
@@ -2277,10 +2812,24 @@ export type Database = {
       }
       engine_counts: { Args: never; Returns: Json }
       home_summary: { Args: { list_limit?: number }; Returns: Json }
+      _inbox_item: {
+        Args: { at: string; message_id: string; tab: string; thread_id: string }
+        Returns: Json
+      }
+      inbox_page: {
+        Args: {
+          cursor_at?: string
+          cursor_id?: string
+          page_size?: number
+          tab?: string
+        }
+        Returns: Json
+      }
       insights_summary: {
         Args: { filters?: Json; from_ts: string; to_ts: string }
         Returns: Json
       }
+      lead_conversation: { Args: { lead_id: string }; Returns: Json }
       lead_detail: {
         Args: { include_unverified?: boolean; lead_id: string }
         Returns: Json
@@ -2290,7 +2839,12 @@ export type Database = {
         Returns: Json
       }
       nav_counts: { Args: never; Returns: Json }
+      review_message: {
+        Args: { action: string; body?: string; message_id: string; subject?: string }
+        Returns: Json
+      }
       revoke_user_sessions: { Args: { target_user: string }; Returns: number }
+      save_call_notes: { Args: { lead_id: string; notes: string }; Returns: Json }
       search_leads: { Args: { max?: number; q: string }; Returns: Json }
     }
     Enums: {

@@ -16,7 +16,7 @@ export const V2_PREFIX = '/v2'
  * Pages that have a v2 screen. An entry is an exact path, or `/path/*` for the path and everything under it.
  * '/calls' and '/deals' are new destinations with no current-design page.
  */
-export const V2_ROUTES: readonly string[] = ['/', '/calls', '/deals']
+export const V2_ROUTES: readonly string[] = ['/', '/calls', '/deals', '/inbox']
 
 const ONE_YEAR = 60 * 60 * 24 * 365
 
