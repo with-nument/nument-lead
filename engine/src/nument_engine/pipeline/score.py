@@ -11,6 +11,10 @@ s2.0 replaced s1.0 (raw / 80 x 100 x reach) on 13 Nov 2026: a strong business wi
 above 50 there, so the judge lifted C to B and the lead showed "B, 40/100". The stored columns keep their
 meaning: `intent` is the need points, `can_pay` the proxy points before scaling, `reach` the share (0 to 1).
 
+Startup segments (domain firms) get score s3.0 instead (`score_startup.py`, 15 Nov 2026): `score_business`
+routes them, so the run, the judge and the eval gate score startups the same way. Each score row records its
+version.
+
 Every weight comes from `scoring_config(segment)` (config/scoring.yaml plus segment overrides) with the
 learned `settings.score_weights` on top (A.13.5 rule 8, Step 16.3). Scoring is pure code and cheap, so the
 morning run re-scores every researched and qualified business; a new `scores` row is stored only when
@@ -37,6 +41,7 @@ from ..logging import get_logger
 from ..models import SIGNAL_CATEGORY, PitchMode, make_test_group
 from ..segments import Segment, load_segments, scoring_config
 from ..settings import get_settings
+from ..sources.startup import limits as startup_limits
 from . import evidence, leads
 from .evidence import Row, fact_count, fact_flag, fact_text, vget
 from .runs import RunContext
@@ -140,10 +145,18 @@ class ScoringConfig:
     reach_email_first: Mapping[str, float] = field(default_factory=dict)  # outreach_channel: email segments
     retainer_fit: float = 3.0  # ongoing work likely (13 Nov 2026)
     too_big: float = -4.0  # 200+ staff
+    startup: Mapping[str, Any] = field(default_factory=dict)  # score s3.0: scoring.yaml `startup` plus the limits
 
     @classmethod
-    def build(cls, raw: Mapping[str, Any], segment_id: str, weights: Mapping[str, Any] | None = None) -> ScoringConfig:
-        """From the merged scoring dict (`scoring_config(seg)`) plus `settings.score_weights`."""
+    def build(
+        cls,
+        raw: Mapping[str, Any],
+        segment_id: str,
+        weights: Mapping[str, Any] | None = None,
+        limits: tuple[int, float] | None = None,
+    ) -> ScoringConfig:
+        """From the merged scoring dict (`scoring_config(seg)`) plus `settings.score_weights`. `limits` are
+        settings startup.max_team and startup.max_raise_usd for score s3.0 (the code defaults without them)."""
         weights = weights or {}
         learned_pay: Mapping[str, Any] = (weights.get("can_pay_points") or {}).get(segment_id) or {}
 
@@ -186,11 +199,17 @@ class ScoringConfig:
             signal_points={
                 str(k): float(v) for k, v in ((weights.get("signal_points") or {}).get(segment_id) or {}).items()
             },
+            startup={
+                **(raw.get("startup") or {}),
+                **({"max_team": limits[0], "max_raise_usd": limits[1]} if limits is not None else {}),
+            },
         )
 
     @classmethod
-    def for_segment(cls, seg: Segment, weights: Mapping[str, Any] | None = None) -> ScoringConfig:
-        return cls.build(scoring_config(seg), seg.id, weights)
+    def for_segment(
+        cls, seg: Segment, weights: Mapping[str, Any] | None = None, limits: tuple[int, float] | None = None
+    ) -> ScoringConfig:
+        return cls.build(scoring_config(seg), seg.id, weights, limits)
 
 
 # =========================================================================
@@ -664,6 +683,7 @@ class ScoreResult:
     note: str  # rule-built "why this lead" (11.10.5)
     evidence_ids: frozenset[str] = frozenset()  # verified fact ids and active signal ids
     has_email: bool = False
+    version: str = SCORE_VERSION  # s3.0 for startup segments (score_startup.py)
 
 
 def score_business(
@@ -677,7 +697,11 @@ def score_business(
     now: datetime,
     suppressed: Suppression | None = None,
 ) -> ScoreResult:
-    """The whole Step 11 rule score for one business (no AI)."""
+    """The whole Step 11 rule score for one business (no AI). Startup segments get score s3.0."""
+    if seg.domain == "firms":
+        from .score_startup import score as score_startup  # imported here: score_startup builds on this module
+
+        return score_startup(b, facts, signals, contacts, seg, cfg, now, suppressed)
     active = [s for s in signals if evidence.is_active(s, now)]
     stated = next(
         (s for s in active if (s.get("category") or SIGNAL_CATEGORY.get(str(s["type"]))) == "stated_need"), None
@@ -874,9 +898,32 @@ def latest_scores(business_ids: Sequence[str], conn: Connection[Any] | None = No
     return {str(r["business_id"]): {**r, "id": str(r["id"])} for r in rows}
 
 
+_EMAIL_STATUS: Final = (
+    "select id::text as id, line, line_why, email_status, email_origin from public.contacts "
+    "where business_id = any(%s::uuid[])"
+)
+
+
+def with_email_status(
+    contacts: dict[str, list[Row]], business_ids: Sequence[str], conn: Connection[Any] | None = None
+) -> dict[str, list[Row]]:
+    """Add who answers (0018) and how sure each email is (0020) to the contacts of these businesses: the startup
+    email ladder (s3.0) reads both, and `evidence.contacts_for` predates them. Other segments are left as they are,
+    so s2.0 scores do not move."""
+    if not business_ids:
+        return contacts
+    extra = {r["id"]: r for r in db.fetch_all(_EMAIL_STATUS, [list(business_ids)], conn=conn)}
+    for bid in business_ids:
+        for c in contacts.get(bid, []):
+            more = extra.get(str(c["id"]))
+            if more is not None:
+                c.update({k: v for k, v in more.items() if k != "id"})
+    return contacts
+
+
 def same_result(row: Mapping[str, Any] | None, r: ScoreResult) -> bool:
     """True when the latest stored row already says exactly this (then no new row is written)."""
-    if row is None or row.get("version") != SCORE_VERSION:
+    if row is None or row.get("version") != r.version:
         return False
     reasons = row.get("reasons") or {}
     return (
@@ -919,7 +966,11 @@ def segment_configs(segments: Mapping[str, Segment], conn: Connection[Any] | Non
     """Resolved configs with the weights in force: `learn.weights.use_weights` inside the eval gate, else
     `settings.score_weights` completed with the YAML defaults (Step 16.3)."""
     weights = active_document(conn)
-    return {sid: ScoringConfig.for_segment(seg, weights) for sid, seg in segments.items()}
+    limits = startup_limits() if any(seg.domain == "firms" for seg in segments.values()) else None
+    return {
+        sid: ScoringConfig.for_segment(seg, weights, limits if seg.domain == "firms" else None)
+        for sid, seg in segments.items()
+    }
 
 
 @dataclass
@@ -948,7 +999,7 @@ class Scorer:
         *,
         now: datetime | None = None,
     ) -> ScoreResult:
-        cfg = ScoringConfig.for_segment(seg, active_document())
+        cfg = ScoringConfig.for_segment(seg, active_document(), startup_limits() if seg.domain == "firms" else None)
         return score_business(
             b, facts, signals, contacts, seg, cfg, self.excl, now or datetime.now(UTC), self.suppressed
         )
@@ -966,7 +1017,9 @@ class Scorer:
             b,
             evidence.verified_facts(ids, conn=conn).get(business_id, []),
             evidence.signals_for(ids, conn=conn).get(business_id, []),
-            evidence.contacts_for(ids, conn=conn).get(business_id, []),
+            with_email_status(evidence.contacts_for(ids, conn=conn), ids if seg.domain == "firms" else [], conn).get(
+                business_id, []
+            ),
             seg,
             now=now,
         )
@@ -994,7 +1047,10 @@ def score_ids(
     biz = evidence.businesses(ids)
     facts = evidence.verified_facts(ids)
     signals = evidence.signals_for(ids)
-    contacts = evidence.contacts_for(ids)
+    contacts = with_email_status(
+        evidence.contacts_for(ids),
+        [i for i in ids if str((biz.get(i) or {}).get("segment_id", "")).startswith("firms-")],
+    )
     latest = latest_scores(ids)
     out: list[Scored] = []
     for bid in ids:
@@ -1033,7 +1089,7 @@ def insert_scores(conn: Connection[Any], items: Sequence[Scored], now: datetime)
         {
             "id": s.score_id,
             "business_id": str(s.business["id"]),
-            "version": SCORE_VERSION,
+            "version": s.result.version,
             "fit": s.result.fit,
             "can_pay": s.result.can_pay,
             "intent": s.result.intent,
