@@ -1,0 +1,33 @@
+Description:           Daily Index of EDGAR Dissemination Feed by Form Type
+Last Data Received:    Nov 12, 2026
+Comments:              webmaster@sec.gov
+Anonymous FTP:         ftp://ftp.sec.gov/edgar/
+
+
+
+
+Form Type   Company Name                                                  CIK
+      Date Filed  File Name
+---------------------------------------------------------------------------------------------------------------------------------------------
+1-A              MANGOCEUTICALS, INC.                                          1938046     20261112    edgar/data/1938046/0001493152-26-051161.txt
+4                1 800 FLOWERS COM INC                                         1084869     20261112    edgar/data/1084869/0001437749-26-036405.txt
+4                2023 ETF Series Trust                                         1969674     20261112    edgar/data/1969674/0001687898-26-000012.txt
+C                MAF Hospitality Holdings, LLC                                 2103234     20261112    edgar/data/2103234/0002103234-26-000002.txt
+C-AR             Experfy, Inc.                                                 1635587     20261112    edgar/data/1635587/0001635587-26-000002.txt
+C-U              Cytonics Corp                                                 1421744     20261112    edgar/data/1421744/0001872856-26-000368.txt
+C-W              ACORN GENETICS INC.                                           2142534     20261112    edgar/data/2142534/0002142534-26-000003.txt
+C/A              Creator Networks, Inc.                                        1930007     20261112    edgar/data/1930007/0001930007-26-000009.txt
+C/A              SwiftSift, Inc.                                               2144403     20261112    edgar/data/2144403/0002144403-26-000002.txt
+D                26North Diversified Credit Income Fund LP                     2159077     20261112    edgar/data/2159077/0002159077-26-000002.txt
+D                8VC AI Fund XII, LLC                                          2162326     20261112    edgar/data/2162326/0002162326-26-000001.txt
+D                Blue Sky Robotics, Inc.                                       2009632     20261112    edgar/data/2009632/0002093398-26-000003.txt
+D                Care Nimble, Inc.                                             2164767     20261112    edgar/data/2164767/0002164767-26-000001.txt
+D                CipherSonic Labs Inc.                                         2164264     20261112    edgar/data/2164264/0002164264-26-000001.txt
+D                NEXROC Group, Inc.                                            2113098     20261112    edgar/data/2113098/0002113098-26-000033.txt
+D                NEXROC Group, Inc.                                            2113098     20261112    edgar/data/2113098/0002113098-26-000034.txt
+D                NEXROC Group, Inc.                                            2113098     20261112    edgar/data/2113098/0002113098-26-000035.txt
+D                NEXROC Group, Inc.                                            2113098     20261112    edgar/data/2113098/0002113098-26-000036.txt
+D                389 College Avenue, LLC                                       1760353     20261112    edgar/data/1760353/0001760353-26-000003.txt
+D                AQR Flex 1 Series LLC - Series B16                            2110380     20261112    edgar/data/2110380/0001405086-26-000933.txt
+D/A              42 Solutions LLC                                              2048143     20261112    edgar/data/2048143/0002048143-26-000001.txt
+D/A              5Up3Down Fund LP                                              2093045     20261112    edgar/data/2093045/0002093045-26-000002.txt

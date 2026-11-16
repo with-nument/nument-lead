@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<edgarSubmission xmlns="http://www.sec.gov/edgar/formc" xmlns:com="http://www.sec.gov/edgar/common">
+  <headerData>
+    <submissionType>C/A</submissionType>
+    <filerInfo>
+      <filer>
+        <filerCredentials>
+          <filerCik>0002144403</filerCik>
+          <filerCcc>XXXXXXXX</filerCcc>
+        </filerCredentials>
+        <fileNumber>020-37325</fileNumber>
+      </filer>
+      <liveTestFlag>LIVE</liveTestFlag>
+      <flags>
+        <confirmingCopyFlag>false</confirmingCopyFlag>
+        <returnCopyFlag>true</returnCopyFlag>
+        <overrideInternetFlag>false</overrideInternetFlag>
+      </flags>
+    </filerInfo>
+  </headerData>
+  <formData>
+    <issuerInformation>
+      <isAmendment>true</isAmendment>
+      <natureOfAmendment>Extends the offering deadline. All other terms are unchanged.</natureOfAmendment>
+      <issuerInfo>
+        <nameOfIssuer>SwiftSift, Inc.</nameOfIssuer>
+        <legalStatus>
+          <legalStatusForm>Corporation</legalStatusForm>
+          <jurisdictionOrganization>DE</jurisdictionOrganization>
+          <dateIncorporation>03-12-2025</dateIncorporation>
+        </legalStatus>
+        <issuerAddress>
+          <com:street1>9319 Robert D Snyder Rd</com:street1>
+          <com:street2>Suite 325A</com:street2>
+          <com:city>Charlotte</com:city>
+          <com:stateOrCountry>NC</com:stateOrCountry>
+          <com:zipCode>28223</com:zipCode>
+        </issuerAddress>
+        <issuerWebsite>https://swiftsift.net</issuerWebsite>
+      </issuerInfo>
+      <isCoIssuer>N</isCoIssuer>
+      <companyName>NetCapital Funding Portal Inc.</companyName>
+      <commissionCik>0001669191</commissionCik>
+      <commissionFileNumber>007-00035</commissionFileNumber>
+      <crdNumber>283596</crdNumber>
+    </issuerInformation>
+    <offeringInformation>
+      <compensationAmount>Up to 4.9% of amount raised for a successful offering and a listing fee of up to $10,000</compensationAmount>
+      <financialInterest>Up to 12,000 SAFE units to be issued, along the same terms as investors.</financialInterest>
+      <securityOfferedType>Other</securityOfferedType>
+      <securityOfferedOtherDesc>SAFE</securityOfferedOtherDesc>
+      <noOfSecurityOffered>10000</noOfSecurityOffered>
+      <price>1.00000</price>
+      <priceDeterminationMethod>The price was set by management.</priceDeterminationMethod>
+      <offeringAmount>10000.00</offeringAmount>
+      <overSubscriptionAccepted>Y</overSubscriptionAccepted>
+      <overSubscriptionAllocationType>First-come, first-served basis</overSubscriptionAllocationType>
+      <maximumOfferingAmount>1200000.00</maximumOfferingAmount>
+      <deadlineDate>02-12-2027</deadlineDate>
+    </offeringInformation>
+    <annualReportDisclosureRequirements>
+      <currentEmployees>3</currentEmployees>
+      <totalAssetMostRecentFiscalYear>0.00</totalAssetMostRecentFiscalYear>
+      <totalAssetPriorFiscalYear>0.00</totalAssetPriorFiscalYear>
+      <cashEquiMostRecentFiscalYear>0.00</cashEquiMostRecentFiscalYear>
+      <cashEquiPriorFiscalYear>0.00</cashEquiPriorFiscalYear>
+      <revenueMostRecentFiscalYear>0.00</revenueMostRecentFiscalYear>
+      <revenuePriorFiscalYear>0.00</revenuePriorFiscalYear>
+      <netIncomeMostRecentFiscalYear>0.00</netIncomeMostRecentFiscalYear>
+      <netIncomePriorFiscalYear>0.00</netIncomePriorFiscalYear>
+      <issueJurisdictionSecuritiesOffering>AL</issueJurisdictionSecuritiesOffering>
+      <issueJurisdictionSecuritiesOffering>AK</issueJurisdictionSecuritiesOffering>
+    </annualReportDisclosureRequirements>
+    <signatureInfo>
+      <issuerSignature>
+        <issuer>SwiftSift, Inc.</issuer>
+        <issuerSignature>Michael Novielli</issuerSignature>
+        <issuerTitle>Principal Executive Officer</issuerTitle>
+      </issuerSignature>
+      <signaturePersons>
+        <signaturePerson>
+          <personSignature>Michael Novielli</personSignature>
+          <personTitle>Principal Executive Officer</personTitle>
+          <signatureDate>11-12-2026</signatureDate>
+        </signaturePerson>
+        <signaturePerson>
+          <personSignature>Michael Novielli</personSignature>
+          <personTitle>Principal Financial Officer</personTitle>
+          <signatureDate>11-12-2026</signatureDate>
+        </signaturePerson>
+        <signaturePerson>
+          <personSignature>Michael Novielli</personSignature>
+          <personTitle>Board Member</personTitle>
+          <signatureDate>11-12-2026</signatureDate>
+        </signaturePerson>
+      </signaturePersons>
+    </signatureInfo>
+  </formData>
+</edgarSubmission>
