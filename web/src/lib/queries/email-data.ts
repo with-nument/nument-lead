@@ -262,8 +262,11 @@ export function inrShort(n: number) {
 /** "₹1.5L to ₹6L", "₹20K to ₹80K a month", or the dollar range when no rupee one is known. */
 export function rangeText(r: OfferRange) {
   const month = r.monthly ? ' a month' : ''
-  if (r.inr) return `${inrShort(r.inr[0])} to ${inrShort(r.inr[1])}${month}`
-  if (r.usd) return `$${r.usd[0].toLocaleString('en-US')} to $${r.usd[1].toLocaleString('en-US')}${month}`
+  if (r.inr) return `${r.inr[0] === r.inr[1] ? inrShort(r.inr[0]) : `${inrShort(r.inr[0])} to ${inrShort(r.inr[1])}`}${month}`
+  if (r.usd) {
+    const usd = (v: number) => `$${v.toLocaleString('en-US')}`
+    return `${r.usd[0] === r.usd[1] ? usd(r.usd[0]) : `${usd(r.usd[0])} to ${usd(r.usd[1])}`}${month}`
+  }
   return ''
 }
 

@@ -1,5 +1,6 @@
 import 'server-only'
 import { createClient } from '@/lib/supabase/server'
+import type { Json } from '@/lib/database.types'
 import { toHomeSummary, type HomeSummary } from './page-data'
 
 export type { FollowupRow, HomeSummary, SendRow, TodayKpis } from './page-data'
@@ -17,4 +18,19 @@ export async function getHomeSummary(limit = TODAY_LIMIT): Promise<HomeSummary> 
   const { data, error } = await sb.rpc('home_summary', { list_limit: limit })
   if (error) throw error
   return toHomeSummary(data)
+}
+
+/**
+ * The Overnight card's numbers since 6 pm yesterday (today_overnight, migration 0034): startups found and
+ * qualified, emails sent, replies, plan pages viewed and bounces. Never opens. Null when the function is not
+ * there yet (the migration is not applied), so Today falls back to the pipeline numbers instead of failing.
+ */
+export async function getOvernight(): Promise<Json | null> {
+  const sb = await createClient()
+  const { data, error } = await sb.rpc('today_overnight')
+  if (error) {
+    console.error('today_overnight failed', error.code, error.message)
+    return null
+  }
+  return data
 }

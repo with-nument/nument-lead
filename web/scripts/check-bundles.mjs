@@ -27,6 +27,7 @@ export const BUDGETS_KB = {
   '/v2/calls': 185,
   '/v2/deals': 190,
   '/v2/inbox': 185,
+  '/v2/leads/[id]': 215, // the lead: conversation, why, people, activity, the stage dialogs and the details sheet
   '/v2/leads': 200, // the full list with filters and bulk actions; v1 was 224 KB
   '/v2/insights': 185,
   '/v2/settings': 190,

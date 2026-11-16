@@ -15,19 +15,23 @@ export type RepliesSectionProps = {
   /** This section holds the page's one solid button. */
   primary?: boolean
   canEdit: boolean
+  /** Every reply waiting, when the section shows only the newest few. */
+  total?: number
   /**
    * Sends the approved answer. Called when the 30 second Undo runs out (or the page is left), so Undo never
    * has to unsend an email. Without it the button opens the lead, where the answer can be read first.
    */
-  approve?: (replyId: string) => Promise<TodayActionResult>
+  approve?: (replyId: string, leadId: string) => Promise<TodayActionResult>
 }
 
 /** Step 1: replies from founders, each with a drafted answer to approve. */
-export function RepliesSection({ step, items, primary, canEdit, approve }: RepliesSectionProps) {
+export function RepliesSection({ step, items, primary, canEdit, total, approve }: RepliesSectionProps) {
   const queue = useUndoQueue()
   const waiting = items.filter((r) => !queue.has(r.id))
+  const more = Math.max(0, (total ?? items.length) - items.length)
+  const left = waiting.length + more
   return (
-    <TodaySection id="replies" step={step} title="Replies to approve" count={waiting.length} countLabel={queue.items.length ? `${waiting.length} left` : undefined} collapsibleOnPhone={items.length === 0} defaultOpen={primary}>
+    <TodaySection id="replies" step={step} title="Replies to approve" count={left} countLabel={queue.items.length ? `${left} left` : undefined} collapsibleOnPhone={items.length === 0} defaultOpen={primary}>
       {queue.items.map((c) => (
         <UndoRow key={c.id} change={c} onUndo={() => queue.undo(c.id)} />
       ))}
@@ -37,16 +41,16 @@ export function RepliesSection({ step, items, primary, canEdit, approve }: Repli
       {waiting.map((r, i) => {
         const solid = primary && i === 0
         const action =
-          approve && canEdit ? (
+          approve && canEdit && r.approvable !== false ? (
             <Button
               variant={solid ? 'primary' : 'secondary'}
               onClick={() =>
                 queue.push({
                   id: r.id,
-                  message: `Reply sent to ${r.person} at ${r.company}`,
-                  countdown: 'Sending in',
+                  message: `Reply to ${r.person} approved`,
+                  countdown: 'Undo for',
                   commit: async () => {
-                    const res = await approve(r.id)
+                    const res = await approve(r.id, r.leadId)
                     if (!res.ok) toast.error(res.message)
                   },
                 })
@@ -76,6 +80,13 @@ export function RepliesSection({ step, items, primary, canEdit, approve }: Repli
           </TodayRow>
         )
       })}
+      {more ? (
+        <p className="px-4 py-3 text-[14px] text-label-3 lg:px-[22px]">
+          <Link href="/inbox" className="text-label-1 underline decoration-separator-strong underline-offset-[3px]">
+            {more === 1 ? '1 more reply' : `${more} more replies`} in Inbox
+          </Link>
+        </p>
+      ) : null}
     </TodaySection>
   )
 }

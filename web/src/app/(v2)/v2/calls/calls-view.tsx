@@ -74,7 +74,7 @@ function SoftTile({ text, className }: { text: string; className?: string }) {
   )
 }
 
-export function CallsView({ calls, canAct }: { calls: CallsPage; canAct: boolean }) {
+export function CallsView({ calls, canAct, initialLead = null }: { calls: CallsPage; canAct: boolean; initialLead?: string | null }) {
   const all = useMemo(
     () => [
       ...calls.today.map((c) => ({ c, g: 'today' as Group })),
@@ -83,9 +83,10 @@ export function CallsView({ calls, canAct }: { calls: CallsPage; canAct: boolean
     ],
     [calls],
   )
-  const [selected, setSelected] = useState<string | null>(all[0]?.c.leadId ?? null)
-  const [phoneOpen, setPhoneOpen] = useState(false)
-  const [showEarlier, setShowEarlier] = useState(calls.today.length + calls.upcoming.length === 0)
+  const linked = initialLead ? all.find((x) => x.c.leadId === initialLead) : undefined
+  const [selected, setSelected] = useState<string | null>(linked?.c.leadId ?? all[0]?.c.leadId ?? null)
+  const [phoneOpen, setPhoneOpen] = useState(Boolean(linked))
+  const [showEarlier, setShowEarlier] = useState(calls.today.length + calls.upcoming.length === 0 || linked?.g === 'earlier')
   const [stages, setStages] = useState<Record<string, string>>({})
   const [now] = useState(() => new Date())
   const { pending, schedule, undo, secondsLeft } = useUndo()

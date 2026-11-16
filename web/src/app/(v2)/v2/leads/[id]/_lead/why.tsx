@@ -3,7 +3,7 @@ import { ExternalLink } from 'lucide-react'
 import { cx } from '@/components/ui2/cx'
 import { eyebrow, panel } from '../../_ui/marks'
 import type { LeadView } from './model'
-import type { BestOffer } from './types'
+import type { BestOffer, ProfileRow } from './types'
 
 function Source({ url, host, date, prefix }: { url: string | null; host: string; date: string; prefix?: string }) {
   const label = [host, date ? `${prefix ? `${prefix} ` : ''}${date}` : ''].filter(Boolean).join(' · ')
@@ -22,11 +22,14 @@ function Source({ url, host, date, prefix }: { url: string | null; host: string;
 export function Why({
   view,
   offer,
+  profile = [],
   isAdmin,
   includeUnverified,
 }: {
   view: LeadView
   offer?: BestOffer | null
+  /** The startup profile's known answers with their evidence (lead_conversation). */
+  profile?: ProfileRow[]
   isAdmin: boolean
   includeUnverified: boolean
 }) {
@@ -68,10 +71,37 @@ export function Why({
         ) : null}
       </section>
 
+      {profile.length ? (
+        <section aria-labelledby="profile-h" className={panel}>
+          <h3 id="profile-h" className={cx(eyebrow, 'px-5 pt-5 lg:px-[26px] lg:pt-[22px]')}>
+            Startup profile
+          </h3>
+          <dl className="px-5 pb-2 lg:px-[26px]">
+            {profile.map((r) => (
+              <div key={r.key} className="grid gap-0.5 py-3 hairline-b last:shadow-none sm:grid-cols-[160px_minmax(0,1fr)] sm:gap-4">
+                <dt className="type-subhead text-label-3">{r.label}</dt>
+                <dd className="min-w-0">
+                  <span className="text-label-1">{r.value}</span>
+                  {r.why ? <p className="type-subhead mt-0.5 text-label-2">{r.why}</p> : null}
+                  {r.sources.length ? (
+                    <div className="flex flex-col items-start">
+                      {r.sources.map((src) => (
+                        <Source key={src.url} url={src.url} host={src.host} date={src.date} />
+                      ))}
+                    </div>
+                  ) : null}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      ) : null}
+
       {offerText ? (
         <section aria-label={offer ? 'Best offer' : 'Angle'} className={cx(panel, 'px-5 py-5 lg:px-[26px] lg:py-[22px]')}>
           <h3 className={cx(eyebrow, 'mb-2')}>{offer ? `Best offer · ${offer.name}` : 'Best angle'}</h3>
           <p className="text-[17px] leading-[1.45] tracking-[-0.01em] text-label-1 lg:text-[19px]">{offerText}</p>
+          {offer?.why ? <p className="type-subhead mt-2 text-label-2">Why now: {offer.why}</p> : null}
           {view.pitch || view.testGroup ? (
             <p className="type-subhead mt-3 text-label-3">{[view.pitch && `Pitch: ${view.pitch}`, view.testGroup && `Test group: ${view.testGroup}`].filter(Boolean).join(' · ')}</p>
           ) : null}
