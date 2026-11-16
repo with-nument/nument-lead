@@ -1,6 +1,7 @@
 import { expect, type Page } from '@playwright/test'
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from '../../src/lib/database.types'
+import { LoginPage } from './pom/login-page'
 
 // The founder's real account is only used by founder.spec.ts, from environment variables.
 export const founder = { email: process.env.E2E_FOUNDER_EMAIL ?? '', password: process.env.E2E_FOUNDER_PASSWORD ?? '' }
@@ -16,13 +17,11 @@ export async function userClient(email: string, password: string) {
   return sb
 }
 
+/** Signs in through the page (both steps) and waits until the app took over, so the session cookie is set. */
 export async function signIn(page: Page, email: string, password: string) {
-  await page.goto('/login')
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password', { exact: true }).fill(password)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  // Wait until the sign in finished and the app took us somewhere, so the session cookie is set.
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'))
+  const login = new LoginPage(page)
+  await login.goto()
+  await login.signIn(email, password)
 }
 
 export async function expectNoHorizontalScroll(page: Page) {

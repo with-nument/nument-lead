@@ -24,7 +24,7 @@ export const BUDGETS_KB = {
 }
 
 /** Routes not rebuilt yet: reported, never failing. Remove a route from here when its new version ships. */
-export const TODO = new Set(['/login', '/', '/leads/[id]', '/leads', '/pipeline'])
+export const TODO = new Set(['/', '/leads/[id]', '/leads', '/pipeline'])
 
 const STATS_FILE = join('.next', 'diagnostics', 'route-bundle-stats.json')
 const KB = 1024

@@ -103,6 +103,20 @@
 */
 @theme inline {
   --color-label-1: var(--ui-label-1);
+  --color-signin-canvas: var(--ui-signin-canvas);
+  --color-signin-ink: var(--ui-signin-ink);
+  --color-signin-ink-strong: var(--ui-signin-ink-strong);
+  --color-signin-on-ink: var(--ui-signin-on-ink);
+  --color-signin-label-2: var(--ui-signin-label-2);
+  --color-signin-label-3: var(--ui-signin-label-3);
+  --color-signin-label-4: var(--ui-signin-label-4);
+  --color-signin-placeholder: var(--ui-signin-placeholder);
+  --color-signin-hint: var(--ui-signin-hint);
+  --color-signin-field: var(--ui-signin-field);
+  --color-signin-field-focus: var(--ui-signin-field-focus);
+  --color-signin-field-line: var(--ui-signin-field-line);
+  --color-signin-focus: var(--ui-signin-focus);
+  --color-signin-underline: var(--ui-signin-underline);
   --color-label-2: var(--ui-label-2);
   --color-label-3: var(--ui-label-3);
   --color-label-4: var(--ui-label-4);
@@ -150,6 +164,7 @@
   --color-field: var(--ui-field);
 
   --font-ui: var(--ui-font);
+  --font-signin: var(--ui-signin-font);
 
   --radius-control: 10px;
   --radius-panel: 16px;

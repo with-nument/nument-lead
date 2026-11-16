@@ -1,31 +1,26 @@
-import { Mark } from '@/components/brand/logo'
-import { PixelField } from '@/components/auth/pixel-field'
+import type { Viewport } from 'next'
+import { AuthArt } from '@/components/auth/auth-art'
+import { SIGNIN_THEME_COLOR } from '@/styles/theme-color'
 
-/** Kit auth layout: an 8px frame, the woven PixelField panel on the left, the quiet form on the right. */
+export const viewport: Viewport = { themeColor: SIGNIN_THEME_COLOR, colorScheme: 'light' }
+
+/**
+ * Sign-in, reset and new-password pages (the approved mock, 16 Nov 2026): the form on the left, the
+ * floating card and coins on the right. Phones and narrow windows: the art on top (46vh), the form below.
+ * Black, white and greys only, in Figtree (the app's --nf-sans: one font file, shared with the app).
+ */
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid min-h-dvh bg-surface-2 p-2 md:grid-cols-[46fr_54fr]">
-      <div className="relative hidden overflow-hidden rounded-l-lg bg-indigo-100 md:block">
-        <PixelField className="absolute inset-0 touch-pan-y" />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-[linear-gradient(to_top,rgba(0,0,0,.72),rgba(0,0,0,.25)_45%,transparent)]"
-        />
-        <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 p-10 text-white">
-          <div className="flex items-center gap-2">
-            <Mark className="size-6" />
-            <span className="wordmark text-[18px] text-white/85!">nument</span>
-          </div>
-          <p className="mt-3 max-w-md font-display text-[44px] leading-[1.02] font-normal tracking-[-0.015em] text-balance">
-            Today&apos;s best leads, ready to send
-          </p>
-          <p className="mt-3 max-w-[330px] text-sm leading-relaxed text-white/65">
-            Fresh leads every morning, each with dated evidence, a number the business published itself, and a first message written for them.
-          </p>
-        </div>
+    <div className="signin-root grid min-h-dvh grid-cols-2 bg-signin-canvas font-signin text-[15px] leading-[normal] font-normal text-signin-ink antialiased [color-scheme:light] signin-phone:grid-cols-1">
+      <div className="relative flex min-w-0 flex-col justify-center pr-[6vw] pl-[12vw] signin-phone:px-6 signin-phone:pt-8 signin-phone:pb-[90px]">
+        <p className="absolute top-10 left-[12vw] text-[24px] font-bold tracking-[-0.035em] text-signin-ink-strong signin-phone:static signin-phone:mb-7">
+          nument
+        </p>
+        <main className="w-[400px] max-w-full">{children}</main>
+        <p className="absolute bottom-[34px] left-[12vw] text-[13px] text-signin-label-4 signin-phone:left-6">Nument Lead desk · Private workspace for Team Nument</p>
       </div>
-      <div className="grid overflow-y-auto rounded-lg bg-surface px-4 py-12 md:rounded-l-none">
-        <div className="m-auto w-full max-w-[340px]">{children}</div>
+      <div className="relative signin-phone:order-first signin-phone:h-[46vh]">
+        <AuthArt />
       </div>
     </div>
   )

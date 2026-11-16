@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { LoginPage } from './pom/login-page'
 
 // Runs without any account: health, redirects, the sign-in errors and the reset answer.
 
@@ -27,11 +28,11 @@ test('security headers are set', async ({ request }) => {
 })
 
 test('a wrong password gets the same plain message as a wrong email', async ({ page }) => {
-  await page.goto('/login')
-  await page.getByLabel('Email').fill('nobody-e2e@example.com')
-  await page.getByLabel('Password', { exact: true }).fill('not-the-password')
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page.getByRole('alert').filter({ hasText: 'Email or password' })).toHaveText('Email or password is not right.')
+  const login = new LoginPage(page)
+  await login.goto()
+  await login.fill('nobody-e2e@example.com', 'not-the-password')
+  await login.submit.click()
+  await expect(login.error).toHaveText('Email or password is not right.')
   await expect(page).toHaveURL(/\/login/)
 })
 

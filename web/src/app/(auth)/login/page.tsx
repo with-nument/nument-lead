@@ -7,7 +7,16 @@ export const metadata: Metadata = { title: 'Sign in' }
 export default function LoginPage() {
   return (
     <>
-      <AuthHeading title="Sign in" subtitle="Use the email and password your admin gave you." />
+      {/* The space before the break keeps the accessible name "Sign in to Nument Lead desk". */}
+      <AuthHeading
+        title={
+          <>
+            Sign in to <br />
+            Nument Lead desk
+          </>
+        }
+        subtitle="Find the founders who need a product team."
+      />
       <LoginForm />
     </>
   )
