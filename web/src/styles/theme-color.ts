@@ -1,9 +1,5 @@
 /**
- * Browser chrome colour for v2 pages and the sign-in pages: the top of the wash (--ui-wash-1 in
- * theme.css), light and dark. The meta tag cannot read CSS variables; tests/unit/contrast.test.ts
- * checks these stay equal to the CSS values.
+ * Browser chrome colour for v2 pages: the page colour (--ui-wash-1 in theme.css). The new design is light
+ * only. The meta tag cannot read CSS variables; tests/unit/contrast.test.ts checks this stays equal to the CSS.
  */
-export const THEME_COLOR = [
-  { media: '(prefers-color-scheme: light)', color: '#dfe6f8' },
-  { media: '(prefers-color-scheme: dark)', color: '#0b1022' },
-]
+export const THEME_COLOR = '#f4f4f4'

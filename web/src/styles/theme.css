@@ -1,78 +1,83 @@
 /* ==========================================================================
-   Nument Leads, new design (v2): Apple-inspired light glass.
-   Clarity, deference, depth. Calm surfaces over a soft blue and violet wash.
+   Nument Leads, new design (v2): calm monochrome (approved mockups, 16 Nov 2026).
+   Black, white, greys and silver. No blue or indigo, no gradients, no glass, light only.
 
    - Raw values live here, all prefixed --ui- so nothing collides with the v1 kit (tokens.css).
      The Tailwind names (text-label-1, bg-accent-fill, rounded-panel...) are mapped in
      src/app/globals.css, after the v1 theme, because its colour reset would wipe them here.
-   - Light is primary; dark follows prefers-color-scheme.
-   - Glass: blur only on fixed bars (sidebar, top bar, tab bar) and overlays (sheets, menus,
-     popovers). Content panels are ~82% white with no blur. Every material has a solid
-     fallback: no backdrop-filter support, prefers-reduced-transparency, html[data-materials=solid].
-   - Contrast: label-1..3, accent, status and who-answers colours reach 4.5:1 over every material
-     at every wash stop, light and dark (tests/unit/contrast.test.ts reads this file).
-     label-4 is for placeholders only.
+   - Page #f4f4f4, white surfaces, hairlines rgb(0 0 0 / 0.07). One solid #111 button per screen.
+   - Status shows only as tiny muted dots (--ui-dot-*). The status text tokens are darker versions
+     of the same hues so a destructive label still reads.
+   - Contrast: label-1..3, accent, status and who-answers colours reach 4.5:1 on every surface
+     (tests/unit/contrast.test.ts reads this file). label-4 is for placeholders only.
    - v2 code never uses hex or palette classes (tests/unit/design-lint.test.ts).
    ========================================================================== */
 
 :root {
-  /* ---------- Wash: the fixed gradient behind v2 pages (static stops) ---------- */
-  --ui-wash-1: #dfe6f8; /* top left, soft periwinkle */
-  --ui-wash-2: #e8e4f6; /* middle, soft lavender */
-  --ui-wash-3: #f4f3f9; /* bottom right, near white */
-  --ui-wash-glow-1: rgb(190 207 255 / 0.5); /* blue light, top left */
-  --ui-wash-glow-2: rgb(222 206 255 / 0.45); /* violet light, bottom right */
+  /* ---------- Page ---------- */
+  --ui-wash-1: #f4f4f4;
+  --ui-wash-2: #f4f4f4;
+  --ui-wash-3: #f4f4f4;
 
   /* ---------- Labels (text) ---------- */
-  --ui-label-1: #15151d; /* primary */
-  --ui-label-2: #43434f; /* secondary */
-  --ui-label-3: #5c5c6a; /* tertiary, still 4.5:1 */
-  --ui-label-4: #8d8d9a; /* placeholders only */
+  --ui-label-1: #111111; /* primary */
+  --ui-label-2: #4a4a4a; /* secondary */
+  --ui-label-3: #666666; /* tertiary, still 4.5:1 on a control fill */
+  --ui-label-4: #8a8a8a; /* placeholders only */
 
   /* ---------- Fills, separators ---------- */
-  --ui-fill-1: rgb(118 118 142 / 0.16); /* control tracks, secondary buttons */
-  --ui-fill-2: rgb(118 118 142 / 0.11); /* pressed and selected rows */
-  --ui-fill-3: rgb(118 118 142 / 0.07); /* hover */
-  --ui-separator: rgb(60 60 92 / 0.14);
-  --ui-separator-strong: rgb(60 60 92 / 0.24);
+  --ui-fill-1: rgb(0 0 0 / 0.06); /* control tracks */
+  --ui-fill-2: rgb(0 0 0 / 0.05); /* pressed and selected rows */
+  --ui-fill-3: rgb(0 0 0 / 0.035); /* hover */
+  --ui-separator: rgb(0 0 0 / 0.07);
+  --ui-separator-strong: rgb(0 0 0 / 0.12); /* outlined buttons and marks */
   --ui-thumb: #ffffff; /* the selected segment */
-  --ui-scrim: rgb(14 14 38 / 0.2); /* dims the page behind a sheet */
-  --ui-selection: rgb(70 67 209 / 0.22);
+  --ui-scrim: rgb(17 17 17 / 0.38); /* dims the page behind a sheet */
+  --ui-selection: rgb(0 0 0 / 0.12);
+  --ui-silver: #c8c9cc;
+  --ui-avatar: #ececed; /* soft initials circles and company tiles (never solid black) */
 
-  /* ---------- Accent: Nument indigo ---------- */
-  --ui-accent: #4643d1; /* links, selected icons, focus */
-  --ui-accent-fill: #4643d1; /* primary buttons */
-  --ui-accent-fill-hover: #3936c2;
+  /* ---------- Accent: ink. The one solid button per screen ---------- */
+  --ui-accent: #111111; /* links, selected icons, focus */
+  --ui-accent-fill: #111111; /* the primary button */
+  --ui-accent-fill-hover: #2b2b2b;
   --ui-on-accent: #ffffff;
 
-  /* ---------- Status ---------- */
-  --ui-ok: #1b6d36;
-  --ui-warn: #8a5200;
-  --ui-bad: #a61e14;
+  /* ---------- Status: text (darker) and the tiny dots (muted) ---------- */
+  --ui-ok: #4c6852;
+  --ui-warn: #6f6038;
+  --ui-bad: #8e4a40;
+  --ui-dot-ok: #7f9a84;
+  --ui-dot-warn: #bba06c;
+  --ui-dot-bad: #b47b71;
 
-  /* ---------- Lead stages (dot colours; same hues as the sheet) ---------- */
-  --ui-stage-new: #73737f;
-  --ui-stage-contacted: #3a63c7;
-  --ui-stage-replied: #5b45c9; /* stored as 'talking' */
-  --ui-stage-call-booked: #a8327e; /* discovery_booked */
-  --ui-stage-call-done: #8b2a62; /* discovery_done */
-  --ui-stage-proposal: #a46100; /* proposal_sent */
-  --ui-stage-won: #2b7a3c;
-  --ui-stage-retainer: #0f6d5e;
-  --ui-stage-lost: #b3261e;
-  --ui-stage-not-now: #ad5016;
-  --ui-stage-not-a-fit: #777784;
-  --ui-stage-wrong-contact: #85603c;
+  /* ---------- Lead stages: dots beside the stage name (the words carry the meaning) ---------- */
+  --ui-stage-new: #c8c9cc;
+  --ui-stage-contacted: #8a8a8a;
+  --ui-stage-replied: #111111; /* stored as 'talking' */
+  --ui-stage-call-booked: #7f9a84; /* discovery_booked */
+  --ui-stage-call-done: #7f9a84; /* discovery_done */
+  --ui-stage-proposal: #bba06c; /* proposal_sent */
+  --ui-stage-won: #5f7d65;
+  --ui-stage-retainer: #5f7d65;
+  --ui-stage-lost: #b47b71;
+  --ui-stage-not-now: #bba06c;
+  --ui-stage-not-a-fit: #c8c9cc;
+  --ui-stage-wrong-contact: #b47b71;
 
-  /* ---------- Grades: filled mark (fill) with its letter (ink) ---------- */
-  --ui-grade-a: #2b7a3c;
-  --ui-grade-a-ink: #ffffff;
-  --ui-grade-b: #3a5ccb;
-  --ui-grade-b-ink: #ffffff;
-  --ui-grade-c: #6b6b79;
-  --ui-grade-c-ink: #ffffff;
-  --ui-grade-d: transparent; /* D is an outline: ring + tertiary letter */
-  --ui-grade-d-ink: var(--ui-label-3);
+  /* ---------- Grades: an outlined letter. Fill stays clear; ring and letter carry the grade ---------- */
+  --ui-grade-a: transparent;
+  --ui-grade-a-ink: #111111;
+  --ui-grade-a-ring: #111111;
+  --ui-grade-b: transparent;
+  --ui-grade-b-ink: #4a4a4a;
+  --ui-grade-b-ring: rgb(0 0 0 / 0.12);
+  --ui-grade-c: transparent;
+  --ui-grade-c-ink: #666666;
+  --ui-grade-c-ring: rgb(0 0 0 / 0.07);
+  --ui-grade-d: transparent;
+  --ui-grade-d-ink: #666666;
+  --ui-grade-d-ring: rgb(0 0 0 / 0.07);
 
   /* ---------- Who answers a number ---------- */
   --ui-line-owner: var(--ui-ok);
@@ -80,34 +85,36 @@
   --ui-line-bot: var(--ui-bad);
   --ui-line-other: var(--ui-label-3);
 
-  /* ---------- Materials ---------- */
-  --ui-panel: rgb(255 255 255 / 0.82); /* content panels: no blur */
+  /* ---------- Surfaces (solid; the names stay from the glass era so pages keep working) ---------- */
+  --ui-panel: #ffffff; /* content surfaces */
   --ui-panel-solid: #ffffff;
-  --ui-bar: rgb(247 247 252 / 0.72); /* sidebar, top bar, tab bar: blurred */
-  --ui-bar-solid: #f3f3f8;
-  --ui-overlay: rgb(252 252 255 / 0.8); /* sheets, menus, popovers: blurred */
-  --ui-overlay-solid: #fbfbfd;
-  --ui-window: rgb(255 255 255 / 0.6); /* the sign-in panel: blurred */
-  --ui-window-solid: #fcfcfe;
-  --ui-field: rgb(255 255 255 / 0.72); /* grouped text fields inside a window or sheet */
+  --ui-bar: #f4f4f4; /* the sidebar and top bar sit on the page */
+  --ui-bar-solid: #f4f4f4;
+  --ui-tabbar: #ffffff; /* the phone tab bar */
+  --ui-overlay: #ffffff; /* sheets, menus, popovers */
+  --ui-overlay-solid: #ffffff;
+  --ui-window: #ffffff;
+  --ui-window-solid: #ffffff;
+  --ui-field: #ffffff; /* text fields and the search box */
+  --ui-row-done: #fafafa; /* a row that has just been acted on (the Undo row) */
 
-  --ui-shadow-panel: 0 0 0 0.5px rgb(22 24 70 / 0.06), 0 1px 2px rgb(22 24 70 / 0.04);
-  --ui-shadow-overlay: 0 0 0 0.5px rgb(22 24 70 / 0.1), 0 2px 6px rgb(22 24 70 / 0.06), 0 14px 36px -8px rgb(22 24 70 / 0.2);
-  --ui-shadow-window: inset 0 0.5px 0 rgb(255 255 255 / 0.9), 0 0 0 0.5px rgb(22 24 70 / 0.08), 0 30px 70px -24px rgb(40 46 140 / 0.3);
-  --ui-shadow-thumb: 0 0 0 0.5px rgb(0 0 0 / 0.04), 0 2px 6px rgb(0 0 0 / 0.1);
+  --ui-shadow-panel: 0 0 0 1px rgb(0 0 0 / 0.07);
+  --ui-shadow-overlay: 0 0 0 1px rgb(0 0 0 / 0.07), 0 12px 32px -8px rgb(0 0 0 / 0.14);
+  --ui-shadow-window: 0 30px 80px rgb(0 0 0 / 0.18);
+  --ui-shadow-thumb: 0 1px 2px rgb(0 0 0 / 0.08), 0 0 0 1px rgb(0 0 0 / 0.04);
 
-  /* The material in use. These switch to the solid values below; components only use these. */
+  /* Every surface is solid now. Kept as names so components need no change. */
   --ui-panel-bg: var(--ui-panel);
   --ui-bar-bg: var(--ui-bar);
   --ui-overlay-bg: var(--ui-overlay);
   --ui-window-bg: var(--ui-window);
-  --ui-blur-bar: blur(20px) saturate(170%);
-  --ui-blur-overlay: blur(30px) saturate(170%);
-  --ui-blur-window: blur(40px) saturate(160%);
+  --ui-blur-bar: none;
+  --ui-blur-overlay: none;
+  --ui-blur-window: none;
 
   /* ---------- Type, spacing, motion ---------- */
-  /* SF on Apple devices (nothing downloaded); Inter elsewhere, loaded only when used. */
-  --ui-font: -apple-system, BlinkMacSystemFont, var(--font-inter), system-ui, sans-serif;
+  /* Figtree, from next/font in src/app/layout.tsx (--nf-sans). */
+  --ui-font: var(--nf-sans), Figtree, system-ui, sans-serif;
   --ui-hairline: 1px;
   --ui-dur-1: 120ms;
   --ui-dur-2: 200ms;
@@ -116,123 +123,9 @@
   --ui-ease-glide: cubic-bezier(0.32, 0.72, 0, 1);
 
   /* ---------- Shell geometry ---------- */
-  --ui-sidebar-w: 256px;
-  --ui-tabbar-h: 49px;
-  --ui-navbar-h: 44px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ui-wash-1: #0b1022;
-    --ui-wash-2: #130f26;
-    --ui-wash-3: #09090e;
-    --ui-wash-glow-1: rgb(64 86 180 / 0.3);
-    --ui-wash-glow-2: rgb(112 72 176 / 0.24);
-
-    --ui-label-1: #f4f4f8;
-    --ui-label-2: #c8c8d2;
-    --ui-label-3: #adadbb;
-    --ui-label-4: #6e6e7c;
-
-    --ui-fill-1: rgb(130 130 158 / 0.24);
-    --ui-fill-2: rgb(130 130 158 / 0.17);
-    --ui-fill-3: rgb(130 130 158 / 0.1);
-    --ui-separator: rgb(255 255 255 / 0.1);
-    --ui-separator-strong: rgb(255 255 255 / 0.18);
-    --ui-thumb: #5e5e6e;
-    --ui-scrim: rgb(0 0 0 / 0.45);
-    --ui-selection: rgb(156 156 255 / 0.32);
-
-    --ui-accent: #aeaeff;
-    --ui-accent-fill: #5552e6;
-    --ui-accent-fill-hover: #6461ee;
-    --ui-on-accent: #ffffff;
-
-    --ui-ok: #5fd08a;
-    --ui-warn: #efb24a;
-    --ui-bad: #ff8f86;
-
-    --ui-stage-new: #9a9aa8;
-    --ui-stage-contacted: #7d9cf2;
-    --ui-stage-replied: #a08ef6;
-    --ui-stage-call-booked: #e57dba;
-    --ui-stage-call-done: #d97ab2;
-    --ui-stage-proposal: #e7a742;
-    --ui-stage-won: #5ec478;
-    --ui-stage-retainer: #41c2a6;
-    --ui-stage-lost: #ff8f86;
-    --ui-stage-not-now: #f08d4b;
-    --ui-stage-not-a-fit: #8f8f9d;
-    --ui-stage-wrong-contact: #c69c6e;
-
-    --ui-grade-a: #5ec478;
-    --ui-grade-a-ink: #08230f;
-    --ui-grade-b: #8ba5f6;
-    --ui-grade-b-ink: #0c1940;
-    --ui-grade-c: #a1a1af;
-    --ui-grade-c-ink: #15151c;
-
-    --ui-panel: rgb(42 42 56 / 0.62);
-    --ui-panel-solid: #1e1e27;
-    --ui-bar: rgb(22 22 32 / 0.68);
-    --ui-bar-solid: #17171f;
-    --ui-overlay: rgb(44 44 58 / 0.78);
-    --ui-overlay-solid: #282832;
-    --ui-window: rgb(34 34 48 / 0.55);
-    --ui-window-solid: #1d1d27;
-    --ui-field: rgb(255 255 255 / 0.07);
-
-    --ui-shadow-panel: 0 0 0 0.5px rgb(255 255 255 / 0.06);
-    --ui-shadow-overlay: 0 0 0 0.5px rgb(255 255 255 / 0.1), 0 14px 36px -8px rgb(0 0 0 / 0.55);
-    --ui-shadow-window: inset 0 0.5px 0 rgb(255 255 255 / 0.12), 0 0 0 0.5px rgb(255 255 255 / 0.08), 0 30px 70px -24px rgb(0 0 0 / 0.7);
-    --ui-shadow-thumb: 0 0 0 0.5px rgb(255 255 255 / 0.06), 0 2px 6px rgb(0 0 0 / 0.3);
-  }
-}
-
-/* ---------- Solid materials: no blur support, reduced transparency, or forced (tests) ---------- */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  :root {
-    --ui-panel-bg: var(--ui-panel-solid);
-    --ui-bar-bg: var(--ui-bar-solid);
-    --ui-overlay-bg: var(--ui-overlay-solid);
-    --ui-window-bg: var(--ui-window-solid);
-    --ui-blur-bar: none;
-    --ui-blur-overlay: none;
-    --ui-blur-window: none;
-  }
-}
-@media (prefers-reduced-transparency: reduce) {
-  :root {
-    --ui-panel-bg: var(--ui-panel-solid);
-    --ui-bar-bg: var(--ui-bar-solid);
-    --ui-overlay-bg: var(--ui-overlay-solid);
-    --ui-window-bg: var(--ui-window-solid);
-    --ui-blur-bar: none;
-    --ui-blur-overlay: none;
-    --ui-blur-window: none;
-  }
-}
-html[data-materials='solid'] {
-  --ui-panel-bg: var(--ui-panel-solid);
-  --ui-bar-bg: var(--ui-bar-solid);
-  --ui-overlay-bg: var(--ui-overlay-solid);
-  --ui-window-bg: var(--ui-window-solid);
-  --ui-blur-bar: none;
-  --ui-blur-overlay: none;
-  --ui-blur-window: none;
-}
-
-/* Hairlines are one device pixel on high-density screens. */
-@media (min-resolution: 2dppx) {
-  :root {
-    --ui-hairline: 0.5px;
-  }
-}
-
-@media (width >= 1024px) {
-  :root {
-    --ui-navbar-h: 52px;
-  }
+  --ui-sidebar-w: 248px;
+  --ui-tabbar-h: 60px;
+  --ui-navbar-h: 52px;
 }
 
 /* ---------- v2 base ----------
@@ -240,26 +133,20 @@ html[data-materials='solid'] {
    carry `ui2-base`. While a v2 page is on screen, <html> carries data-ui="2" (set by V2Scope, so a
    v2 page kept hidden in the background by the router never restyles a current-design page). */
 @utility ui2-base {
-  color-scheme: light dark;
+  color-scheme: light;
   font-family: var(--ui-font);
-  font-size: 17px;
-  line-height: 22px;
+  font-size: 15px;
+  line-height: 1.45;
   font-weight: 400;
-  letter-spacing: -0.005em;
-  font-variant-numeric: tabular-nums;
   color: var(--ui-label-1);
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
-  @media (width >= 1024px) {
-    font-size: 15px;
-    line-height: 20px;
-  }
 }
 
 @layer base {
   /* The page canvas (seen when scrolling past the ends) and native scrollbars follow v2 too. */
   html[data-ui='2'] {
-    color-scheme: light dark;
+    color-scheme: light;
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
   }
@@ -359,98 +246,70 @@ html[data-materials='solid'] {
 
 /* ---------- Surfaces ---------- */
 
-/* The wash: a fixed layer behind the page. Pure CSS gradients, painted once. */
+/* The page behind v2: flat #f4f4f4. */
 @utility wash {
   background-color: var(--ui-wash-3);
-  background-image:
-    radial-gradient(70% 55% at 0% 0%, var(--ui-wash-glow-1), transparent),
-    radial-gradient(60% 50% at 100% 100%, var(--ui-wash-glow-2), transparent),
-    linear-gradient(160deg, var(--ui-wash-1), var(--ui-wash-2) 55%, var(--ui-wash-3));
 }
-
-/* The sign-in backdrop: the same wash with two soft lights near the middle, so the glass panel
-   in front of them visibly frosts. */
+/* Kept for the sign-in pages: the same flat page. */
 @utility wash-stage {
   background-color: var(--ui-wash-3);
-  background-image:
-    radial-gradient(30% 34% at 36% 34%, var(--ui-wash-glow-1), transparent),
-    radial-gradient(32% 36% at 64% 68%, var(--ui-wash-glow-2), transparent),
-    radial-gradient(70% 55% at 0% 0%, var(--ui-wash-glow-1), transparent),
-    linear-gradient(160deg, var(--ui-wash-1), var(--ui-wash-2) 55%, var(--ui-wash-3));
 }
 
-/* Content panels: translucent white, never blurred. */
+/* Content surfaces: white with a hairline edge. */
 @utility material-panel {
   background-color: var(--ui-panel-bg);
   box-shadow: var(--ui-shadow-panel);
 }
 
-/* Fixed bars: the sidebar, top bars and the tab bar. */
+/* Fixed bars: the sidebar and the phone top bar sit on the page colour. */
 @utility material-bar {
   background-color: var(--ui-bar-bg);
-  -webkit-backdrop-filter: var(--ui-blur-bar);
-  backdrop-filter: var(--ui-blur-bar);
 }
 
 /* Overlays: sheets, menus, popovers, tooltips, toasts. */
 @utility material-overlay {
   background-color: var(--ui-overlay-bg);
-  -webkit-backdrop-filter: var(--ui-blur-overlay);
-  backdrop-filter: var(--ui-blur-overlay);
   box-shadow: var(--ui-shadow-overlay);
 }
 
-/* The sign-in panel: frosted glass with a bright edge. */
+/* A centred dialog such as the welcome sheet. */
 @utility material-window {
   background-color: var(--ui-window-bg);
-  -webkit-backdrop-filter: var(--ui-blur-window);
-  backdrop-filter: var(--ui-blur-window);
   box-shadow: var(--ui-shadow-window);
 }
 
-/* ---------- Type: Large Title 34 (30 on phones), Title 22, Headline 17, Body 15 (17 on phones), Caption 12 ---------- */
+/* ---------- Type (mockups): page title 32 (28 on phones), section 17, row 15, caption 12 ---------- */
 @utility type-large-title {
-  font-size: 30px;
-  line-height: 36px;
-  font-weight: 700;
-  letter-spacing: -0.021em;
+  font-size: 28px;
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: -0.025em;
   @media (width >= 1024px) {
-    font-size: 34px;
-    line-height: 41px;
+    font-size: 32px;
   }
 }
 @utility type-title {
-  font-size: 22px;
-  line-height: 28px;
-  font-weight: 650;
-  letter-spacing: -0.017em;
+  font-size: 20px;
+  line-height: 1.25;
+  font-weight: 600;
+  letter-spacing: -0.015em;
 }
 @utility type-headline {
-  font-size: 17px;
-  line-height: 22px;
+  font-size: 15.5px;
+  line-height: 1.35;
   font-weight: 600;
-  letter-spacing: -0.012em;
+  letter-spacing: -0.01em;
 }
 @utility type-body {
-  font-size: 17px;
-  line-height: 22px;
+  font-size: 15px;
+  line-height: 1.45;
   font-weight: 400;
-  letter-spacing: -0.005em;
-  @media (width >= 1024px) {
-    font-size: 15px;
-    line-height: 20px;
-  }
 }
 /* Secondary lines under a row title. */
 @utility type-subhead {
-  font-size: 15px;
-  line-height: 20px;
+  font-size: 13.5px;
+  line-height: 1.4;
   font-weight: 400;
-  letter-spacing: -0.003em;
-  @media (width >= 1024px) {
-    font-size: 13px;
-    line-height: 18px;
-  }
 }
 @utility type-caption {
   font-size: 12px;
@@ -460,10 +319,15 @@ html[data-materials='solid'] {
 }
 /* Tab bar labels. */
 @utility type-tab {
-  font-size: 10px;
-  line-height: 12px;
+  font-size: 11px;
+  line-height: 13px;
   font-weight: 500;
-  letter-spacing: 0.01em;
+}
+/* The nument wordmark: lowercase, 700, tight. */
+@utility type-wordmark {
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1;
 }
 
 /* ---------- Lines ---------- */
@@ -535,6 +399,31 @@ html[data-materials='solid'] {
     }
   }
 }
+/* The centred sheet: rises on phones, fades in the middle on laptops (its position uses transform). */
+@utility motion-sheet-center {
+  &[data-state='open'] {
+    animation: ui-sheet-up var(--ui-dur-3) var(--ui-ease-glide);
+  }
+  &[data-state='closed'] {
+    animation: ui-sheet-down var(--ui-dur-2) var(--ui-ease);
+  }
+  @media (width >= 1024px) {
+    &[data-state='open'] {
+      animation: ui-fade-in var(--ui-dur-2) var(--ui-ease);
+    }
+    &[data-state='closed'] {
+      animation: ui-fade-out var(--ui-dur-1) var(--ui-ease);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    &[data-state='open'] {
+      animation-name: ui-fade-in;
+    }
+    &[data-state='closed'] {
+      animation-name: ui-fade-out;
+    }
+  }
+}
 @utility motion-toast {
   animation: ui-toast-in var(--ui-dur-3) var(--ui-ease-glide);
   @media (prefers-reduced-motion: reduce) {
@@ -550,8 +439,6 @@ html[data-materials='solid'] {
     inset: 0;
     z-index: -1;
     background-color: var(--ui-bar-bg);
-    -webkit-backdrop-filter: var(--ui-blur-bar);
-    backdrop-filter: var(--ui-blur-bar);
     box-shadow: inset 0 calc(-1 * var(--ui-hairline)) 0 var(--ui-separator);
   }
   /* Clear until content scrolls under it; a page too short to scroll keeps it clear. */
@@ -582,7 +469,7 @@ html[data-materials='solid'] {
   }
 }
 
-/* Apple's activity indicator: eight spokes stepping round. */
+/* The activity indicator: eight spokes stepping round. */
 @utility activity-spin {
   animation: ui-spin 0.9s steps(8, end) infinite;
 }

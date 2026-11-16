@@ -1,7 +1,7 @@
 import { cx } from './cx'
 
 /**
- * Text fields grouped in one rounded block (iOS): each row has its label on the left and the field on
+ * Text fields grouped in one rounded block: each row has its label on the left and the field on
  * the right, labels aligned to the widest one. Rows are separated by a hairline.
  */
 export function FieldGroup({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -29,7 +29,7 @@ export function FieldRow({
         'after:pointer-events-none after:absolute after:right-0 after:bottom-0 after:left-4 after:h-[var(--ui-hairline)] after:bg-separator last:after:hidden',
       )}
     >
-      <label htmlFor={htmlFor} className="type-body cursor-text py-3 pr-3 pl-4 whitespace-nowrap text-label-1">
+      <label htmlFor={htmlFor} className="cursor-text text-[15px] py-3 pr-3 pl-4 whitespace-nowrap text-label-1">
         {label}
       </label>
       <div className="flex min-w-0 items-center gap-1 pr-2">
@@ -42,4 +42,4 @@ export function FieldRow({
 
 /** Classes for an input inside a FieldRow: borderless, the row shows focus. */
 export const fieldInput =
-  'type-body h-12 w-full min-w-0 bg-transparent py-0 pr-2 text-label-1 outline-none focus-visible:outline-none placeholder:text-label-4 lg:h-11'
+  'h-12 w-full text-[16px] lg:text-[15px] min-w-0 bg-transparent py-0 pr-2 text-label-1 outline-none focus-visible:outline-none placeholder:text-label-4 lg:h-11'

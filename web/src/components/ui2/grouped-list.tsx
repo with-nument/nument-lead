@@ -3,8 +3,7 @@ import { ChevronRight } from 'lucide-react'
 import { cx } from './cx'
 
 /**
- * An inset grouped list (iOS Settings, macOS System Settings): an optional header above, a
- * translucent panel of rows, an optional footnote below.
+ * A list of rows on a white surface: an optional header above, an optional footnote below.
  */
 export function GroupedList({
   header,
@@ -22,11 +21,11 @@ export function GroupedList({
 }) {
   return (
     <section className={cx('flex flex-col', className)} aria-label={label}>
-      {header ? <h2 className="type-subhead px-4 pb-2 font-semibold text-label-2">{header}</h2> : null}
+      {header ? <h2 className="px-1 pb-2.5 text-[14px] text-label-3">{header}</h2> : null}
       <ul role="list" className="material-panel overflow-hidden rounded-panel">
         {children}
       </ul>
-      {footer ? <p className="type-caption px-4 pt-2 text-label-3">{footer}</p> : null}
+      {footer ? <p className="type-caption px-1 pt-2.5 text-label-3">{footer}</p> : null}
     </section>
   )
 }
@@ -56,33 +55,32 @@ type ListRowProps = RowBody & {
 const interactive =
   'transition-colors duration-[var(--ui-dur-1)] hover:bg-fill-3 active:bg-fill-2 aria-[current=page]:bg-fill-2 focus-visible:-outline-offset-2'
 
-/** One row of a GroupedList: at least 44 px tall on phones, 40 px on laptops. */
+/** One row of a GroupedList: at least 56 px tall. */
 export function ListRow({ href, onClick, chevron, current, tone = 'default', className, prefetch, ...body }: ListRowProps) {
   const showChevron = chevron ?? Boolean(href)
   const content = (
     <>
       {body.icon ? (
-        <span aria-hidden className={cx('grid size-7 shrink-0 place-items-center [&_svg]:size-5', tone === 'default' ? 'text-accent' : null)}>
+        <span aria-hidden className={cx('grid size-7 shrink-0 place-items-center [&_svg]:size-5', tone === 'default' ? 'text-label-2 [&_svg]:stroke-[1.6]' : null)}>
           {body.icon}
         </span>
       ) : null}
-      <span className="flex min-w-0 flex-1 flex-col py-2.5">
-        <span className={cx('truncate', tone === 'accent' && 'text-accent', tone === 'destructive' && 'text-status-bad')}>{body.title}</span>
+      <span className="flex min-w-0 flex-1 flex-col py-2.5 text-[15px]">
+        <span className={cx('truncate', tone === 'accent' && 'font-[550] text-label-1', tone === 'destructive' && 'text-status-bad')}>{body.title}</span>
         {body.subtitle ? <span className="type-subhead truncate text-label-3">{body.subtitle}</span> : null}
       </span>
       {body.detail ? <span className="shrink-0 text-label-3">{body.detail}</span> : null}
       {body.accessory ? <span className="flex shrink-0 items-center">{body.accessory}</span> : null}
-      {showChevron ? <ChevronRight aria-hidden className="-mr-1 size-[18px] shrink-0 text-label-3 lg:size-4" strokeWidth={2.25} /> : null}
+      {showChevron ? <ChevronRight aria-hidden className="-mr-1 size-4 shrink-0 text-label-2" strokeWidth={1.6} /> : null}
     </>
   )
-  const row = cx('flex min-h-11 w-full items-center gap-3 px-4 text-left lg:min-h-10', className)
+  const row = cx('flex min-h-14 w-full items-center gap-4 px-4 py-1 text-left lg:px-[22px]', className)
   return (
     <li
       className={cx(
         'relative',
-        // Separator, inset to the text like iOS. Hidden after the last row.
-        'after:pointer-events-none after:absolute after:right-0 after:bottom-0 after:h-[var(--ui-hairline)] after:bg-separator last:after:hidden',
-        body.icon ? 'after:left-14' : 'after:left-4',
+        // A full-width hairline between rows, hidden after the last one.
+        'after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-separator last:after:hidden',
       )}
     >
       {href ? (

@@ -3,11 +3,16 @@
 import { RadioGroup } from 'radix-ui'
 import { cx } from './cx'
 
-export type Segment<T extends string> = { value: T; label: React.ReactNode }
+export type Segment<T extends string> = {
+  value: T
+  label: React.ReactNode
+  /** A quiet count after the label, such as the number of rows in that view. */
+  count?: number
+}
 
 /**
- * One choice out of a few (iOS and macOS segmented control). A radio group underneath: arrow keys move
- * and select, and the selected thumb slides (fades with reduced motion).
+ * One choice out of a few. A radio group underneath: arrow keys move and select. The selected segment is a
+ * white chip on a grey track (mockups); segments size to their words.
  */
 export function SegmentedControl<T extends string>({
   items,
@@ -26,7 +31,6 @@ export function SegmentedControl<T extends string>({
   name?: string
   className?: string
 }) {
-  const index = Math.max(0, items.findIndex((i) => i.value === value))
   return (
     <RadioGroup.Root
       value={value}
@@ -35,24 +39,20 @@ export function SegmentedControl<T extends string>({
       name={name}
       orientation="horizontal"
       loop
-      className={cx('relative grid h-9 rounded-control bg-fill-1 p-0.5 lg:h-8', className)}
-      style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
+      className={cx('inline-flex max-w-full gap-0.5 overflow-x-auto rounded-control bg-fill-1 p-[3px]', className)}
     >
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-y-0.5 left-0.5 rounded-[8px] bg-thumb shadow-[var(--ui-shadow-thumb)] transition-transform duration-[var(--ui-dur-2)] ease-glide motion-reduce:transition-none"
-        style={{ width: `calc((100% - 4px) / ${items.length})`, transform: `translateX(${index * 100}%)` }}
-      />
       {items.map((item) => (
         <RadioGroup.Item
           key={item.value}
           value={item.value}
           className={cx(
-            'relative z-10 min-w-0 truncate rounded-[8px] px-3 text-[15px] font-medium transition-colors duration-[var(--ui-dur-1)] lg:text-[13px]',
-            'text-label-2 data-[state=checked]:text-label-1 data-[state=checked]:font-semibold focus-visible:outline-offset-0',
+            'group inline-flex h-[38px] shrink-0 items-center gap-1.5 rounded-[9px] px-3.5 text-[14px] whitespace-nowrap transition-colors duration-[var(--ui-dur-1)] lg:h-8',
+            'text-label-3 hover:text-label-1 focus-visible:outline-offset-0',
+            'data-[state=checked]:bg-thumb data-[state=checked]:font-[550] data-[state=checked]:text-label-1 data-[state=checked]:shadow-[var(--ui-shadow-thumb)]',
           )}
         >
           {item.label}
+          {item.count !== undefined ? <span className="text-[13px] font-normal text-label-3 tabular-nums">{item.count}</span> : null}
         </RadioGroup.Item>
       ))}
     </RadioGroup.Root>

@@ -3,7 +3,8 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 // The new design (v2) only speaks in tokens from src/styles/theme.css. No hex colours, no colour
-// functions, no Tailwind palette classes, no v1 kit names, and no v1 components or helpers.
+// functions, no Tailwind palette classes, no v1 kit names, no v1 components or helpers, no blue or
+// indigo and no dark mode.
 // The sign-in pages are v2 as well.
 
 const SRC = path.join(__dirname, '../../src')
@@ -34,6 +35,10 @@ const RULES: { name: string; re: RegExp }[] = [
   { name: 'v1 component or helper', re: /from ['"]@\/(?:components\/(?:ui|shell|skeletons)\b|lib\/cn['"])/g },
   { name: 'sonner (use the ui2 toast)', re: /from ['"]sonner['"]/g },
   // label-4 is too light for reading: placeholders (and disabled controls) only.
+  // The new design is monochrome (16 Nov 2026): no blue, indigo or violet by name, in classes, styles or icons.
+  { name: 'blue or indigo', re: /(?<![a-z])(?:blue|indigo|violet|purple|periwinkle|lavender)(?![a-z])/gi },
+  // Light only: no dark variants or dark-scheme queries.
+  { name: 'dark mode', re: /(?<![\w-])dark:|prefers-color-scheme:\s*dark/g },
   { name: 'label-4 outside a placeholder', re: /(?<!(?:placeholder|disabled|aria-disabled):)(?<![\w-])(?:text|fill|stroke)-label-4(?![\w-])/g },
 ]
 
@@ -63,7 +68,9 @@ describe('v2 design lint', () => {
 
   it('catches what it should', () => {
     const probe = (snippet: string) => RULES.filter(({ re }) => new RegExp(re.source, re.flags).test(snippet)).map((r) => r.name)
-    expect(probe('className="bg-blue-500"')).toEqual(['palette class'])
+    expect(probe('className="bg-blue-500"')).toEqual(['palette class', 'blue or indigo'])
+    expect(probe("stroke: 'indigo'")).toEqual(['blue or indigo'])
+    expect(probe('className="text-label-1 dark:text-label-2"')).toEqual(['dark mode'])
     expect(probe("color: '#1f1f1f'")).toEqual(['hex colour'])
     expect(probe('bg-[rgb(0_0_0/0.2)]')).toEqual(['colour function'])
     expect(probe('text-white')).toEqual(['black or white class'])
