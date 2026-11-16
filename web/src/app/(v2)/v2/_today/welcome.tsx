@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useSyncExternalStore } from 'react'
+import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
@@ -15,8 +15,6 @@ const STEPS = [
   { text: 'Take your calls', when: 'evening' },
   { text: 'Send the proposals we draft', when: '5 min each' },
 ] as const
-
-const noop = () => () => {}
 
 /**
  * The `welcome-art` slot above the title: a path under /public (for example '/brand/welcome-coin.png'), or null
@@ -33,25 +31,8 @@ function WelcomeArt({ src }: { src: string | null }) {
   )
 }
 
-function seenHere(userId: string) {
-  try {
-    return window.localStorage.getItem(tourStorageKey(userId)) !== null
-  } catch {
-    return false
-  }
-}
-
-/**
- * The welcome sheet (mockup 08): shown once, on the first visit to the new Today. It replaces the old product
- * tour for the new design and shares its "done" mark, so finishing either one hides both.
- */
-export function WelcomeSheet({ userId, completedAt }: { userId: string; completedAt: string | null }) {
-  // The server snapshot says "seen" so nothing opens before the browser has checked localStorage.
-  const seen = useSyncExternalStore(
-    noop,
-    () => completedAt !== null || seenHere(userId),
-    () => true,
-  )
+/** The welcome sheet itself, loaded only for someone who has not seen it (see WelcomeGate). */
+export function WelcomeSheet({ userId }: { userId: string }) {
   const [closed, setClosed] = useState(false)
 
   function done() {
@@ -65,7 +46,7 @@ export function WelcomeSheet({ userId, completedAt }: { userId: string; complete
   }
 
   return (
-    <Sheet open={!seen && !closed} onOpenChange={(open) => (open ? null : done())}>
+    <Sheet open={!closed} onOpenChange={(open) => (open ? null : done())}>
       <SheetContent
         variant="center"
         title="Welcome to Lead desk"

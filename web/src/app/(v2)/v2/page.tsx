@@ -15,7 +15,7 @@ import { ProposalsSection } from './_today/proposals'
 import { RepliesSection } from './_today/replies'
 import { TodaySkeleton } from './_today/skeleton'
 import { StartupsSection } from './_today/startups'
-import { WelcomeSheet } from './_today/welcome'
+import { WelcomeGate } from './_today/welcome-gate'
 
 export const metadata: Metadata = { title: 'Today' }
 
@@ -57,7 +57,7 @@ async function Today() {
           link={{ href: '/insights', label: 'See Insights' }}
         />
       </div>
-      <WelcomeSheet userId={user.id} completedAt={user.tourCompletedAt} />
+      <WelcomeGate userId={user.id} completedAt={user.tourCompletedAt} />
     </Page>
   )
 }

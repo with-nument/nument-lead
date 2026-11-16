@@ -37,17 +37,22 @@ function SidebarLink({ item, current, count, secondary }: { item: NavItem; curre
 
 /** The sidebar's two groups, the second at the foot. `role` is null until the session streams in (admin-only items wait). */
 export function SidebarLinks({ role, counts }: { role: Role | null; counts?: NavCounts | null }) {
-  const path = usePathname()
+  return <SidebarLinksView path={usePathname()} role={role} counts={counts} />
+}
+
+/** The links for a given path. With `path` null nothing is marked current (the static fallback, see TabBarView). */
+export function SidebarLinksView({ path, role, counts }: { path: string | null; role: Role | null; counts?: NavCounts | null }) {
+  const here = (href: string) => path !== null && isCurrent(path, href)
   return (
     <>
       <ul role="list" className="flex flex-col gap-0.5">
         {PRIMARY_NAV.map((item) => (
-          <SidebarLink key={item.href} item={item} current={isCurrent(path, item.href)} count={navCount(item.href, counts)} />
+          <SidebarLink key={item.href} item={item} current={here(item.href)} count={navCount(item.href, counts)} />
         ))}
       </ul>
       <ul role="list" className="mt-auto flex flex-col gap-0.5 pt-4">
         {secondaryFor(role).map((item) => (
-          <SidebarLink key={item.href} item={item} current={isCurrent(path, item.href)} secondary />
+          <SidebarLink key={item.href} item={item} current={here(item.href)} secondary />
         ))}
       </ul>
     </>

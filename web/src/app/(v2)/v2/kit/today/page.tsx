@@ -36,7 +36,8 @@ const SAMPLE: TodayData = {
 
 /** The Today page with sample data in every section (/v2/kit/today). Buttons that save are off (view only). */
 export default function KitTodayPage() {
-  const head = headline(SAMPLE, new Date())
+  // A fixed morning, so the sample prerenders and reads like the mockup.
+  const head = headline(SAMPLE, new Date('2026-11-16T03:30:00Z'))
   return (
     <Page title={head.title} compactTitle={head.compact} eyebrow={<TodayDate />} subtitle={head.subtitle}>
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-8">

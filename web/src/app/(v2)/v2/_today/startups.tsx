@@ -1,18 +1,17 @@
 'use client'
 
-import { useState } from 'react'
-import Link from 'next/link'
-import { Ellipsis } from 'lucide-react'
+import { lazy, Suspense, useState } from 'react'
 import { markContacted, markReplied, skipLead, undoLeadChange, type PreviousState, type UndoKind } from '@/app/(app)/actions'
 import { Button } from '@/components/ui2/button'
 import { EmptyLine } from '@/components/ui2/empty-state'
-import { GradeMark } from '@/components/ui2/grade-mark'
-import { Menu, MenuContent, MenuItem, MenuTrigger } from '@/components/ui2/menu'
 import { toast } from '@/components/ui2/toast'
 import { UndoRow, useUndoQueue } from '@/components/ui2/undo-row'
 import type { ActionResult } from '@/lib/action-result'
-import { CompanyMark, Note, TodayRow, TodaySection, Who } from './section'
+import { CompanyMark, Note, TodayRow, TodaySection } from './section'
 import type { StartupItem } from './types'
+
+// The full list (with its menu) loads when someone opens it.
+const StartupsList = lazy(() => import('./startups-list').then((m) => ({ default: m.StartupsList })))
 
 export type StartupsSectionProps = {
   step: number
@@ -92,43 +91,19 @@ export function StartupsSection({ step, items, total, primary, canEdit, summary 
         </TodayRow>
       )}
       {open ? (
-        <div id="startups-list" className="[&>*+*]:hairline-t">
-          {waiting.map((s) => (
-            <TodayRow
-              key={s.leadId}
-              className="bg-row-done"
-              action={
-                canEdit ? (
-                  <>
-                    <Button onClick={() => act(s, 'sent', () => markContacted(s.leadId, 'manual'), `${s.company} marked as contacted`)}>Mark contacted</Button>
-                    <Menu>
-                      <MenuTrigger aria-label={`More for ${s.company}`} className="grid size-11 shrink-0 place-items-center rounded-control text-label-2 hover:bg-fill-3 max-lg:!flex-none lg:size-[38px]">
-                        <Ellipsis aria-hidden className="size-[18px]" strokeWidth={1.6} />
-                      </MenuTrigger>
-                      <MenuContent>
-                        <MenuItem onSelect={() => act(s, 'replied', () => markReplied(s.leadId), `${s.company} marked as replied`)}>They replied</MenuItem>
-                        <MenuItem onSelect={() => act(s, 'skip', () => skipLead(s.leadId), `${s.company} skipped for now`)}>Skip for now</MenuItem>
-                        <MenuItem asChild>
-                          <Link href={`/leads/${s.leadId}`}>Open the lead</Link>
-                        </MenuItem>
-                      </MenuContent>
-                    </Menu>
-                  </>
-                ) : (
-                  <Link href={`/leads/${s.leadId}`} className="text-[14px] text-label-1 underline decoration-separator-strong underline-offset-[3px]">
-                    Open
-                  </Link>
-                )
-              }
-            >
-              <GradeMark grade={s.grade} />
-              <div className="min-w-0 flex-1">
-                <Who main={s.company} sub={[s.person, s.city].filter(Boolean).join(', ') || null} />
-                {s.signal ? <Note>{s.signal}</Note> : null}
-              </div>
-            </TodayRow>
-          ))}
-        </div>
+        <Suspense fallback={<div id="startups-list" className="h-[72px] bg-row-done" />}>
+          <StartupsList
+            items={waiting}
+            canEdit={canEdit}
+            onAct={(st, kind) =>
+              kind === 'sent'
+                ? act(st, 'sent', () => markContacted(st.leadId, 'manual'), `${st.company} marked as contacted`)
+                : kind === 'replied'
+                  ? act(st, 'replied', () => markReplied(st.leadId), `${st.company} marked as replied`)
+                  : act(st, 'skip', () => skipLead(st.leadId), `${st.company} skipped for now`)
+            }
+          />
+        </Suspense>
       ) : null}
     </TodaySection>
   )

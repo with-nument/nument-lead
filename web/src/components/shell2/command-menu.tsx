@@ -24,7 +24,8 @@ const words = (q: string) => q.toLowerCase().split(/\s+/).filter(Boolean)
 
 /**
  * The ⌘K command menu: find a lead by name, website or phone, or go to a page. Opens from the sidebar search
- * box, the phone search button, ⌘K or Ctrl+K. Arrow keys move, Enter opens, Escape closes.
+ * box, the phone search button, ⌘K or Ctrl+K. Arrow keys move, Enter opens, Escape closes. Loaded on first
+ * use by CommandMenuHost, so it adds nothing to a page's first load.
  */
 export function CommandMenu({ role = null }: { role?: Role | null }) {
   const open = useCommandMenuOpen()
@@ -36,18 +37,6 @@ export function CommandMenu({ role = null }: { role?: Role | null }) {
   const [active, setActive] = useState(0)
   const [searching, startSearch] = useTransition()
   const latest = useRef('')
-
-  // ⌘K / Ctrl+K anywhere toggles the menu.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'k') {
-        e.preventDefault()
-        setCommandMenuOpen(!open)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open])
 
   // Leads, a moment after typing stops. Only the newest answer counts.
   useEffect(() => {

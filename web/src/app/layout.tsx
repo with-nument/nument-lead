@@ -25,7 +25,9 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
-    <html lang="en-IN" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
+    // suppressHydrationWarning: a new-design page marks <html data-ui="2"> before React hydrates
+    // (V2Scope's first-paint script), so the server HTML and the browser differ on that one attribute.
+    <html lang="en-IN" suppressHydrationWarning className={`${display.variable} ${sans.variable} ${mono.variable}`}>
       <body>
         {children}
         <ClassicToaster />

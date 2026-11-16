@@ -3,10 +3,11 @@ import { requireUser } from '@/lib/auth'
 import { initials } from '@/lib/format'
 import { getNavCounts, type NavCounts } from '@/lib/queries/nav'
 import { ROLE_LABEL } from '@/lib/roles'
-import { AccountMenu, AccountSheet, type AccountView } from './account-controls'
+import { LazyAccountMenu, LazyAccountSheet } from './account-lazy'
+import type { AccountView } from './account-row'
 import { SidebarLinks } from './sidebar-links'
 import { TabBar } from './tab-bar'
-import { CommandMenu } from './command-menu'
+import { CommandMenuHost } from './command-menu-host'
 
 async function accountView(): Promise<AccountView> {
   const user = await requireUser()
@@ -37,15 +38,15 @@ export async function CountedTabBar() {
 }
 
 export async function SidebarAccount() {
-  return <AccountMenu account={await accountView()} />
+  return <LazyAccountMenu account={await accountView()} />
 }
 
 export async function PhoneAccount() {
-  return <AccountSheet account={await accountView()} />
+  return <LazyAccountSheet account={await accountView()} />
 }
 
 /** The ⌘K menu, with the pages this role may open. */
 export async function RoleCommandMenu() {
   const user = await requireUser()
-  return <CommandMenu role={user.role} />
+  return <CommandMenuHost role={user.role} />
 }

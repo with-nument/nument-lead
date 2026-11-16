@@ -8,13 +8,20 @@ import { isCurrent, PRIMARY_NAV } from './nav-items'
 
 /** The phone tab bar below 1024 px (mockups): the five places, one tap away, with the Inbox count as a badge. */
 export function TabBar({ counts }: { counts?: NavCounts | null }) {
-  const path = usePathname()
+  return <TabBarView path={usePathname()} counts={counts} />
+}
+
+/**
+ * The tab bar for a given path. With `path` null nothing is marked current: the static fallback, which reads no
+ * request data, so the shell prerenders on every route (dynamic ones included).
+ */
+export function TabBarView({ path, counts }: { path: string | null; counts?: NavCounts | null }) {
   const inbox = counts?.inboxNew ?? 0
   return (
     <nav aria-label="Main" className="hairline-t fixed inset-x-0 bottom-0 z-30 bg-tabbar pb-[env(safe-area-inset-bottom)] lg:hidden">
       <ul role="list" className="mx-auto grid h-[var(--ui-tabbar-h)] max-w-[640px] grid-cols-5 px-[max(6px,env(safe-area-inset-left))]">
         {PRIMARY_NAV.map((item) => {
-          const current = isCurrent(path, item.href)
+          const current = path !== null && isCurrent(path, item.href)
           const Icon = item.icon
           const badge = item.href === '/inbox' && inbox > 0 ? inbox : null
           return (
