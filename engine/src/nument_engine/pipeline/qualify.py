@@ -846,7 +846,7 @@ def _disqualify(p: Profile, rules: Rules) -> None:
     if p.raised_usd is not None and p.raised_usd > rules.max_raise_usd:
         p.disqualified.append(f"raised about {_usd_text(p.raised_usd)} (more than {_usd_text(rules.max_raise_usd)})")
     if p.is_startup is False:
-        p.disqualified.append(p.is_startup_why.rstrip("."))
+        p.disqualified.append("not a startup, " + p.is_startup_why.removeprefix("Not a startup: ").rstrip("."))
 
 
 # =========================================================================

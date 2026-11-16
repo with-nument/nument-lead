@@ -170,8 +170,10 @@ def fit_of(p: Profile, rules: Rules, w: Weights, now: datetime) -> tuple[float, 
     why: list[str] = []
     total = 0.0
     if p.is_startup is True:
-        total += pts("startup", "yes")
-        why.append(f"a startup: {p.is_startup_why.removeprefix('Startup: ').rstrip('.')} (+{pts('startup', 'yes'):g})")
+        total += pts("startup", "shown")
+        why.append(
+            f"a startup: {p.is_startup_why.removeprefix('Startup: ').rstrip('.')} (+{pts('startup', 'shown'):g})"
+        )
     elif p.is_startup is None:
         total += pts("startup", "unknown")
         why.append(f"startup not yet shown (+{pts('startup', 'unknown'):g})")
@@ -288,8 +290,10 @@ def grade_with_caps(total: float, p: Profile, stated: Row | None, rung: str, cfg
     caps: list[str] = []
     rules = (
         (rung == "none", "no_contact", "nobody to email yet"),
-        (p.tech_team not in ("none", "lone_cto") and stated is None, "no_gap_or_ask",
-         "no proof yet of a missing tech team and no ask of their own"),
+        (p.tech_team not in ("none", "lone_cto") and not p.no_tech_signs and stated is None, "no_tech_evidence",
+         "nothing yet about the tech team and no ask of their own"),
+        (p.tech_team != "none" and stated is None, "no_gap_or_ask",
+         "no proof of a missing tech team (one sign, or a lone CTO who can build) and no ask of their own"),
         (p.can_pay == "no", "no_budget", "equity only or unpaid, and no money seen"),
     )  # fmt: skip
     for applies, key, why in rules:
@@ -333,19 +337,29 @@ def angle_of(p: Profile, mode: str, trigger: Row | None, seg: Segment) -> str:
 def startup_note(p: Profile, stated: Row | None, trigger: Row | None, now: datetime) -> str:
     """Two plain sentences at most, from the evidence only (no AI, no dashes)."""
     first = ""
-    if stated is not None:
+    if p.disqualified:
+        first = f"Not a fit: {p.disqualified[0]}"
+    elif stated is not None:
         first = _signal_line(stated, now)
     elif trigger is not None and trigger["type"] == "funding" and p.funding_round:
         amount = f" of {qualify._usd_text(p.raised_usd)}" if p.raised_usd else ""
         days = max(0, (now - trigger["observed_at"]).days)
         when = "today" if days == 0 else "yesterday" if days == 1 else f"{days} days ago"
         first = f"Raised {qualify._a(qualify.ROUND_WORDS.get(p.funding_round, 'funding'))} round{amount}, seen {when}"
+    elif trigger is not None and trigger["type"] == "launch":
+        details = trigger.get("details") or {}
+        days = max(0, (now - trigger["observed_at"]).days)
+        where = f"in the {details['batch']} batch" if details.get("batch") else "launched"
+        first = f"{'Listed' if details.get('batch') else 'Launched'} {where if details.get('batch') else ''}".strip()
+        first = f"{first}, seen {'today' if days == 0 else f'{days} days ago'}"
     elif trigger is not None:
         first = _signal_line(trigger, now)
     else:
         first = "No buying signal yet, but a startup that fits"
     team = f"a team of {p.team_size}" if p.team_size else "the team"
-    if p.tech_team == "none":
+    if p.tech_team == "has_engineers":
+        second = f"Engineers already on {team}"
+    elif p.tech_team == "none":
         second = f"Nobody technical on {team}"
     elif p.tech_team == "lone_cto":
         second = f"One technical person and no engineers on {team}"

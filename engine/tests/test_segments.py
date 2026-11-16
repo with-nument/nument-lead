@@ -12,6 +12,7 @@ from nument_engine.segments import (
     REQUIRED_ANGLES,
     SEGMENTS_DIR,
     SegmentConfigError,
+    country_name,
     file_hash,
     load_segments,
     load_yaml_config,
@@ -22,7 +23,32 @@ from nument_engine.segments import (
 from .helpers import Conn
 
 WAVE1 = {"clinics-in", "realestate-in", "education-in", "clinics-ae", "realestate-ae", "education-ae"}
-NEED_FIRST = {f"firms-{cc}" for cc in ("in", "ae", "us", "gb", "au", "ca", "sg")}  # need-first track (13 Nov 2026)
+# startup segments (15 Nov 2026): one per country config/outreach.yaml allows
+NEED_FIRST = {
+    f"firms-{cc}"
+    for cc in (
+        "in",
+        "ae",
+        "us",
+        "gb",
+        "au",
+        "ca",
+        "sg",
+        "ie",
+        "nl",
+        "fr",
+        "se",
+        "fi",
+        "be",
+        "pt",
+        "nz",
+        "br",
+        "mx",
+        "ph",
+        "my",
+        "id",
+    )
+}
 # A.13.5 rule 7: the only subcategory and ticket class names.
 TICKET_CLASSES = {
     "ivf_fertility", "hair_transplant", "aesthetic", "dermatology", "dental", "physio", "therapy_group",
@@ -216,7 +242,7 @@ def test_sync_fills_config_honours_the_switch_and_keeps_the_app_quota(db_conn: C
         [Jsonb({"education-ae": False})],
     )
     segments = load_segments()
-    assert sync_segments_to_db(db_conn, segments) == 24
+    assert sync_segments_to_db(db_conn, segments) == 37
     rows = {
         r["id"]: r
         for r in db_conn.execute(
@@ -232,7 +258,7 @@ def test_sync_fills_config_honours_the_switch_and_keeps_the_app_quota(db_conn: C
     assert db_conn.execute("select daily_quota from public.segments where id = 'clinics-in'").fetchone() == {
         "daily_quota": 25
     }
-    assert db_conn.execute("select count(*) as n from public.segments").fetchone() == {"n": 24}
+    assert db_conn.execute("select count(*) as n from public.segments").fetchone() == {"n": 37}
 
 
 def test_sync_inserts_a_new_segment_with_its_file_quota(db_conn: Conn) -> None:
@@ -242,3 +268,25 @@ def test_sync_inserts_a_new_segment_with_its_file_quota(db_conn: Conn) -> None:
     assert db_conn.execute("select daily_quota from public.segments where id = 'education-ae'").fetchone() == {
         "daily_quota": segments["education-ae"].quota.daily_research
     }
+
+
+# ---- The startup segments (lane E2b, 15 Nov 2026) ---------------------------------------------------------
+
+
+def test_one_startup_segment_per_allowed_country() -> None:
+    allowed = {str(c) for c in load_yaml_config("outreach")["allowed_countries"]}
+    blocked = {str(c) for c in load_yaml_config("outreach")["blocked_countries"]}
+    firms = {s.country: s for s in load_segments().values() if s.domain == "firms"}
+    assert set(firms) == allowed and not set(firms) & blocked
+    for s in firms.values():
+        assert (s.universe, s.outreach_channel, s.enabled) == ("signals_only", "email", True), s.id
+        assert s.public_ask_queries and s.news_queries and any(q.startswith("hiring:") for q in s.public_ask_queries)
+        assert {"build_what_they_asked", "first_version", "beyond_no_code", "extra_hands"} <= {a.key for a in s.angles}
+        assert s.signal_points.get("launch") and s.size_rules.any_of[0].op == "<="
+        assert country_name(s.country) != s.country.upper(), s.id  # prompts get the country's name
+
+
+def test_startup_quotas_leave_room_in_research_per_day() -> None:
+    segs = load_segments()
+    firms = sum(s.quota.daily_research for s in segs.values() if s.domain == "firms")
+    assert 200 <= firms <= 300  # about 250 startups a night (the approved plan)

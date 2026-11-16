@@ -93,7 +93,31 @@ def test_seed_segments_and_quotas(db_conn: Conn) -> None:
     seeded = [r for r in rows if r["id"] in WAVE1]
     # A segment sync (test_cli runs one) may add newer segments such as firms-in and apply the YAML switches
     # (real estate is off since 12 Nov 2026); the seed itself is the six wave-1 rows with quotas adding to 300.
-    newer = {f"firms-{cc}" for cc in ("in", "ae", "us", "gb", "au", "ca", "sg")}
+    newer = {
+        f"firms-{cc}"
+        for cc in (
+            "in",
+            "ae",
+            "us",
+            "gb",
+            "au",
+            "ca",
+            "sg",
+            "ie",
+            "nl",
+            "fr",
+            "se",
+            "fi",
+            "be",
+            "pt",
+            "nz",
+            "br",
+            "mx",
+            "ph",
+            "my",
+            "id",
+        )
+    }
     newer |= {f"partners-{cc}" for cc in ("in", "us", "gb", "au", "ae")}
     newer |= {f"{d}-{cc}" for d in ("clinics", "professional") for cc in ("us", "gb", "au")}
     assert {r["id"] for r in seeded} == WAVE1 and {r["id"] for r in rows} <= WAVE1 | newer

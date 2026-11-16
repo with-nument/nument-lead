@@ -318,7 +318,8 @@ def test_reach_in_email_first_countries() -> None:
     assert (phone_only.kind, phone_only.value) == ("landline", 0.4)
     assert reach_of([], [], c, NOW, email_first=True).kind == "none"
     assert load_segments()["firms-us"].outreach_channel == "email"
-    assert load_segments()["firms-in"].outreach_channel == "whatsapp"
+    assert load_segments()["firms-in"].outreach_channel == "email"  # startups: email everywhere (15 Nov 2026)
+    assert load_segments()["clinics-in"].outreach_channel == "whatsapp"
 
 
 def test_pitch_mode_order() -> None:

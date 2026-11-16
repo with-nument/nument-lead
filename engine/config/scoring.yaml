@@ -84,7 +84,7 @@ startup:
     trigger_cap: 8
     cap: 35
   fit:
-    startup: {yes: 6, unknown: 3}
+    startup: {shown: 6, unknown: 3}                  # shown: a startup sign (qualify.py)
     size: {small: 6, mid: 5, solo: 3, unknown: 3}   # small: 2 to small_max people; mid: up to max_team; solo: 1
     small_max: 5
     stage: {early: 5, unknown: 2}                    # an early round (idea to seed) is known
@@ -126,5 +126,6 @@ startup:
   max_age_years: 10             # founded or online longer ago, with no startup sign: not a startup
   caps:                         # the most a lead can grade when...
     no_contact: B               # nobody to email yet (founder_emails still searches B leads)
-    no_gap_or_ask: B            # no sign of a missing tech team and no ask of their own: funding alone is not an A
+    no_tech_evidence: C         # nothing yet about the tech team and no ask of their own: funding alone is no lead
+    no_gap_or_ask: B            # one sign only (two make it proof) or a lone CTO, and no ask of their own
     no_budget: C                # equity only or unpaid, and no money seen: not a buyer now

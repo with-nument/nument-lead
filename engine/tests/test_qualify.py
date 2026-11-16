@@ -106,7 +106,7 @@ CASES = [
         "a development agency: not a startup",
         facts=[fact("f-agency", "is_agency_or_vendor", {"value": True}, "We build custom apps for our clients")],
         expect={"is_startup": False},
-        disqualified=("Not a startup: sells services",),
+        disqualified=("not a startup, sells services",),
     ),
     Case(
         "founded in 2009 with no startup sign: an established business",
