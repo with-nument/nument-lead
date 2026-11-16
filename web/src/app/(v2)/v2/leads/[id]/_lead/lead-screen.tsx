@@ -59,9 +59,9 @@ export function LeadScreen({ view, canEdit, isAdmin, includeUnverified, team, pr
   const [pending, start] = useTransition()
   const undo = useUndo()
   const stageMove = useStageMove({ isAdmin, undo, onLocal: (_, s) => setStage(s) })
-  const now = useMemo(() => new Date(), [])
+  const now = useMemo(() => new Date(view.now), [view.now])
 
-  const status = stage === view.stage ? view.status : statusOf({ stage, wa_at: null, meeting_at: null, last_activity_at: new Date().toISOString(), lost_reason: null }, now)
+  const status = stage === view.stage ? view.status : statusOf({ stage, wa_at: null, meeting_at: null, last_activity_at: view.now, lost_reason: null }, now)
   const primary = primaryActionFor({ stage, canEdit, hasPendingReply: Boolean(thread?.suggestedReply) })
   const open = !(CLOSED_STAGES as readonly string[]).includes(stage)
   const lead = { id: view.id, stage, name: view.name, money: view.money, lostReason: view.lostReason }

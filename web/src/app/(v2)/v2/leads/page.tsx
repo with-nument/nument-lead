@@ -47,6 +47,7 @@ async function Leads({ searchParams }: Pick<PageProps<'/v2/leads'>, 'searchParam
       canEdit={canEdit(user.role)}
       isAdmin={canSeeMoney(user.role)}
       canExport={user.role !== 'viewer'}
+      now={now.toISOString()}
     />
   )
 }

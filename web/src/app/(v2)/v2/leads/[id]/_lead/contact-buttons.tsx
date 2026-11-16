@@ -41,10 +41,12 @@ export function ContactButtons({
     <div className={cx('flex flex-wrap items-center gap-2', className)}>
       {wa ? (
         <>
-          <a href={links.web} target="_blank" rel="noopener noreferrer" className={cls('hidden lg:inline-flex')} {...props('web')}>
-            <Monitor aria-hidden />
-            WhatsApp Web
-          </a>
+          <span className="hidden lg:inline-flex">
+            <a href={links.web} target="_blank" rel="noopener noreferrer" className={cls()} {...props('web')}>
+              <Monitor aria-hidden />
+              WhatsApp Web
+            </a>
+          </span>
           <a href={links.app} target="_blank" rel="noopener noreferrer" className={cls()} {...props('app')}>
             <Smartphone aria-hidden />
             WhatsApp app

@@ -214,7 +214,7 @@ export function Conversation({
   reply: string
   onReply: (text: string) => void
 }) {
-  const now = useMemo(() => new Date(), [])
+  const now = useMemo(() => new Date(view.now), [view.now])
   if (!thread) return <Messages view={view} canEdit={canEdit} onOpen={onOpen} />
   return (
     <div className="flex flex-col gap-4">

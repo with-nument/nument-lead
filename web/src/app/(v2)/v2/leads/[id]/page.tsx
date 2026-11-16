@@ -11,6 +11,14 @@ import { toLeadView } from './_lead/model'
 
 export const metadata: Metadata = { title: 'Lead' }
 
+/**
+ * One sample id, so the build can prerender the shell around this page (the shell reads the path). Every
+ * real lead renders on request; the sample id is a nil UUID no lead has, so it would show Not found.
+ */
+export async function generateStaticParams() {
+  return [{ id: '00000000-0000-4000-8000-000000000000' }]
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const TABS = new Set<Tab>(['conversation', 'why', 'people', 'activity'])
 

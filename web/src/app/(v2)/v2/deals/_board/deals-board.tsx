@@ -58,7 +58,7 @@ function Card({ card, canEdit, onMove, onDragStart }: { card: DealCardView; canE
           <span className="truncate">{card.name}</span>
         </Link>
         <p className="mt-1 truncate text-[14px] text-label-2 lg:text-[15px]">{card.line}</p>
-        {card.meta ? <p className={cx('mt-1 text-[14px] lg:text-[15px]', card.overdue ? 'text-status-warn' : 'text-label-3')}>{card.overdue ? `Was due ${card.meta}` : card.meta}</p> : null}
+        {card.meta ? <p className={cx('mt-1 text-[14px] lg:text-[15px]', card.overdue ? 'text-status-warn' : 'text-label-3')}>{card.meta}</p> : null}
       </div>
       {canEdit ? <StageMenu card={card} onMove={onMove} /> : null}
     </li>
@@ -93,7 +93,7 @@ export function DealsBoard({ view, canEdit, isAdmin }: { view: BoardView; canEdi
             {view.openCount} open{view.inPlay ? ` · ${view.inPlay} in proposals and finished calls` : ''}
           </p>
         </div>
-        <div className="flex w-full items-center gap-3 lg:w-auto">
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-3 lg:w-auto lg:flex-nowrap">
           <div role="radiogroup" aria-label="Show as" className="inline-flex gap-0.5 rounded-[12px] bg-fill-2 p-[3px]">
             {(['columns', 'list'] as const).map((m) => (
               <button
@@ -109,7 +109,7 @@ export function DealsBoard({ view, canEdit, isAdmin }: { view: BoardView; canEdi
             ))}
           </div>
           {view.primary ? (
-            <Link href={view.primary.href} className={buttonClass('primary', 'regular', 'ml-auto min-w-0 lg:h-12 lg:rounded-[14px] lg:px-5 lg:text-[15px]')}>
+            <Link href={view.primary.href} className={buttonClass('primary', 'regular', 'w-full min-w-0 shrink sm:ml-auto sm:w-auto lg:h-12 lg:rounded-[14px] lg:px-5 lg:text-[15px]')}>
               <span className="truncate">{view.primary.label}</span>
               <ArrowRight aria-hidden />
             </Link>
@@ -150,7 +150,7 @@ export function DealsBoard({ view, canEdit, isAdmin }: { view: BoardView; canEdi
                   }}
                   className={cx('flex min-w-0 flex-col', i < view.columns.length - 1 && 'hairline-r', over === col.stage && 'bg-fill-3')}
                 >
-                  <div className="flex min-h-[86px] flex-col justify-center px-4 lg:px-6">
+                  <div className="flex min-h-[86px] flex-col px-4 pt-6 pb-4 lg:px-6">
                     <h2 className="text-[16px] font-semibold text-label-1">
                       {col.label} <span className="font-normal text-label-3">{count}</span>
                     </h2>

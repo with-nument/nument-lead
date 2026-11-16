@@ -1,9 +1,9 @@
 // Server-side helpers for the W2 preview pages: sample data turned into the screens' props.
 import { notFound } from 'next/navigation'
-import { toBoardView } from '../../deals/_board/model'
-import { toLeadView } from '../../leads/[id]/_lead/model'
-import type { LeadExtras } from '../../leads/[id]/_lead/types'
-import { toRow } from '../../leads/_list/model'
+import { toBoardView } from '@/app/(v2)/v2/deals/_board/model'
+import { toLeadView } from '@/app/(v2)/v2/leads/[id]/_lead/model'
+import type { LeadExtras } from '@/app/(v2)/v2/leads/[id]/_lead/types'
+import { toRow } from '@/app/(v2)/v2/leads/_list/model'
 import { MOCK_LEAD_ID, MOCK_NOW, mockBoard, mockLeadDetail, mockLeadRows } from './mock'
 
 /** Previews exist for design review and screenshots only; production answers 404. */

@@ -44,6 +44,8 @@ export type PrimaryAction = { kind: PrimaryKind; label: string; to?: Stage; href
 
 export type LeadView = {
   id: string
+  /** When the view was made (ISO), so the browser renders the same dates as the server. */
+  now: string
   name: string
   description: string | null
   place: string
@@ -340,6 +342,7 @@ export function toLeadView(
   const dueLabel = lead.due_at ? formatDate(lead.due_at, now) : null
   return {
     id: lead.id,
+    now: now.toISOString(),
     name: lead.name,
     description,
     place: [lead.locality, lead.city, lead.country && lead.country.trim().toLowerCase() !== 'in' ? countryLabel(lead.country) : ''].filter(Boolean).join(', '),

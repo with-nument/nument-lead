@@ -44,7 +44,7 @@ export function toCardView(c: BoardCard, now: Date): DealCardView {
     name: c.name,
     stage: c.stage,
     line: c.nextStep ?? (c.city ? c.city : stageLabel(c.stage)),
-    meta: money ?? when,
+    meta: money ? (state === 'overdue' && c.dueAt ? `${money} · was due ${formatDate(c.dueAt, now)}` : money) : state === 'overdue' && c.dueAt ? `Was due ${formatDate(c.dueAt, now)}` : when,
     dot: state === 'overdue' ? 'warn' : needsYou ? 'ink' : null,
     value: c.dealValue ?? null,
     overdue: state === 'overdue',

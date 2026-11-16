@@ -35,6 +35,8 @@ export type LeadsListProps = {
   canEdit: boolean
   isAdmin: boolean
   canExport: boolean
+  /** The server's clock (ISO), for the New tab's date. */
+  now: string
 }
 
 const check = 'size-[18px] shrink-0 cursor-pointer accent-[var(--ui-label-2)]'
@@ -44,7 +46,7 @@ const href = (f: LeadFilters) => {
 }
 
 /** The v2 Leads list: search, scope tabs, a filter sheet, a plain table and a bulk bar. */
-export function LeadsList({ rows, filters, total, pageSize, newCount, options, views, canEdit, isAdmin, canExport }: LeadsListProps) {
+export function LeadsList({ rows, filters, total, pageSize, newCount, options, views, canEdit, isAdmin, canExport, now }: LeadsListProps) {
   const router = useRouter()
   const [navigating, startNav] = useTransition()
   const [pending, start] = useTransition()
@@ -57,7 +59,8 @@ export function LeadsList({ rows, filters, total, pageSize, newCount, options, v
   const [askReason, setAskReason] = useState<Stage | null>(null)
   const undo = useUndo()
   const tableRef = useRef<HTMLTableSectionElement>(null)
-  const scope = scopeOf(filters)
+  const clock = useMemo(() => new Date(now), [now])
+  const scope = scopeOf(filters, clock)
   const extra = scope ? 0 : extraFilterCount(filters)
 
   // A new page of rows clears the selection and the keyboard cursor.
@@ -156,7 +159,7 @@ export function LeadsList({ rows, filters, total, pageSize, newCount, options, v
     .filter(Boolean)
     .join(' · ')
 
-  const scopeLinks = useMemo(() => SCOPES.map((s) => ({ ...s, href: href(scopeFilters(s.value, filters.q)) })), [filters.q])
+  const scopeLinks = useMemo(() => SCOPES.map((s) => ({ ...s, href: href(scopeFilters(s.value, filters.q, clock)) })), [filters.q, clock])
 
   return (
     <div className="mx-auto max-w-[1280px] px-4 pt-4 sm:px-6 lg:px-14 lg:pt-11">
@@ -166,9 +169,11 @@ export function LeadsList({ rows, filters, total, pageSize, newCount, options, v
           <p className="mt-1.5 text-[15px] text-label-3 lg:mt-2">{subtitle}</p>
         </div>
         {canExport ? (
-          <a href={exportHref} download className={cx(outlineClass(), 'hidden sm:inline-flex')}>
-            Export CSV
-          </a>
+          <div className="hidden sm:block">
+            <a href={exportHref} download className={outlineClass()}>
+              Export CSV
+            </a>
+          </div>
         ) : null}
       </header>
 
