@@ -295,6 +295,11 @@ class SignalClassification(BaseModel):
     city: str | None
     evidence_quote: str  # exact sentence from the input proving the role
     confidence: float = Field(ge=0, le=1)
+    # The startup engine (15 Nov 2026): need-first segments keep only startups of at most startup.max_team people.
+    is_startup: bool | None = Field(
+        default=None, description="young, founder-led, building its own product or brand; null when unclear"
+    )
+    team_size: int | None = Field(default=None, description="total people when the text states it, else null")
 
 
 class FeedJobClassification(BaseModel):
@@ -321,6 +326,10 @@ class FeedJobClassification(BaseModel):
     team_size: int | None  # total staff when the post says it
     evidence_quote: str  # exact phrase from the post that proves the role
     confidence: float = Field(ge=0, le=1)
+    # The startup engine (15 Nov 2026): a small business is kept only when it is a startup.
+    is_startup: bool | None = Field(
+        default=None, description="young, founder-led, building its own product or brand; null when unclear"
+    )
 
 
 class NewsClassification(BaseModel):

@@ -1,6 +1,6 @@
 ---
 task: classify_feed_job
-version: 1
+version: 2
 output: FeedJobClassification
 inputs: [feed, url, text]
 description: Decide whether one post from a global job feed is a company that needs software built, and where it is based.
@@ -28,6 +28,7 @@ How to fill each field:
 - role: the builder role, as written.
 - contract: true when the post offers contract, freelance or part-time work, or welcomes agencies or consultants.
 - team_size: the company's total staff when the post states it (for example "we are 12 people"). Null otherwise.
+- is_startup: true when the company is a young, founder-led startup building its own product or brand (for example "we are a 4-person seed-stage team", "founded last year", "just raised our pre-seed"). False when the post shows an established business, a company of more than 50 people, a public company, an agency or a non-profit. Null when the post does not show either.
 - evidence_quote: one exact phrase copied from the post that proves the role.
 - confidence: from 0 to 1, how sure you are about is_relevant, company_kind and hq_country together.
 

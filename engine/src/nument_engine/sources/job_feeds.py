@@ -15,10 +15,12 @@ RemoteOK is not used (its API terms ask for a public link back) and Remotive's r
 Only posts whose text names a builder role reach the AI. One `classify_feed_job` call per post (g_lite) says who
 the company is, what kind of company, and its home country. Code then routes it:
 
-- product companies and small businesses go to `firms-{country}`;
-- marketing and design agencies go to `partners-{country}` (white-label partners) when that segment is on;
+- startups go to `firms-{country}` (15 Nov 2026): product companies and other companies the classifier does not
+  call established, and small businesses only when it calls them startups; more people than `startup.max_team`
+  (10) is dropped; countries where cold email needs prior consent are never routed (`sources/startup.py`);
+- marketing and design agencies go to `partners-{country}` (white-label partners) when that segment is on,
+  unless they say they have more than 200 staff;
 - software agencies, IT services, staffing firms, marketplaces, enterprises and public bodies are dropped;
-- companies that say they have more than 200 staff are dropped (a young studio rarely wins them);
 - countries without an enabled segment are dropped.
 
 The post itself is the evidence; its URL is never fetched again. Each post is read once (`source_records`).
@@ -37,9 +39,9 @@ from .. import db
 from ..http import host_blocked
 from ..normalize import city_for_text, clean_text, web_domain
 from ..segments import Segment
-from . import health
-from .base import QUOTE_MAX, Signal, SourceAdapter, field_of
-from .jobs import _phrase_in, mask_contacts, parse_date, quote_in
+from . import health, startup
+from .base import QUOTE_MAX, Signal, SourceAdapter, SourceContext, field_of
+from .jobs import _phrase_in, mask_contacts, parse_date, quote_in, startup_fit
 
 HN_SEARCH = "https://hn.algolia.com/api/v1/search"
 HN_BY_DATE = "https://hn.algolia.com/api/v1/search_by_date"
@@ -239,6 +241,11 @@ class JobFeedsAdapter(SourceAdapter):
     name = "job_feeds"
     policy = "official_api"
 
+    def __init__(self, ctx: SourceContext, **kwargs: Any) -> None:
+        super().__init__(ctx, **kwargs)
+        # (most people, most money raised) of a startup lead: the code defaults until `signals_for` reads settings
+        self.limits: tuple[int, float] = (startup.DEFAULT_MAX_TEAM, float(startup.DEFAULT_MAX_RAISE_USD))
+
     async def _json(self, url: str, params: dict[str, Any] | None = None, *, robots: bool = False) -> Any:
         res = await self.http.get(url, params=params, check_robots=robots, raise_on_block=False, retries=1)
         if res.status != 200:
@@ -346,10 +353,16 @@ class JobFeedsAdapter(SourceAdapter):
         if domain is None:
             return None, f"kind_{kind}"
         team = field_of(result, "team_size")
-        if isinstance(team, int) and team > MAX_TEAM:
-            return None, "too_big"
         country = country_code(field_of(result, "hq_country"))
-        seg = segments.get(f"{domain}-{country}") if country else None
+        if domain == "firms":
+            why = startup_fit(result, limits=self.limits, stated=kind == "small_business")
+            if why:
+                return None, why
+            seg = startup.startup_segment(country, segments)
+        else:
+            if isinstance(team, int) and team > MAX_TEAM:
+                return None, "too_big"
+            seg = segments.get(f"{domain}-{country}") if country else None
         if seg is None:
             return None, "partners_off" if domain == "partners" and country else "country_not_enabled"
         name = clean_text(str(field_of(result, "company_name") or post.company or ""), 120)
@@ -370,6 +383,7 @@ class JobFeedsAdapter(SourceAdapter):
         }
         if isinstance(team, int):
             details["team_size"] = team
+            details["team_size_source"] = "post"
         if post.posted_at is None:
             details["date_estimated"] = True
         sig = Signal(
@@ -394,6 +408,7 @@ class JobFeedsAdapter(SourceAdapter):
         """Builder hiring signals from the three feeds, routed to the enabled country segments."""
         if not any(s.domain in ("firms", "partners") for s in segments.values()):
             return []
+        self.limits = startup.limits()
         left = self.posts_left()
         if limit:
             left = min(left, limit)

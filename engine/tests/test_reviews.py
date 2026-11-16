@@ -131,6 +131,29 @@ def test_the_stage_stops_when_the_search_quota_is_used(seg_db: str) -> None:
     assert reviews.run(pf.rc_for(), router=router)["stopped_quota"] == 1 and router.calls == []
 
 
+def test_startup_segments_never_spend_a_review_lookup(seg_db: str) -> None:
+    """15 Nov 2026: startups (need-first `signals_only` segments) get no review lookups at all."""
+    from nument_engine.segments import sync_segments_to_db
+
+    with pf.connect(seg_db) as conn:
+        sync_segments_to_db(conn, {"firms-us": load_segments()["firms-us"]})
+        startup = pf.business(conn, segment_id="firms-us", country="us", city=None, review_count=None)
+        clinic = pf.business(conn, review_count=None)
+    try:
+        router = FakeRouter([Result(lookup(), GROUNDING)])
+        stats = reviews.run(pf.rc_for(segments=[pf.TEST_SEGMENT, "firms-us"]), router=router)
+        assert stats["candidates"] == 1 and stats["looked_up"] == 1
+        assert stats["skipped_signals_only_segments"] == 1 and len(router.calls) == 1
+        looked = db.fetch_all(
+            "select id::text as id from public.businesses where id in (%s, %s) and extra ? 'reviews_lookup_at'",
+            [startup, clinic],
+        )
+        assert [r["id"] for r in looked] == [clinic]
+        assert reviews.run(pf.rc_for(segments=["firms-us"]), router=FakeRouter([]))["candidates"] == 0
+    finally:
+        pf.wipe_segment(seg_db, "firms-us")
+
+
 def test_a_fresh_grounded_review_count_passes_the_size_rule() -> None:
     from nument_engine.pipeline.prefilter import World
 

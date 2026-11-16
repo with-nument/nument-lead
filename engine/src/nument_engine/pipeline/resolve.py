@@ -47,7 +47,9 @@ GRID_DEG = 0.005  # about 550 m: neighbours of a point are found in the 3 x 3 ce
 FLUSH_EVERY = 500
 REGISTRY_SOURCES = frozenset({"art_registry"})
 GEO_SOURCES = frozenset({"places", "overture", "osm"})
-OPEN_SIGNAL_SOURCES = frozenset({"apna", "adzuna", "gdelt", "grounded_search", "careers_watch", "inbox"})
+OPEN_SIGNAL_SOURCES = frozenset(
+    {"apna", "adzuna", "gdelt", "grounded_search", "careers_watch", "inbox", "sec_edgar"}
+)  # sec_edgar: a Form D names no website
 
 # Source precedence per field group (lower wins). Step 6.6.4.
 RANK: dict[str, dict[str, int]] = {

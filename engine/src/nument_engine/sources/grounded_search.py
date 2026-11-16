@@ -30,12 +30,18 @@ from ..http import NeverFetch, PoliteClient, SourceBlocked, host_blocked, host_o
 from ..normalize import canonical_url, city_for_text
 from ..research.text import page_text
 from ..segments import Segment, country_name
-from .base import QUOTE_MAX, SNIPPET_ONLY_POINTS, Signal, SourceAdapter, field_of
-from .jobs import DOMAIN_MAP, MIN_CONFIDENCE, quote_in
+from . import health, startup
+from .base import QUOTE_MAX, SNIPPET_ONLY_POINTS, Signal, SourceAdapter, SourceContext, field_of
+from .jobs import DOMAIN_MAP, MIN_CONFIDENCE, quote_in, startup_fit
 
 MAX_AGE_DAYS = 14
 REDIRECT_HOSTS = ("vertexaisearch.cloud.google.com",)
 QUOTE_MATCH_MIN = 92  # same threshold as Step 10.2
+# The "asks" share of grounded search (pipeline/grounding.py, which sources may not import, holds the same
+# numbers for every use; a test keeps the two equal).
+TASK = "grounded_search"
+ASKS_SETTING = "grounding.asks_per_day"
+ASKS_PER_DAY = 60
 
 
 @dataclass
@@ -107,7 +113,9 @@ DOMAIN_WORDS: dict[str, str] = {
     "clinics": "clinic",
     "realestate": "real estate",
     "education": "coaching or education",
-    "firms": "small or mid-size company of any industry (not an IT services firm, agency or staffing company)",
+    # 15 Nov 2026: the startup engine. Founder-led startups of 2 to 10 people, idea to small seed.
+    "firms": "young startup of 2 to 10 people, founder-led and at idea, pre-seed or seed stage (not an IT services "
+    "firm, agency or staffing company)",
     "partners": "marketing, advertising, branding or design agency (as a white-label partner)",
     "professional": "law firm or accounting firm",
 }
@@ -120,9 +128,11 @@ class GroundedSearchAdapter(SourceAdapter):
     policy = "official_api"
     min_gap_s = 0.5
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(self, ctx: SourceContext, **kwargs: Any) -> None:
+        super().__init__(ctx, **kwargs)
         self._pages: PoliteClient | None = None
+        # (most people, most money raised) of a startup lead: the code defaults until `signals_for` reads settings
+        self.limits: tuple[int, float] = (startup.DEFAULT_MAX_TEAM, float(startup.DEFAULT_MAX_RAISE_USD))
 
     @property
     def pages(self) -> PoliteClient:
@@ -139,8 +149,12 @@ class GroundedSearchAdapter(SourceAdapter):
 
     # ---- quota --------------------------------------------------------------------------------------
     def calls_left(self) -> int:
-        """Search queries still allowed today (the budget guard's daily cap and free monthly allowance)."""
-        return self.ctx.budget.grounding_quota_left()
+        """Search queries the asks use may still make today: its share (settings grounding.asks_per_day) minus
+        what `grounded_search` calls logged today, within the day's total (the budget guard's daily cap, free
+        monthly allowance and month pace). The same rule as `pipeline.grounding.allowance("asks", budget)`."""
+        budget = self.ctx.budget
+        used = budget.searches_today([TASK])
+        return max(0, min(health.setting_int(ASKS_SETTING, ASKS_PER_DAY) - used, budget.grounding_quota_left()))
 
     @staticmethod
     def todays_queries(seg: Segment, day: int | None = None) -> list[str]:
@@ -214,12 +228,14 @@ class GroundedSearchAdapter(SourceAdapter):
             return None
         return parsed if parsed and parsed.tzinfo else parsed.replace(tzinfo=UTC) if parsed else None
 
-    def classify(self, item: Any, seg: Segment, kind: str = "asks") -> str | None:
-        """The segment the signal belongs to, or None when it is not a target business's ask or builder job.
+    def classify(self, item: Any, seg: Segment, kind: str = "asks") -> tuple[str | None, bool]:
+        """(the segment the signal belongs to, or None when it is not a target business's ask or builder job;
+        whether the startup segment may take it when that segment is off).
 
-        A need-first segment (firms) takes a builder job or ask from any industry except agencies and staffing
-        firms; when the poster's own industry has an enabled segment, the signal is routed there first (the sink
-        falls back to firms when that segment is off)."""
+        A need-first segment (firms) takes a builder job or ask only from a startup of at most startup.max_team
+        people (15 Nov 2026), never from agencies and staffing firms. When the poster's own industry has a
+        segment, the signal is routed there first; the sink falls back to firms only when the classifier says
+        the poster is a startup."""
         result = self.ctx.ai(
             "classify_signal",
             {
@@ -238,25 +254,32 @@ class GroundedSearchAdapter(SourceAdapter):
             },
         )
         if result is None or not field_of(result, "is_relevant"):
-            return None
+            return None, False
         if float(field_of(result, "confidence") or 0) < MIN_CONFIDENCE:
-            return None
+            return None, False
         domain = str(field_of(result, "employer_domain") or "other")
         if domain == "agency_or_staffing":
-            return None
-        if DOMAIN_MAP.get(domain) == "partners" or seg.domain == "partners":
+            return None, False
+        home = DOMAIN_MAP.get(domain)
+        builder = str(field_of(result, "role_category") or "") == "builder"
+        if home == "partners" or seg.domain == "partners":
             # Marketing and design agencies are white-label partners (13 Nov 2026), never firms leads; a partner
-            # search that finds a product company hiring a builder hands it to that country's firms segment.
-            if DOMAIN_MAP.get(domain) == "partners":
-                return f"partners-{seg.country}"
-            builder = str(field_of(result, "role_category") or "") == "builder"
-            return f"firms-{seg.country}" if builder else None
+            # search that finds a startup hiring a builder hands it to that country's firms segment.
+            if home == "partners":
+                return f"partners-{seg.country}", False
+            fits = builder and startup_fit(result, limits=self.limits, stated=home not in (None, "firms")) is None
+            return (f"firms-{seg.country}" if fits else None), False
         if seg.universe == "signals_only":
-            if str(field_of(result, "role_category") or "") != "builder":
-                return None
-            home = DOMAIN_MAP.get(domain)
-            return f"{home}-{seg.country}" if home and home != seg.domain else seg.id
-        return seg.id if DOMAIN_MAP.get(domain) == seg.domain else None
+            if not builder:
+                return None, False
+            if home and home != seg.domain:
+                return f"{home}-{seg.country}", startup_fit(result, limits=self.limits, stated=True) is None
+            why = startup_fit(result, limits=self.limits)
+            if why:
+                self.ctx.add(f"grounded_search.{why}")
+                return None, False
+            return seg.id, False
+        return (seg.id if home == seg.domain else None), False
 
     async def item_signal(
         self, item: Any, citations: Sequence[Citation], seg: Segment, kind: str = "asks"
@@ -283,7 +306,7 @@ class GroundedSearchAdapter(SourceAdapter):
         if not snippet_only and not await self.verify_on_page(cited, quote):
             self.ctx.add("grounded_search.quote_not_on_page")
             return None
-        target = self.classify(item, seg, kind)
+        target, fallback = self.classify(item, seg, kind)
         if target is None:
             self.ctx.add("grounded_search.not_a_business_ask")
             return None
@@ -292,8 +315,8 @@ class GroundedSearchAdapter(SourceAdapter):
             details["role"] = field_of(item, "need")
         if posted is None:
             details["date_estimated"] = True
-        if target != seg.id and not target.startswith("partners-") and seg.domain != "partners":
-            details["fallback_segment"] = seg.id  # used when the poster's own segment is off
+        if fallback and target != seg.id:
+            details["fallback_segment"] = seg.id  # a startup: used when the poster's own segment is off
         return Signal(
             type="hiring_builder" if kind == "jobs" else "public_ask",
             source=self.name,
@@ -308,13 +331,18 @@ class GroundedSearchAdapter(SourceAdapter):
         )
 
     async def signals_for(self, seg: Segment, *, budget: int, limit: int | None = None) -> list[Signal]:
+        """Signals from today's queries of one segment, at most `budget` queries, each within the asks share."""
         out: list[Signal] = []
+        self.limits = startup.limits()
         for raw_query in self.todays_queries(seg)[:budget]:
             if self.ctx.ai_stopped:
                 break
+            if self.calls_left() <= 0:  # one call can spend several queries: checked before every call
+                self.ctx.add("grounded_search.allowance_used")
+                break
             kind, query = self.query_kind(raw_query)
             result = self.ctx.ai_result(  # output and citations together
-                "grounded_search",
+                TASK,
                 {
                     "segment_id": seg.id,
                     "domain": DOMAIN_WORDS.get(seg.domain, seg.domain),

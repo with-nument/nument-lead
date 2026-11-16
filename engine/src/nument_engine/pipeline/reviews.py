@@ -334,10 +334,16 @@ def _lookup(run_result: Any, b: dict[str, Any], seg: Segment, now: datetime) -> 
 
 def run(rc: RunContext, router: Any = None) -> dict[str, Any]:
     """`nlead reviews`: public review numbers (and dated signs of need) for researched businesses without Places
-    data. Up to WORKERS lookups run at once; results are written one at a time in this thread."""
+    data. Up to WORKERS lookups run at once; results are written one at a time in this thread.
+
+    Need-first segments (`universe: signals_only`, the startups) are skipped: review numbers say nothing about a
+    2 to 10 person startup, and their grounded queries are worth more on websites and founders (15 Nov 2026)."""
     now = datetime.now(UTC)
     stats: Counter[str] = Counter()
-    segments = score.enabled_segments(rc)
+    enabled = score.enabled_segments(rc)
+    segments = {k: s for k, s in enabled.items() if s.universe != "signals_only"}
+    if len(segments) < len(enabled):
+        stats["skipped_signals_only_segments"] = len(enabled) - len(segments)
     per_day = db.get_setting(SETTING, DEFAULT_PER_DAY)
     limit = int(per_day) if isinstance(per_day, int | float) else DEFAULT_PER_DAY
     if rc.opts.limit:

@@ -36,7 +36,7 @@ def test_happy_path_validates_logs_one_cost_row_and_tags(llm_db: str) -> None:
 
     assert isinstance(res.output, SignalClassification) and res.output.role_category == "frontdesk"
     assert (res.provider, res.model, res.fallback_from, res.cached) == ("gemini", "gemini-3.5-flash-lite", None, False)
-    assert res.tag == "gemini:gemini-3.5-flash-lite#classify_signal.v2"
+    assert res.tag == "gemini:gemini-3.5-flash-lite#classify_signal.v3"
     usd = llm_cost_usd("gemini-3.5-flash-lite", 1200, 150, on=router.budget.clock().date())
     rows = _costs(clock)
     assert len(rows) == 1
