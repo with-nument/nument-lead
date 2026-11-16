@@ -1,8 +1,8 @@
-"""The Gmail mailbox interface for the email autopilot (contract, task 0, 15 Nov 2026).
+"""The Gmail mailbox interface for the email autopilot, and the real Gmail API client (contract 4.6, lane E5a).
 
 Two parallel pieces of work meet here: the send loop (sequences.py, mailbox.py) and the reply side (inbox.py,
-replies.py, bookings, briefs). Both code against `MailboxClient` and test with `FakeMailbox`; the real Gmail API
-client (OAuth refresh token from Supabase Vault, scope gmail.modify) implements the same protocol.
+replies.py, bookings, briefs). Both code against `MailboxClient` and test with `FakeMailbox`; `GmailMailbox`
+implements the same protocol on the Gmail REST API (scope gmail.modify), through `outreach/net.py` only.
 
 Rules every implementation keeps:
 - plain-text messages only; the engine generates the RFC Message-ID before sending, so a crash between "sent"
@@ -10,13 +10,52 @@ Rules every implementation keeps:
 - follow-ups reply in the same thread (In-Reply-To / References);
 - every outgoing message carries List-Unsubscribe (mailto and the one-click https link) and
   List-Unsubscribe-Post: List-Unsubscribe=One-Click.
+
+The real client:
+- the access token comes from the refresh token (Supabase Vault, `gmail_refresh_token:<email>`) and the OAuth
+  client in settings (GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET); it lives in memory only and is never logged;
+- Gmail may replace a Message-ID it does not like, keeping ours in X-Google-Original-Message-ID. So every message
+  also carries ours in X-Nument-Ref, `send` reads back the Message-ID Gmail really used (follow-ups and reply
+  matching need that one), and `find_sent` falls back to scanning recent sent mail for either header;
+- a send is never retried after an answer that leaves it unclear whether Gmail took it (a timeout while waiting,
+  a 5xx): the caller keeps it claimed and `find_sent` settles it later. Only a refused request is retried;
+- errors map to `MailboxError` kinds: auth (pause the mailbox), rate_limit and quota (pause and look),
+  invalid (this message is wrong), transient (try later).
 """
 
 from __future__ import annotations
 
+import base64
+import re
+import time
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Protocol
+from datetime import UTC, datetime
+from email import policy
+from email.message import EmailMessage, Message
+from email.parser import BytesParser, HeaderParser
+from email.utils import format_datetime, formataddr, parseaddr, parsedate_to_datetime
+from typing import Any, Final, Protocol, cast
+
+import httpx
+
+from ..logging import get_logger
+
+log = get_logger()
+
+API: Final = "https://gmail.googleapis.com/gmail/v1/users/me"
+TOKEN_URL: Final = "https://oauth2.googleapis.com/token"
+VAULT_PREFIX: Final = "gmail_refresh_token:"
+REF_HEADER: Final = "X-Nument-Ref"  # our Message-ID again, in a header Gmail keeps
+ORIGINAL_ID_HEADER: Final = "X-Google-Original-Message-ID"
+TOKEN_MARGIN_S: Final = 60  # refresh this long before Google says the token expires
+RETRIES: Final = 2  # extra attempts for a request that is safe to repeat
+FIRST_SYNC_QUERY: Final = "newer_than:2d -in:sent -in:drafts"
+RESYNC_QUERY: Final = "newer_than:7d -in:sent -in:drafts"  # when the history cursor has expired
+SENT_SCAN_LIMIT: Final = 300  # most recent sent messages read when a Message-ID search finds nothing
+SMTP_POLICY: Final = policy.SMTP.clone(max_line_length=998)
+_ID: Final = re.compile(r"<[^<>\s]+>")
+_HEADER_BREAK: Final = re.compile(r"[\r\n]")
 
 
 @dataclass(frozen=True)
@@ -37,7 +76,7 @@ class Outgoing:
 class Sent:
     gmail_message_id: str
     gmail_thread_id: str
-    rfc_message_id: str
+    rfc_message_id: str  # the Message-ID the recipient got (Gmail may have replaced ours)
     sent_at: datetime
 
 
@@ -61,9 +100,11 @@ class Incoming:
 class MailboxError(Exception):
     """Gmail refused: auth expired or revoked (pause the mailbox), rate limit or quota (pause and retry later)."""
 
-    def __init__(self, kind: str, message: str) -> None:
+    def __init__(self, kind: str, message: str, *, status: int | None = None, maybe_sent: bool = False) -> None:
         super().__init__(message)
         self.kind = kind  # auth | rate_limit | quota | invalid | transient
+        self.status = status  # the HTTP status, when there was one
+        self.maybe_sent = maybe_sent  # a send that Gmail may have taken: keep it claimed, find_sent settles it
 
 
 class MailboxClient(Protocol):
@@ -71,8 +112,9 @@ class MailboxClient(Protocol):
 
     def send(self, message: Outgoing) -> Sent: ...
 
-    def find_sent(self, rfc_message_id: str) -> Sent | None:
-        """A message we sent with this Message-ID (crash recovery), or None."""
+    def find_sent(self, rfc_message_id: str, *, to: str | None = None) -> Sent | None:
+        """A message we sent with this Message-ID (crash recovery), or None. `to` (the address it went to)
+        narrows the search when Gmail replaced the Message-ID."""
         ...
 
     def fetch_new(self, since_history_id: str | None) -> tuple[list[Incoming], str]:
@@ -101,7 +143,7 @@ class FakeMailbox:
         n = len(self.sent)
         return Sent(f"m{n}", message.gmail_thread_id or f"t{n}", message.rfc_message_id, datetime.now().astimezone())
 
-    def find_sent(self, rfc_message_id: str) -> Sent | None:
+    def find_sent(self, rfc_message_id: str, *, to: str | None = None) -> Sent | None:
         for i, m in enumerate(self.sent, start=1):
             if m.rfc_message_id == rfc_message_id:
                 return Sent(f"m{i}", m.gmail_thread_id or f"t{i}", rfc_message_id, datetime.now().astimezone())
@@ -114,3 +156,584 @@ class FakeMailbox:
 
     def mark_read(self, gmail_message_id: str) -> None:
         self.read.add(gmail_message_id)
+
+
+# ---------------------------------------------------------------------------
+# MIME: what goes into `raw`
+# ---------------------------------------------------------------------------
+
+
+def _one_line(name: str, value: str) -> str:
+    if _HEADER_BREAK.search(value):
+        raise MailboxError("invalid", f"{name} must be a single line")
+    return value.strip()
+
+
+def build_mime(message: Outgoing, sender: str, *, now: datetime | None = None) -> bytes:
+    """The RFC 5322 message: plain text in UTF-8 (quoted-printable), our Message-ID, threading headers and the
+    List-Unsubscribe pair (RFC 2369 and RFC 8058 one-click)."""
+    msg = EmailMessage(policy=SMTP_POLICY)
+    msg["From"] = formataddr((_one_line("From name", message.from_name), _one_line("From", sender)))
+    msg["To"] = _one_line("To", message.to)
+    msg["Subject"] = _one_line("Subject", message.subject)
+    msg["Date"] = format_datetime(now or datetime.now(UTC))
+    msg["Message-ID"] = _one_line("Message-ID", message.rfc_message_id)
+    if message.in_reply_to:
+        msg["In-Reply-To"] = _one_line("In-Reply-To", message.in_reply_to)
+    references = [_one_line("References", r) for r in message.references if r]
+    if message.in_reply_to and message.in_reply_to not in references:
+        references.append(message.in_reply_to.strip())
+    if references:
+        msg["References"] = " ".join(references)
+    targets = [u for u in (message.unsubscribe_url, message.unsubscribe_mailto) if u]
+    if targets:
+        msg["List-Unsubscribe"] = ", ".join(f"<{_one_line('List-Unsubscribe', u)}>" for u in targets)
+    if message.unsubscribe_url:
+        msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
+    msg[REF_HEADER] = message.rfc_message_id.strip()
+    msg.set_content(message.body, subtype="plain", charset="utf-8", cte="quoted-printable")
+    return msg.as_bytes()
+
+
+def encode_raw(mime: bytes) -> str:
+    return base64.urlsafe_b64encode(mime).decode("ascii")
+
+
+def _decode_raw(raw: str) -> bytes:
+    return base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4))
+
+
+# ---------------------------------------------------------------------------
+# Reading a received message
+# ---------------------------------------------------------------------------
+
+
+def _first_id(value: object) -> str | None:
+    match = _ID.search(str(value or ""))
+    return match.group(0) if match else None
+
+
+def _text_of(part: Message) -> str:
+    """The decoded text of a part, even with a wrong or unknown charset."""
+    try:
+        content = part.get_content()  # type: ignore[attr-defined]
+    except (LookupError, KeyError, ValueError, AttributeError):
+        content = None
+    if isinstance(content, str):
+        return content
+    payload = part.get_payload(decode=True)
+    if isinstance(payload, bytes):
+        return payload.decode(part.get_content_charset() or "utf-8", errors="replace")
+    return content.decode("utf-8", errors="replace") if isinstance(content, bytes) else ""
+
+
+def html_to_text(html: str) -> str:
+    """Readable text from an HTML-only email."""
+    from selectolax.lexbor import LexborHTMLParser
+
+    tree = LexborHTMLParser(html)
+    for node in tree.css("script, style, head"):
+        node.decompose()
+    root = tree.body or tree.root
+    text = root.text(separator="\n") if root is not None else ""
+    lines = [" ".join(line.split()) for line in text.splitlines()]
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+
+
+def body_text(msg: EmailMessage) -> str:
+    """The plain text of a message (its text/plain part, else its HTML as text)."""
+    part = msg.get_body(preferencelist=("plain",))
+    if part is not None:
+        return _text_of(part).strip()
+    html = msg.get_body(preferencelist=("html",))
+    return html_to_text(_text_of(html)) if html is not None else ""
+
+
+def _dsn_blocks(part: Message) -> list[Message]:
+    """The field blocks of a message/delivery-status part (per message, then per recipient)."""
+    payload = part.get_payload()
+    if isinstance(payload, list):
+        return [p for p in payload if isinstance(p, Message)]
+    text = payload.decode("utf-8", "replace") if isinstance(payload, bytes) else str(payload or "")
+    return [HeaderParser().parsestr(block.strip() + "\n") for block in re.split(r"\n\s*\n", text) if block.strip()]
+
+
+def _original_id(msg: EmailMessage) -> str | None:
+    """The Message-ID of the message a bounce returns: from the attached original or its headers, else from the
+    bounce's own threading headers, else from a Message-ID line in its text."""
+    for part in msg.walk():
+        kind = part.get_content_type()
+        if kind in ("message/rfc822", "message/global"):
+            inner = part.get_payload()
+            original = inner[0] if isinstance(inner, list) and inner else None
+            if isinstance(original, Message) and _first_id(original.get("Message-ID")):
+                return _first_id(original.get("Message-ID"))
+        elif kind in ("text/rfc822-headers", "message/global-headers"):
+            headers = HeaderParser().parsestr(_text_of(part))
+            if _first_id(headers.get("Message-ID")):
+                return _first_id(headers.get("Message-ID"))
+    for name in ("In-Reply-To", "References"):
+        if _first_id(msg.get(name)):
+            return _first_id(msg.get(name))
+    for part in msg.walk():
+        if part.get_content_maintype() == "text":
+            match = re.search(r"Message-ID:\s*(<[^<>\s]+>)", _text_of(part), re.I)
+            if match:
+                return match.group(1)
+    return None
+
+
+_FAILURE_WORDS: Final = ("failure", "failed", "undeliverable", "undelivered", "returned mail", "not delivered")
+
+
+def bounce_of(msg: EmailMessage, from_email: str) -> tuple[bool, str | None]:
+    """(is a delivery failure, the Message-ID it returns). A delay notice is not a failure."""
+    sender = from_email.lower()
+    from_daemon = sender.split("@")[0] in ("mailer-daemon", "postmaster") or "mailer-daemon" in sender
+    is_report = msg.get_content_type() == "multipart/report"
+    reports = [
+        p for p in msg.walk() if p.get_content_type() in ("message/delivery-status", "message/global-delivery-status")
+    ]
+    if not (from_daemon or is_report or reports):
+        return False, None
+    actions = {
+        str(block.get("Action") or "").strip().lower()
+        for part in reports
+        for block in _dsn_blocks(part)
+        if block.get("Action")
+    }
+    if actions:
+        failed = "failed" in actions
+    else:
+        subject = str(msg.get("Subject") or "").lower()
+        failed = from_daemon and "delay" not in subject and any(w in subject for w in _FAILURE_WORDS)
+    return (True, _original_id(msg)) if failed else (False, None)
+
+
+def calendar_of(msg: EmailMessage) -> str | None:
+    """The text of a calendar invite in the message (a text/calendar part or an .ics attachment)."""
+    for part in msg.walk():
+        kind = part.get_content_type()
+        name = (part.get_filename() or "").lower()
+        if kind in ("text/calendar", "application/ics") or name.endswith(".ics"):
+            text = _text_of(part)
+            if "BEGIN:VCALENDAR" in text.upper():
+                return text
+    return None
+
+
+def parse_message(data: dict[str, Any]) -> Incoming:
+    """An Incoming from a Gmail `messages.get?format=raw` answer."""
+    msg = cast(EmailMessage, BytesParser(policy=policy.default).parsebytes(_decode_raw(str(data.get("raw") or ""))))
+    from_name, from_email = parseaddr(str(msg.get("From") or ""))
+    if data.get("internalDate"):
+        received = datetime.fromtimestamp(int(data["internalDate"]) / 1000, UTC)
+    else:
+        try:
+            received = parsedate_to_datetime(str(msg.get("Date"))).astimezone(UTC)
+        except (TypeError, ValueError):
+            received = datetime.now(UTC)
+    is_bounce, bounced = bounce_of(msg, from_email)
+    return Incoming(
+        gmail_message_id=str(data.get("id") or ""),
+        gmail_thread_id=str(data.get("threadId") or ""),
+        rfc_message_id=_first_id(msg.get("Message-ID")),
+        in_reply_to=_first_id(msg.get("In-Reply-To")),
+        from_email=from_email.strip().lower(),
+        from_name=from_name.strip() or None,
+        subject=" ".join(str(msg.get("Subject") or "").split()),
+        body_text=body_text(msg),
+        received_at=received,
+        is_bounce=is_bounce,
+        bounced_rfc_id=bounced,
+        calendar_ics=calendar_of(msg),
+        labels=tuple(str(label) for label in data.get("labelIds") or []),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Errors
+# ---------------------------------------------------------------------------
+
+
+def _json(response: httpx.Response) -> dict[str, Any]:
+    try:
+        body = response.json()
+    except ValueError:
+        return {}
+    return body if isinstance(body, dict) else {}
+
+
+def gmail_error(response: httpx.Response) -> MailboxError:
+    """A Gmail API error answer as a MailboxError (the message never contains a token)."""
+    status = response.status_code
+    err = _json(response).get("error")
+    err = err if isinstance(err, dict) else {}
+    reasons = {str(e.get("reason")) for e in err.get("errors") or [] if isinstance(e, dict)}
+    text = f"gmail {status}: {str(err.get('message') or response.reason_phrase)[:200]}"
+    if status == 401:
+        kind = "auth"
+    elif status == 403:
+        if reasons & {"dailyLimitExceeded", "quotaExceeded"}:
+            kind = "quota"
+        elif reasons & {"userRateLimitExceeded", "rateLimitExceeded"}:
+            kind = "rate_limit"
+        else:  # domainPolicy, insufficientPermissions, accessNotConfigured: a setup problem
+            kind = "auth"
+    elif status == 429:
+        kind = "rate_limit"
+    elif status >= 500:
+        kind = "transient"
+    else:
+        kind = "invalid"
+    return MailboxError(kind, text, status=status)
+
+
+def token_error(response: httpx.Response) -> MailboxError:
+    """An OAuth token endpoint error (invalid_grant: the refresh token expired or was revoked)."""
+    status = response.status_code
+    body = _json(response)
+    code = str(body.get("error") or "")
+    text = f"oauth {status}: {code or response.reason_phrase} {str(body.get('error_description') or '')[:120]}"
+    if status == 429:
+        kind = "rate_limit"
+    elif status >= 500:
+        kind = "transient"
+    else:
+        kind = "auth"
+    return MailboxError(kind, text.strip(), status=status)
+
+
+# ---------------------------------------------------------------------------
+# The client
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _Meta:
+    gmail_message_id: str
+    gmail_thread_id: str
+    labels: frozenset[str]
+    headers: dict[str, str]  # lower-case names
+    sent_at: datetime | None
+
+
+class GmailMailbox:
+    """MailboxClient on the Gmail REST API. Use as a context manager, or call `close()`."""
+
+    def __init__(
+        self,
+        address: str,
+        *,
+        client_id: str,
+        client_secret: str,
+        refresh_token: str,
+        transport: httpx.BaseTransport | None = None,
+        clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        from .net import api_client
+
+        self.address = address.strip().lower()
+        self._client_id = client_id
+        self._client_secret = client_secret
+        self._refresh_token = refresh_token
+        self._http = api_client(transport=transport)
+        self._clock = clock
+        self._sleep = sleep
+        self._access: str | None = None
+        self._expires_at = 0.0
+        self._address_checked = False
+
+    def __repr__(self) -> str:  # never shows a token
+        return f"GmailMailbox({self.address!r})"
+
+    def __enter__(self) -> GmailMailbox:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
+    def close(self) -> None:
+        self._http.close()
+
+    # -- tokens ---------------------------------------------------------------
+
+    def access_token(self) -> str:
+        """A valid access token, refreshed from the refresh token when needed (kept in memory only)."""
+        if self._access and self._clock() < self._expires_at:
+            return self._access
+        form = {
+            "client_id": self._client_id,
+            "client_secret": self._client_secret,
+            "refresh_token": self._refresh_token,
+            "grant_type": "refresh_token",
+        }
+        try:
+            response = self._http.post(TOKEN_URL, data=form)
+        except httpx.HTTPError as exc:
+            raise MailboxError("transient", f"token refresh failed: {type(exc).__name__}") from None
+        if response.status_code != 200:
+            err = token_error(response)
+            log.warning("gmail.token_refused", kind=err.kind, status=err.status)
+            raise err
+        body = _json(response)
+        token = body.get("access_token")
+        if not isinstance(token, str) or not token:
+            raise MailboxError("auth", "the token answer has no access token", status=200)
+        self._access = token
+        self._expires_at = self._clock() + max(int(body.get("expires_in") or 3600) - TOKEN_MARGIN_S, 30)
+        log.info("gmail.token_refreshed")
+        return token
+
+    # -- requests -------------------------------------------------------------
+
+    def _call(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: Sequence[tuple[str, str]] | None = None,
+        body: dict[str, Any] | None = None,
+        repeatable: bool = True,
+    ) -> dict[str, Any]:
+        """One Gmail API call. 401 refreshes the token once; a connection that never opened is retried; other
+        transient failures are retried only when `repeatable` (never for a send)."""
+        refreshed = False
+        attempt = 0
+        while True:
+            token = self.access_token()
+            try:
+                response = self._http.request(
+                    method,
+                    f"{API}/{path}",
+                    params=list(params or []),
+                    json=body,
+                    headers={"authorization": f"Bearer {token}"},
+                )
+            except (httpx.ConnectError, httpx.ConnectTimeout) as exc:  # the request never reached Gmail
+                if attempt < RETRIES:
+                    attempt += 1
+                    self._sleep(float(2 ** (attempt - 1)))
+                    continue
+                raise MailboxError("transient", f"cannot reach Gmail: {type(exc).__name__}") from None
+            except httpx.HTTPError as exc:  # it may have reached Gmail: a send is not repeated
+                if repeatable and attempt < RETRIES:
+                    attempt += 1
+                    self._sleep(float(2 ** (attempt - 1)))
+                    continue
+                raise MailboxError(
+                    "transient", f"Gmail did not answer: {type(exc).__name__}", maybe_sent=not repeatable
+                ) from None
+            if response.status_code == 401 and not refreshed:
+                refreshed = True
+                self._access = None
+                continue
+            if response.is_success:
+                return _json(response) if response.content else {}
+            err = gmail_error(response)
+            if err.kind == "transient" and repeatable and attempt < RETRIES:
+                attempt += 1
+                self._sleep(float(2 ** (attempt - 1)))
+                continue
+            err.maybe_sent = err.kind == "transient" and not repeatable  # a 5xx after a send: unclear
+            log.warning("gmail.error", path=path.split("/")[0], kind=err.kind, status=err.status)
+            raise err
+
+    def profile(self) -> dict[str, Any]:
+        """The mailbox's address and current history id."""
+        return self._call("GET", "profile")
+
+    def _check_address(self) -> None:
+        """Refuse to send when the token belongs to another Gmail address than this mailbox."""
+        if self._address_checked:
+            return
+        actual = str(self.profile().get("emailAddress") or "").strip().lower()
+        if actual != self.address:
+            raise MailboxError("auth", "the Gmail token belongs to another address than this mailbox")
+        self._address_checked = True
+
+    def _list(self, query: str, *, limit: int, spam_trash: bool = False) -> list[str]:
+        """Message ids matching a Gmail search, newest first, at most `limit`."""
+        ids: list[str] = []
+        token: str | None = None
+        while len(ids) < limit:
+            params = [("q", query), ("maxResults", str(min(100, limit - len(ids))))]
+            if spam_trash:
+                params.append(("includeSpamTrash", "true"))
+            if token:
+                params.append(("pageToken", token))
+            page = self._call("GET", "messages", params=params)
+            ids += [str(m["id"]) for m in page.get("messages") or [] if isinstance(m, dict) and m.get("id")]
+            token = page.get("nextPageToken")
+            if not token:
+                break
+        return ids[:limit]
+
+    def _meta(self, gmail_message_id: str, headers: Sequence[str]) -> _Meta:
+        params = [("format", "metadata"), *(("metadataHeaders", h) for h in headers)]
+        data = self._call("GET", f"messages/{gmail_message_id}", params=params)
+        found = {
+            str(h.get("name") or "").lower(): str(h.get("value") or "")
+            for h in (data.get("payload") or {}).get("headers") or []
+            if isinstance(h, dict)
+        }
+        internal = data.get("internalDate")
+        return _Meta(
+            gmail_message_id=str(data.get("id") or gmail_message_id),
+            gmail_thread_id=str(data.get("threadId") or ""),
+            labels=frozenset(str(label) for label in data.get("labelIds") or []),
+            headers=found,
+            sent_at=datetime.fromtimestamp(int(internal) / 1000, UTC) if internal else None,
+        )
+
+    # -- the protocol -----------------------------------------------------------
+
+    def send(self, message: Outgoing) -> Sent:
+        """Send one message. Raises MailboxError; kind 'transient' means Gmail may or may not have it."""
+        self._check_address()
+        payload: dict[str, Any] = {"raw": encode_raw(build_mime(message, self.address))}
+        if message.gmail_thread_id:
+            payload["threadId"] = message.gmail_thread_id
+        data = self._call("POST", "messages/send", body=payload, repeatable=False)
+        gmail_id, thread_id = str(data.get("id") or ""), str(data.get("threadId") or "")
+        if not gmail_id:
+            raise MailboxError("transient", "Gmail accepted the send without a message id", maybe_sent=True)
+        actual, sent_at = message.rfc_message_id, datetime.now(UTC)
+        try:  # the Message-ID Gmail really used, for threading and reply matching
+            meta = self._meta(gmail_id, ["Message-ID"])
+            actual = _first_id(meta.headers.get("message-id")) or actual
+            sent_at = meta.sent_at or sent_at
+            thread_id = thread_id or meta.gmail_thread_id
+        except MailboxError as exc:  # the email is sent; reading it back is only a nicety
+            log.warning("gmail.readback_failed", kind=exc.kind)
+        if actual != message.rfc_message_id:
+            log.info("gmail.message_id_replaced")
+        log.info("gmail.sent", gmail_message_id=gmail_id)
+        return Sent(gmail_id, thread_id, actual, sent_at)
+
+    def find_sent(self, rfc_message_id: str, *, to: str | None = None) -> Sent | None:
+        """A sent message with this Message-ID: Gmail's rfc822msgid search, then a scan of recent sent mail
+        (to `to` first) for our id in Message-ID, X-Google-Original-Message-ID or X-Nument-Ref."""
+        wanted = rfc_message_id.strip()
+        headers = ["Message-ID", ORIGINAL_ID_HEADER, REF_HEADER]
+        for gmail_id in self._list(f"rfc822msgid:{wanted.strip('<>')}", limit=5, spam_trash=True):
+            meta = self._meta(gmail_id, headers)
+            if "SENT" in meta.labels:
+                return self._as_sent(meta, wanted)
+        queries = ([f"from:me to:{to.strip()} newer_than:14d"] if to else []) + ["from:me newer_than:7d"]
+        seen: set[str] = set()
+        for query in queries:
+            for gmail_id in self._list(query, limit=SENT_SCAN_LIMIT - len(seen), spam_trash=True):
+                if gmail_id in seen:
+                    continue
+                seen.add(gmail_id)
+                meta = self._meta(gmail_id, headers)
+                ids = {_first_id(meta.headers.get(h.lower())) for h in headers}
+                if "SENT" in meta.labels and wanted in ids:
+                    return self._as_sent(meta, wanted)
+            if len(seen) >= SENT_SCAN_LIMIT:
+                break
+        return None
+
+    @staticmethod
+    def _as_sent(meta: _Meta, wanted: str) -> Sent:
+        actual = _first_id(meta.headers.get("message-id")) or wanted
+        return Sent(meta.gmail_message_id, meta.gmail_thread_id, actual, meta.sent_at or datetime.now(UTC))
+
+    def _history(self, start: str) -> tuple[list[str], str]:
+        """Ids of messages added since `start`, oldest first, and the mailbox's current history id."""
+        ids: list[str] = []
+        cursor = start
+        token: str | None = None
+        while True:
+            params = [("startHistoryId", start), ("historyTypes", "messageAdded"), ("maxResults", "500")]
+            if token:
+                params.append(("pageToken", token))
+            page = self._call("GET", "history", params=params)
+            for record in page.get("history") or []:
+                for added in record.get("messagesAdded") or []:
+                    gmail_id = str((added.get("message") or {}).get("id") or "")
+                    if gmail_id and gmail_id not in ids:
+                        ids.append(gmail_id)
+            cursor = str(page.get("historyId") or cursor)
+            token = page.get("nextPageToken")
+            if not token:
+                return ids, cursor
+
+    def fetch_new(self, since_history_id: str | None) -> tuple[list[Incoming], str]:
+        """Messages that arrived since the cursor (our own sends and drafts left out), and the new cursor.
+
+        Without a cursor, or when Gmail has expired it (404), the recent messages are read again with a search;
+        those may include messages seen before, so the caller dedupes by gmail_message_id."""
+        ids: list[str]
+        if since_history_id:
+            try:
+                ids, cursor = self._history(since_history_id)
+            except MailboxError as exc:
+                if exc.status != 404:
+                    raise
+                log.warning("gmail.history_expired")
+                cursor = str(self.profile().get("historyId") or "")
+                ids = list(reversed(self._list(RESYNC_QUERY, limit=500)))
+        else:
+            cursor = str(self.profile().get("historyId") or "")
+            ids = list(reversed(self._list(FIRST_SYNC_QUERY, limit=200)))
+        messages: list[Incoming] = []
+        for gmail_id in ids:
+            try:
+                data = self._call("GET", f"messages/{gmail_id}", params=[("format", "raw")])
+            except MailboxError as exc:
+                if exc.status == 404:  # deleted since
+                    continue
+                raise
+            labels = set(data.get("labelIds") or [])
+            if "DRAFT" in labels or ("SENT" in labels and "INBOX" not in labels):
+                continue
+            messages.append(parse_message(data))
+        return messages, cursor
+
+    def mark_read(self, gmail_message_id: str) -> None:
+        self._call("POST", f"messages/{gmail_message_id}/modify", body={"removeLabelIds": ["UNREAD"]})
+
+
+# ---------------------------------------------------------------------------
+# Opening the outreach mailbox
+# ---------------------------------------------------------------------------
+
+
+def refresh_token_for(address: str, *, conn: Any = None) -> str | None:
+    """The mailbox's refresh token from Supabase Vault (None when it is not there, or there is no Vault)."""
+    import psycopg
+
+    from .. import db
+
+    try:
+        value = db.scalar(
+            "select decrypted_secret from vault.decrypted_secrets where name = %s limit 1",
+            [VAULT_PREFIX + address.strip().lower()],
+            conn=conn,
+        )
+    except psycopg.Error as exc:
+        log.warning("gmail.vault_unreadable", error=type(exc).__name__)
+        return None
+    return str(value) if value else None
+
+
+def connect(address: str, *, transport: httpx.BaseTransport | None = None) -> GmailMailbox:
+    """The Gmail client for the outreach mailbox. Raises MailboxError('auth') when it is not connected."""
+    from ..settings import get_settings
+
+    s = get_settings()
+    if not s.gmail_client_id or s.gmail_client_secret is None:
+        raise MailboxError("auth", "GMAIL_CLIENT_ID or GMAIL_CLIENT_SECRET is not set")
+    token = refresh_token_for(address)
+    if not token:
+        raise MailboxError("auth", "no Gmail refresh token in Vault for this mailbox: connect Gmail in the app")
+    return GmailMailbox(
+        address,
+        client_id=s.gmail_client_id,
+        client_secret=s.gmail_client_secret.get_secret_value(),
+        refresh_token=token,
+        transport=transport,
+    )

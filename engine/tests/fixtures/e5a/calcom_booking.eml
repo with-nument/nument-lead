@@ -1,0 +1,36 @@
+From: Cal.com <hello@cal.example.com>
+To: hello.nument@gmail.com
+Subject: New event: Intro call between Nument and Maya
+Date: Mon, 16 Nov 2026 16:00:00 +0000
+Message-ID: <calcom-booking-003@cal.example.com>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="cal-mixed"
+
+--cal-mixed
+Content-Type: multipart/alternative; boundary="cal-alt"
+
+--cal-alt
+Content-Type: text/plain; charset="utf-8"
+
+A new event has been scheduled: Intro call, Thursday 19 November 2026, 10:00 to 10:30 (America/New_York).
+
+--cal-alt
+Content-Type: text/calendar; charset="utf-8"; method=REQUEST
+
+BEGIN:VCALENDAR
+PRODID:-//Cal.com//EN
+VERSION:2.0
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:booking-uid-123@cal.example.com
+DTSTART:20261119T150000Z
+DTEND:20261119T153000Z
+SUMMARY:Intro call between Nument and Maya
+ORGANIZER;CN=Nument:mailto:hello.nument@gmail.com
+ATTENDEE;CN=Maya;PARTSTAT=ACCEPTED:mailto:maya@acme.example.com
+END:VEVENT
+END:VCALENDAR
+
+--cal-alt--
+
+--cal-mixed--
