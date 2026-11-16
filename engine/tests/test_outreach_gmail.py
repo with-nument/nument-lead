@@ -454,7 +454,7 @@ def _raw(gmail_id: str, fixture: str, labels: tuple[str, ...] = ("INBOX", "UNREA
 def test_parse_a_plain_reply() -> None:
     msg = g.parse_message(_raw("r1", "reply_plain.eml"))
     assert msg.from_email == "maya@acme.example.com" and msg.from_name == "Maïa Schön"
-    assert msg.subject == "Re: Quick question about Acme — café"
+    assert msg.subject == f"Re: Quick question about Acme {chr(0x2014)} café"  # an em dash
     assert msg.rfc_message_id == "<CAmaya-reply-001@mail.acme.example.com>"
     assert msg.in_reply_to == OUR_ID
     assert msg.body_text.startswith("Hi,\n\nYes, send me the plan. We meet at the café on Tuesday.")
