@@ -65,9 +65,7 @@ def test_roles(title: str, founding: bool, software: bool) -> None:
 
 def test_each_board_api_is_parsed() -> None:
     gh = ats.parse_greenhouse("brightcart", data("ats_greenhouse.json"))
-    assert (
-        gh is not None and gh.name == "Brightcart" and [j.title for j in gh.jobs][0] == "Founding Full-Stack Engineer"
-    )
+    assert gh is not None and gh.name == "Brightcart" and gh.jobs[0].title == "Founding Full-Stack Engineer"
     assert gh.jobs[0].url == "https://job-boards.greenhouse.io/brightcart/jobs/6231864004"
     assert gh.jobs[0].posted == datetime(2026, 11, 6, 15, 22, 1, tzinfo=UTC)
     lever = ats.parse_lever("lithemedical", data("ats_lever.json"))
