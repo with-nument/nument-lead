@@ -319,7 +319,7 @@ function CallDetail({
       <header className="flex shrink-0 flex-wrap items-center gap-4 px-4 pt-2 pb-4 sm:px-6 lg:hairline-b lg:px-8 lg:py-6">
         <SoftTile text={initials(c.company)} className="size-12 text-[17px]" />
         <div className="min-w-0 flex-1">
-          <h2 className="text-[22px] leading-tight font-semibold text-label-1">
+          <h2 className="text-[21px] leading-tight font-semibold text-label-1 xl:text-[22px]">
             {c.contactName ? `${c.contactName} · ${c.company}` : c.company}
           </h2>
           <p className="mt-0.5 text-[15px] text-label-3">{when}</p>
@@ -455,18 +455,18 @@ function CallDetail({
                 onOutcome(c, 'discovery_done', 'Call done')
               }}
               disabled={stage === 'discovery_done'}
-              className="bg-transparent shadow-[inset_0_0_0_1px_var(--ui-separator-strong)]"
+              className="bg-transparent px-2 shadow-[inset_0_0_0_1px_var(--ui-separator-strong)] lg:px-4"
             >
               <Check aria-hidden />
               Done
             </Button>
-            <Button onClick={() => onOutcome(c, 'talking', 'No-show')} className="bg-transparent shadow-[inset_0_0_0_1px_var(--ui-separator-strong)]">
+            <Button onClick={() => onOutcome(c, 'talking', 'No-show')} className="bg-transparent px-2 lg:px-4 shadow-[inset_0_0_0_1px_var(--ui-separator-strong)]">
               No-show
             </Button>
             <Button
               onClick={() => save(() => onOutcome(c, 'discovery_done', 'Proposal next'))}
               disabled={saving}
-              className="bg-transparent shadow-[inset_0_0_0_1px_var(--ui-separator-strong)]"
+              className="bg-transparent px-2 shadow-[inset_0_0_0_1px_var(--ui-separator-strong)] lg:px-4"
             >
               Proposal next
             </Button>

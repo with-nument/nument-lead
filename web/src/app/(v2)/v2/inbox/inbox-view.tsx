@@ -478,13 +478,15 @@ function Reading({
           Inbox
         </button>
         <span className="text-[15px] text-label-3">{position}</span>
-        <span className="w-16" />
+        <Link href={`/leads/${i.leadId}`} className="flex h-11 items-center px-2 text-[17px] text-label-1">
+          Lead
+        </Link>
       </div>
       <header className="flex shrink-0 items-center gap-4 px-4 pt-2 pb-4 sm:px-6 lg:hairline-b lg:px-8 lg:py-5">
         <Avatar initials={initials(i.contactName ?? i.company)} size="large" className="hairline-ring text-label-2 lg:size-[60px] lg:text-[19px]" />
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-[22px] font-semibold text-label-1 lg:text-[21px]">{who(i)}</h2>
-          <p className="truncate text-[15px] text-label-3">
+          <p className="line-clamp-2 text-[15px] text-label-3">
             <span className="lg:hidden">
               {i.contactRole ? `${i.contactRole}, ${i.company}` : i.company} · {shortWhen(i.at)}
             </span>
@@ -493,10 +495,12 @@ function Reading({
         </div>
         {i.grade ? <GradeMark grade={i.grade} size="large" /> : null}
         {i.stage ? <span className="hidden text-[15px] text-label-2 lg:inline">{stageLabel(i.stage)}</span> : null}
-        <Link href={`/leads/${i.leadId}`} className={cx(buttonClass('secondary', 'regular'), 'hidden lg:inline-flex')}>
-          Open lead
-          <ArrowRight aria-hidden />
-        </Link>
+        <span className="hidden lg:contents">
+          <Link href={`/leads/${i.leadId}`} className={buttonClass('secondary', 'regular')}>
+            Open lead
+            <ArrowRight aria-hidden />
+          </Link>
+        </span>
       </header>
 
       <div ref={paneRef} className="min-h-0 flex-1 overflow-y-auto px-4 pb-44 sm:px-6 lg:px-8 lg:pt-6 lg:pb-8">
@@ -531,12 +535,12 @@ function Reading({
         ) : null}
 
         {d ? (
-          <div className="rounded-[18px] bg-[var(--ui-panel-solid,white)] shadow-[inset_0_0_0_1px_var(--ui-hairline)]">
-            <div className="hairline-b flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-5 py-3.5 lg:px-6">
+          <div className="hairline-ring overflow-hidden rounded-[18px] bg-[var(--ui-panel-solid)]">
+            <div className="hairline-b px-5 py-3.5 lg:px-6">
               <span className="text-[16px] font-semibold text-label-1">
                 {i.tab === 'done' ? (d.step === null ? 'Our reply' : `${stepLabel(d.step)} email`) : d.step === null ? 'Suggested reply' : `${stepLabel(d.step)} email`}
               </span>
-              <span className="text-[14px] text-label-3">
+              <span className="ml-2 text-[14px] text-label-3">
                 {i.tab === 'done'
                   ? `· ${DONE_LABEL[d.status] ?? d.status}${d.sentAt ? `, ${formatDateTime(d.sentAt)}` : ''}`
                   : d.step === null
