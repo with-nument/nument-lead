@@ -1,0 +1,5 @@
+[
+  {"issuer_ca_id": 295815, "issuer_name": "C=US, O=Let's Encrypt, CN=R11", "common_name": "tallyhq-nlead.io", "name_value": "tallyhq-nlead.io\nwww.tallyhq-nlead.io", "id": 15100000002, "entry_timestamp": "2025-02-10T08:15:01.123", "not_before": "2025-02-10T07:16:30", "not_after": "2025-05-11T07:16:29", "serial_number": "04aa", "result_count": 2},
+  {"issuer_ca_id": 295815, "issuer_name": "C=US, O=Let's Encrypt, CN=R10", "common_name": "tallyhq-nlead.io", "name_value": "tallyhq-nlead.io", "id": 15100000001, "entry_timestamp": "2024-03-02T10:01:44.004", "not_before": "2024-03-02T09:03:12", "not_after": "2024-05-31T09:03:11", "serial_number": "03bb", "result_count": 2},
+  {"issuer_ca_id": 295815, "issuer_name": "C=US, O=Let's Encrypt, CN=R11", "common_name": "www.tallyhq-nlead.io", "name_value": "www.tallyhq-nlead.io", "id": 15100000003, "entry_timestamp": "2025-08-01T00:00:00.000", "not_before": "2025-07-31T23:00:00", "not_after": "2025-10-29T22:59:59", "serial_number": "05cc", "result_count": 2}
+]
