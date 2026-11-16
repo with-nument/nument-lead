@@ -42,7 +42,7 @@ async function Today() {
 
   return (
     <Page title={head.title} compactTitle={head.compact} eyebrow={<TodayDate />} subtitle={head.subtitle}>
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-8">
+      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-8">
         <div>
           <RepliesSection step={1} items={data.replies} primary={first === 'replies'} canEdit={editable} />
           <CallsSection step={2} items={data.calls} primary={first === 'calls'} />

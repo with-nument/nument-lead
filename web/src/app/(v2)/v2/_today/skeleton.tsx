@@ -9,7 +9,7 @@ export function TodaySkeleton() {
         <Skeleton className="mt-3 h-8 w-[min(520px,80%)]" />
         <Skeleton className="mt-3 h-4 w-[min(340px,60%)]" />
       </div>
-      <div className="mx-auto grid max-w-[1192px] items-start gap-6 px-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-8 lg:px-14">
+      <div className="mx-auto grid max-w-[1192px] grid-cols-[minmax(0,1fr)] items-start gap-6 px-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-8 lg:px-14">
         <div className="flex flex-col gap-3 lg:gap-3.5">
           <SkeletonList header rows={2} action />
           <SkeletonList header rows={1} action />
