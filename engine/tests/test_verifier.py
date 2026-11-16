@@ -25,8 +25,8 @@ from .sources_helpers import clean_db, no_network
 __all__ = ["clean_db", "no_network"]
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "e3"
-QEV_KEY = "qev-secret-key-123"
-MEV_KEY = "mev-secret-key-456"
+QEV_KEY = "qev-test-key"
+MEV_KEY = "mev-test-key"
 QEV_HOST = "api.quickemailverification.com"
 MEV_HOST = "client.myemailverifier.com"
 

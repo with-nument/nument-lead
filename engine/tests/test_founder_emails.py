@@ -666,3 +666,19 @@ def test_a_country_we_never_write_to_is_left_alone(e3_db: str) -> None:
     api = Api({"maya@brightcart.io": DELIVERABLE})
     run_stage(api=api)
     assert api.asked == [] and contacts(bid) == [] and attempt(bid)["outcome"] == "country"
+
+
+def test_an_address_marked_do_not_contact_is_never_used_again(e3_db: str) -> None:
+    bid = startup()
+    db.execute(
+        "insert into public.contacts (business_id, name, email, source, do_not_contact) "
+        "values (%s, 'Maya Chen', 'maya@brightcart.io', 'website', true)",
+        [bid],
+    )
+    page(bid, f"{SITE}team", "Maya Chen, CEO: maya@brightcart.io")
+    api = Api({"maya@brightcart.io": DELIVERABLE})
+    stats = run_stage(api=api)
+    assert "maya@brightcart.io" not in api.asked and stats["skipped.do_not_contact"] >= 1
+    assert db.scalar(
+        "select email_status from public.contacts where business_id = %s and email = 'maya@brightcart.io'", [bid]
+    ) == "unknown"  # fmt: skip

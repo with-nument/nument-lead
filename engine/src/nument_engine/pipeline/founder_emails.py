@@ -273,6 +273,7 @@ class Lead:
     backed: set[str] = field(default_factory=set)  # patterns a published address at the domain shows
     tried: set[str] = field(default_factory=set)
     deferred: list[str] = field(default_factory=list)  # why a rung could not finish (retry tomorrow)
+    do_not_contact: frozenset[str] = frozenset()  # addresses a person marked "do not contact" in the app
 
     @property
     def checks_left(self) -> int:
@@ -376,6 +377,7 @@ def load_lead(row: Mapping[str, Any], segment: Segment, now: datetime) -> Lead:
         contacts=contacts,
         checks_used=used,
         window_start=since,
+        do_not_contact=frozenset(str(c["email"]).lower() for c in contacts if c["email"] and c["do_not_contact"]),
     )
 
 
@@ -445,6 +447,8 @@ def usable(email: str, lead: Lead, env: Env) -> str | None:
         return "free_mail"
     if email in env.suppressed.emails or dom in env.suppressed.domains:
         return "suppressed"
+    if email in lead.do_not_contact:
+        return "do_not_contact"
     if GENERIC_LOCAL.match(email):
         return "shared_inbox"
     if not same_company(dom, lead):
