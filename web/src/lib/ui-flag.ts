@@ -13,10 +13,11 @@ export const UI_V2 = '2'
 export const V2_PREFIX = '/v2'
 
 /**
- * Pages that have a v2 screen. An entry is an exact path, or `/path/*` for the path and everything under it.
- * '/calls' and '/deals' are new destinations with no current-design page.
+ * Pages that have a v2 screen. An entry is an exact path, `/path/*` for the path and everything under it, or a
+ * path with `:uuid` segments, each matching one UUID (so '/leads/:uuid' is a lead page but never
+ * '/leads/export', the CSV download). '/calls' and '/deals' are new destinations with no current-design page.
  */
-export const V2_ROUTES: readonly string[] = ['/', '/calls', '/deals']
+export const V2_ROUTES: readonly string[] = ['/', '/calls', '/deals', '/leads', '/leads/:uuid']
 
 const ONE_YEAR = 60 * 60 * 24 * 365
 
@@ -25,10 +26,17 @@ function normalize(pathname: string): string {
   return path.length > 1 ? path.replace(/\/+$/, '') : path || '/'
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 function matches(route: string, path: string): boolean {
   if (route.endsWith('/*')) {
     const base = route.slice(0, -2)
     return path === base || path.startsWith(`${base}/`)
+  }
+  if (route.includes(':uuid')) {
+    const want = route.split('/')
+    const got = path.split('/')
+    return want.length === got.length && want.every((seg, i) => (seg === ':uuid' ? UUID.test(got[i] ?? '') : seg === got[i]))
   }
   return path === route
 }
