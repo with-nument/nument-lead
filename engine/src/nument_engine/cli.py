@@ -79,12 +79,16 @@ report_app = typer.Typer(help="Reports.", **_TYPER_SETTINGS)
 run_app = typer.Typer(help="Orchestrated runs used by GitHub Actions.", **_TYPER_SETTINGS)
 db_app = typer.Typer(help="Database schema and configuration: migrations and segment sync.", **_TYPER_SETTINGS)
 notify_app = typer.Typer(help="Email: send a sample, or write previews of every email.", **_TYPER_SETTINGS)
+outreach_app = typer.Typer(
+    help="The email autopilot: status, the 15-minute schedule, pause and resume.", **_TYPER_SETTINGS
+)
 app.add_typer(extract_app, name="extract")
 app.add_typer(sheet_app, name="sheet")
 app.add_typer(report_app, name="report")
 app.add_typer(run_app, name="run")
 app.add_typer(db_app, name="db")
 app.add_typer(notify_app, name="notify")
+app.add_typer(outreach_app, name="outreach")
 
 
 class Env(StrEnum):
@@ -724,6 +728,107 @@ def run_monthly(ctx: typer.Context) -> None:
     from .pipeline import runs
 
     _execute(ctx, "monthly", runs.monthly)
+
+
+# ---------------------------------------------------------------------------
+# The email autopilot (15 Nov 2026): switches, not part of the scheduled runs
+# ---------------------------------------------------------------------------
+
+
+class Switch(StrEnum):
+    on = "on"
+    off = "off"
+
+
+def _outreach(ctx: typer.Context, work: Callable[[Options], None]) -> None:
+    """Run an outreach switch against the database with clear errors, then close the pool."""
+    import psycopg
+    import psycopg_pool
+
+    from . import db
+
+    opts = _bootstrap(ctx)
+    try:
+        work(opts)
+    except (psycopg.OperationalError, psycopg_pool.PoolTimeout) as exc:
+        raise _fail(
+            f"{ctx.command_path}: cannot reach the database ({type(exc).__name__}). "
+            "Check DATABASE_URL (session pooler, port 5432) and that the Supabase project is not paused."
+        ) from None
+    finally:
+        db.close_pool()
+
+
+@outreach_app.command("status")
+def outreach_status(ctx: typer.Context) -> None:
+    """Mode, pause, mailbox, warm-up cap, bounces, queue and schedule of the email autopilot."""
+    from .outreach import mailbox as m
+
+    def work(_opts: Options) -> None:
+        for line in m.status_lines(m.status()):
+            typer.echo(line)
+
+    _outreach(ctx, work)
+
+
+@outreach_app.command("schedule")
+def outreach_schedule(
+    ctx: typer.Context,
+    switch: Annotated[Switch, typer.Argument(help="on: start the outreach run every 15 minutes; off: stop it.")],
+) -> None:
+    """Create or drop the pg_cron job nlead-outreach that starts outreach.yml every 15 minutes. Honours --dry-run."""
+    from .outreach import mailbox as m
+    from .pipeline.runs import outreach_mode
+
+    def work(opts: Options) -> None:
+        on = switch is Switch.on
+        if opts.dry_run:
+            typer.echo(
+                f"Would {'create' if on else 'drop'} the pg_cron job {m.CRON_JOB} ({opts.env}); nothing changed."
+            )
+            return
+        try:
+            result = m.schedule(on, opts.env)
+        except RuntimeError as exc:
+            raise _fail(f"{ctx.command_path}: {exc}") from None
+        typer.echo(f"pg_cron job {m.CRON_JOB}: {result} ({m.CRON_EVERY}, env {opts.env}).")
+        if on and outreach_mode() == "off":
+            typer.secho("outreach.mode is off: each run does nothing until it is manual or auto.", fg="yellow")
+
+    _outreach(ctx, work)
+
+
+@outreach_app.command("pause")
+def outreach_pause(ctx: typer.Context) -> None:
+    """Stop every send now (settings outreach.paused). Honours --dry-run."""
+    from .outreach import mailbox as m
+
+    def work(opts: Options) -> None:
+        if opts.dry_run:
+            typer.echo("Would pause all sending; nothing changed.")
+            return
+        m.pause("manual")
+        typer.echo("Sending is paused. Resume with: nlead outreach resume")
+
+    _outreach(ctx, work)
+
+
+@outreach_app.command("resume")
+def outreach_resume(ctx: typer.Context) -> None:
+    """Allow sending again: clears outreach.paused and a mailbox paused for bounces or Gmail limits. Honours --dry-run."""
+    from .outreach import mailbox as m
+
+    def work(opts: Options) -> None:
+        if opts.dry_run:
+            typer.echo("Would resume sending; nothing changed.")
+            return
+        box = m.resume()
+        state = f"mailbox {box.email} is {box.status}" if box else "no mailbox connected yet"
+        typer.echo(f"Sending may go on ({state}).")
+        if box is not None and box.status in ("error", "disconnected"):
+            typer.secho("The mailbox needs Gmail connected again in the app before anything is sent.", fg="yellow")
+
+    _outreach(ctx, work)
 
 
 # ---------------------------------------------------------------------------

@@ -392,3 +392,32 @@ def status(*, now: datetime | None = None, conn: Connection[Any] | None = None) 
             "last_error": box.last_error,
         }
     return info
+
+
+def status_lines(info: dict[str, Any]) -> list[str]:
+    """`nlead outreach status` as plain lines."""
+    lines = [f"mode: {info['mode']}{' (paused)' if info['paused'] else ''}"]
+    sandbox = info.get("sandbox_to")
+    lines.append(f"dev sandbox: {sandbox}" if sandbox else "dev sandbox: not set (dev sends nothing)")
+    if not info["postal_address_set"]:
+        lines.append("postal address: missing (settings outreach.postal_address): no email can be sent")
+    box = info.get("mailbox")
+    if box is None:
+        lines.append("mailbox: none connected (connect Gmail in the app)")
+    else:
+        lines.append(
+            f"mailbox: {box['email']}, {box['status']}"
+            + (f" ({box['paused_reason']})" if box.get("paused_reason") else "")
+            + f", warm-up week {box['warmup_week']}, {box['sent_24h']} of {box['cap_24h']} in the last 24 hours"
+        )
+        if box.get("last_error"):
+            lines.append(f"last Gmail error: {box['last_error']}")
+    bounces = info["bounces"]
+    lines.append(f"bounces: {bounces['bounced']} of the last {bounces['of']} sends")
+    queue = info["queue"]
+    lines.append("queue: " + (", ".join(f"{k} {v}" for k, v in sorted(queue.items())) or "empty"))
+    job = info.get("schedule")
+    lines.append(
+        f"schedule: {job['schedule']} ({'active' if job['active'] else 'inactive'})" if job else "schedule: off"
+    )
+    return lines
