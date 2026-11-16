@@ -19,9 +19,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
+      # The address people use (lead.nument.in, a custom domain on the same Render service), then the
+      # onrender.com one, so a DNS or certificate problem on the custom domain still keeps the service warm and
+      # shows up as a warning. /api/health makes no database call and skips the session proxy.
       - name: Ping the health endpoint
         run: |
           for i in 1 2 3; do
+            if curl -fsS --max-time 60 https://lead.nument.in/api/health; then exit 0; fi
+            echo "::warning::lead.nument.in did not answer, trying the onrender.com address"
             if curl -fsS --max-time 60 https://nument-leads-web.onrender.com/api/health; then exit 0; fi
             sleep 20
           done

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { unstable_rethrow } from 'next/navigation'
 import { Suspense } from 'react'
 import { TodayDate } from '@/components/shell2/today-date'
 import { Page } from '@/components/ui2/large-title'
@@ -37,9 +38,14 @@ const REPLIES_SHOWN = 5
 const NO_CALLS: CallsPage = { today: [], upcoming: [], earlier: [] }
 const NO_REPLIES: InboxSummary = { counts: { replies: 0, review: 0, done: 0 }, replies: [] }
 
-/** The email reads must not take Today down with them: on an error the section is empty and the error logged. */
+/**
+ * The email reads must not take Today down with them: on an error the section is empty and the error logged.
+ * Next's own signals (the prerender ending before a request-time read) pass through, so they are not logged as
+ * failures.
+ */
 function orEmpty<T>(p: Promise<T>, empty: T, what: string): Promise<T> {
   return p.catch((e: unknown) => {
+    unstable_rethrow(e)
     console.error(`Today: ${what} failed`, e instanceof Error ? e.message : e)
     return empty
   })

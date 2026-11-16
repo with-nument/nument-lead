@@ -23,7 +23,16 @@ function sync() {
 }
 
 // For the first paint of a full page load, before React runs.
-const FIRST_PAINT = "document.documentElement.dataset.ui='2'"
+//
+// It also turns off React's 300 ms reveal batching for this page load. The prerendered shell (skeletons)
+// paints at once and the per-user sections stream in about 100 ms later, but React's streaming runtime
+// ($RC) holds every streamed section until 300 ms after the shell's first paint ($RT), so a full load showed
+// skeletons for ~0.3 s even when the data was already there. With $RT never a number, the runtime reveals
+// on the next animation frame instead (still batching what arrives in the same frame). The skeletons match
+// the final layout, so nothing jumps. If a React upgrade changes this runtime the line does nothing and the
+// default batching comes back (tests/unit/reveal-now.test.ts notices the change).
+export const REVEAL_NOW = "Object.defineProperty(window,'$RT',{configurable:true,get:function(){},set:function(){}})"
+const FIRST_PAINT = `document.documentElement.dataset.ui='2';${REVEAL_NOW}`
 const never = () => () => {}
 
 /** Marks the page as new design while it is on screen. */

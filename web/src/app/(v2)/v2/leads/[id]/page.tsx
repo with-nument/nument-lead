@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
+import { notFound, unstable_rethrow } from 'next/navigation'
 import { Suspense } from 'react'
 import { early, requireUser } from '@/lib/auth'
 import { canEdit, canSeeMoney } from '@/lib/roles'
@@ -45,6 +45,7 @@ async function Lead({ params, searchParams }: Pick<PageProps<'/v2/leads/[id]'>, 
   // page still shows the lead, without the thread.
   const conversationP = early(
     getLeadConversation(id).catch((e: unknown) => {
+      unstable_rethrow(e)
       console.error('lead_conversation failed', e instanceof Error ? e.message : e)
       return null
     }),
