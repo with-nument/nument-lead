@@ -16,6 +16,8 @@ export type ReplyItem = {
   quote: string
   /** What the drafted answer does, in one plain line ("Suggests two call slots and a ₹2–3L range"). */
   suggestion: string | null
+  /** False when there is no drafted answer to approve: the row then opens the lead. */
+  approvable?: boolean
 }
 
 /** A call booked for today. */

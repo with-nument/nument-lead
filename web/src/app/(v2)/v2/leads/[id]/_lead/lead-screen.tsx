@@ -46,6 +46,9 @@ type Outcome = { ok: boolean; message?: string; data?: PreviousState }
 /** The v2 lead page: one next step in the header, then Conversation, Why, People and Activity. */
 export function LeadScreen({ view, canEdit, isAdmin, includeUnverified, team, proposals, myFeedback, extras = {}, initialTab }: LeadScreenProps) {
   const thread = extras.thread ?? null
+  // The reply approved here (optimistic): hidden at once, back on Undo or when the approval fails.
+  const [approvedId, setApprovedId] = useState<string | null>(null)
+  const suggested = thread?.suggestedReply && thread.suggestedReply.messageId !== approvedId ? thread.suggestedReply : null
   const [tab, setTab] = useState<Tab>(initialTab && TABS.includes(initialTab) ? initialTab : thread?.suggestedReply ? 'conversation' : 'why')
   const [stage, setStage] = useState(view.stage)
   const [synced, setSynced] = useState(view.stage)
@@ -62,7 +65,7 @@ export function LeadScreen({ view, canEdit, isAdmin, includeUnverified, team, pr
   const now = useMemo(() => new Date(view.now), [view.now])
 
   const status = stage === view.stage ? view.status : statusOf({ stage, wa_at: null, meeting_at: null, last_activity_at: view.now, lost_reason: null }, now)
-  const primary = primaryActionFor({ stage, canEdit, hasPendingReply: Boolean(thread?.suggestedReply) })
+  const primary = primaryActionFor({ stage, canEdit, hasPendingReply: Boolean(suggested) })
   const open = !(CLOSED_STAGES as readonly string[]).includes(stage)
   const lead = { id: view.id, stage, name: view.name, money: view.money, lostReason: view.lostReason }
 
@@ -88,26 +91,42 @@ export function LeadScreen({ view, canEdit, isAdmin, includeUnverified, team, pr
   }
   const markSent = (channel: Channel | 'manual') => outcome(() => markContacted(view.id, channel), 'sent', 'Marked as contacted', stage === 'new' ? 'contacted' : undefined)
 
+  /** Approve the suggested reply (with any edits): hidden at once, with Undo (back to review) for 30 seconds. */
+  const approve = () => {
+    const s = suggested
+    const approveReply = extras.approveReply
+    if (!s || !approveReply) {
+      setTab('conversation')
+      return
+    }
+    if (!reply.trim()) {
+      toast.error('Write the reply first.')
+      return
+    }
+    setApprovedId(s.messageId)
+    start(async () => {
+      const r = await approveReply({ leadId: view.id, messageId: s.messageId, body: reply })
+      if (!r.ok) {
+        setApprovedId(null)
+        toast.error(r.message)
+        return
+      }
+      const reopen = extras.reopenReply
+      if (reopen)
+        undo.offer('Reply approved. It goes out with the next send.', async () => {
+          const u = await reopen({ leadId: view.id, messageId: s.messageId })
+          if (u.ok) setApprovedId(null)
+          return u
+        })
+      else toast(r.message ?? 'Reply approved')
+    })
+  }
+
   const runPrimary = () => {
     if (!primary || pending) return
     switch (primary.kind) {
-      case 'approve': {
-        const s = thread?.suggestedReply
-        if (!s || !extras.approveReply) {
-          setTab('conversation')
-          return
-        }
-        if (!reply.trim()) {
-          toast.error('Write the reply first.')
-          return
-        }
-        start(async () => {
-          const r = await extras.approveReply!({ leadId: view.id, messageId: s.messageId, body: reply })
-          if (r.ok) toast(r.message ?? 'Reply approved')
-          else toast.error(r.message)
-        })
-        return
-      }
+      case 'approve':
+        return approve()
       case 'contacted':
         return markSent('manual')
       case 'replied':
@@ -213,7 +232,7 @@ export function LeadScreen({ view, canEdit, isAdmin, includeUnverified, team, pr
 
 
   let body: React.ReactNode
-  if (tab === 'why') body = <Why view={view} offer={extras.offer} isAdmin={isAdmin} includeUnverified={includeUnverified} />
+  if (tab === 'why') body = <Why view={view} offer={extras.offer} profile={extras.profile} isAdmin={isAdmin} includeUnverified={includeUnverified} />
   else if (tab === 'people')
     body = (
       <People
@@ -227,7 +246,20 @@ export function LeadScreen({ view, canEdit, isAdmin, includeUnverified, team, pr
     )
   else if (tab === 'activity')
     body = <Activity view={view} stage={stage} canEdit={canEdit} isAdmin={isAdmin} proposals={proposals} myFeedback={myFeedback} onStage={(to) => stageMove.move(lead, to)} />
-  else body = <Conversation view={view} thread={thread} canEdit={canEdit} onOpen={(ch) => markSent(ch)} reply={reply} onReply={setReply} />
+  else
+    body = (
+      <Conversation
+        view={view}
+        thread={thread ? { ...thread, suggestedReply: suggested } : null}
+        canEdit={canEdit}
+        canApprove={canEdit && Boolean(extras.approveReply)}
+        onOpen={(ch) => markSent(ch)}
+        reply={reply}
+        onReply={setReply}
+        onApprove={approve}
+        approving={pending}
+      />
+    )
 
   return (
     <div className="mx-auto max-w-[1280px] px-4 pt-3 sm:px-6 lg:px-14 lg:pt-11">
@@ -298,13 +330,13 @@ export function LeadScreen({ view, canEdit, isAdmin, includeUnverified, team, pr
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_330px]">
         <div className="min-w-0">{body}</div>
         <aside aria-label="Details" className={cx(panel, 'hidden lg:block')}>
-          <Inspector view={view} thread={thread} planPage={extras.planPage} now={now} />
+          <Inspector view={view} thread={thread} planPage={extras.planPage} emailStatus={extras.emailStatus} nextEmail={suggested ? 'Approve the suggested reply.' : extras.nextEmail} now={now} />
         </aside>
       </div>
 
       <Sheet open={details} onOpenChange={setDetails}>
         <SheetContent title={view.name} description="Contact, messages and the next step">
-          <Inspector view={view} thread={thread} planPage={extras.planPage} now={now} flush />
+          <Inspector view={view} thread={thread} planPage={extras.planPage} emailStatus={extras.emailStatus} nextEmail={suggested ? 'Approve the suggested reply.' : extras.nextEmail} now={now} flush />
         </SheetContent>
       </Sheet>
       {stageMove.dialogs}

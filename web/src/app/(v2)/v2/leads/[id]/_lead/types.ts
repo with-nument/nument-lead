@@ -1,6 +1,6 @@
-// What the v2 lead page shows beyond lead_detail. Lane W3 (email outreach) fills these from the email
-// tables (migration 0022) and plan pages (0021); until then the page passes nothing and the Conversation
-// segment shows the lead's own message and follow-ups. Plain data only, so a server page can pass it.
+// What the v2 lead page shows beyond lead_detail, filled from lead_conversation (migration 0033) by extras.ts.
+// Without an email thread the Conversation segment shows the lead's own message and follow-ups. Plain data
+// only, so a server page can pass it.
 import type { ActionResult } from '@/lib/action-result'
 
 export type ConversationMessageStatus =
@@ -44,6 +44,9 @@ export type ConversationThread = {
 /** Approve (and queue) the suggested reply, with the founder's edits. A server action. */
 export type ApproveReplyAction = (input: { leadId: string; messageId: string; body: string }) => Promise<ActionResult>
 
+/** Puts an approved reply back in review (the Undo of Approve). A server action. */
+export type ReopenReplyAction = (input: { leadId: string; messageId: string }) => Promise<ActionResult>
+
 /** Props of the Conversation segment. Export for lane W3. */
 export type ConversationProps = {
   leadId: string
@@ -55,12 +58,25 @@ export type ConversationProps = {
 export type PlanPageSummary = { views: number; lastViewedAt: string | null; url: string | null; note?: string | null }
 
 /** The best offer for this lead (lead_offers rank 1 joined to offers). */
-export type BestOffer = { name: string; text: string; timeline?: string | null; range?: string | null }
+export type BestOffer = { name: string; text: string; timeline?: string | null; range?: string | null; why?: string | null }
+
+/** One known answer of the startup profile (0028), with the plain reason and up to two sources. */
+export type ProfileRow = { key: string; label: string; value: string; why: string | null; sources: { url: string; host: string; date: string }[] }
+
+/** Where the email sequence with the founder stands ("Replied 16 Nov", "Stopped: bounced"). */
+export type EmailStatus = { tone: 'ok' | 'warn' | 'bad' | 'muted'; text: string }
 
 /** Everything optional the page can be given on top of lead_detail. */
 export type LeadExtras = {
   thread?: ConversationThread | null
   approveReply?: ApproveReplyAction
+  reopenReply?: ReopenReplyAction
   planPage?: PlanPageSummary | null
   offer?: BestOffer | null
+  /** The startup profile's known answers with their evidence (Why). */
+  profile?: ProfileRow[]
+  /** The email sequence's state (inspector). */
+  emailStatus?: EmailStatus | null
+  /** What happens next on the email side (inspector, under Next step). */
+  nextEmail?: string | null
 }

@@ -2,7 +2,7 @@ import { cx } from '@/components/ui2/cx'
 import { formatDate, formatDateTime } from '@/lib/dates'
 import { eyebrow, Status } from '../../_ui/marks'
 import type { LeadView, MilestoneView } from './model'
-import type { ConversationThread, PlanPageSummary } from './types'
+import type { ConversationThread, EmailStatus, PlanPageSummary } from './types'
 
 const STEP_LABEL: Record<number, string> = { 0: 'Day 1', 3: 'Day 3', 7: 'Day 7', 12: 'Day 12' }
 
@@ -21,12 +21,18 @@ export function Inspector({
   view,
   thread,
   planPage,
+  emailStatus,
+  nextEmail,
   now,
   flush,
 }: {
   view: LeadView
   thread?: ConversationThread | null
   planPage?: PlanPageSummary | null
+  /** Where the email sequence with the founder stands. */
+  emailStatus?: EmailStatus | null
+  /** The next email step, or the reply to approve. */
+  nextEmail?: string | null
   now: Date
   /** No side padding (inside a sheet, which has its own). */
   flush?: boolean
@@ -76,30 +82,38 @@ export function Inspector({
         </section>
       ) : null}
 
-      {milestones.length ? (
+      {milestones.length || (thread && emailStatus) ? (
         <section className={section} aria-label={thread ? 'Emails' : 'Messages'}>
           <h3 className={cx(eyebrow, 'mb-2.5')}>{thread ? 'Emails' : 'Messages'}</h3>
-          <ol className="relative pl-[18px] before:absolute before:top-2 before:bottom-2 before:left-[3px] before:w-px before:bg-separator-strong">
-            {milestones.map((m, i) => (
-              <li key={i} className={cx('relative flex justify-between gap-3 py-1 text-[14px]', m.faint ? 'text-label-3' : 'text-label-1')}>
-                <span
-                  aria-hidden
-                  className={cx(
-                    'absolute top-[11px] -left-[18px] size-[7px] rounded-full',
-                    m.strong ? 'bg-panel shadow-[inset_0_0_0_2px_var(--ui-label-1)]' : 'bg-panel shadow-[inset_0_0_0_1.5px_var(--ui-label-3)]',
-                  )}
-                />
-                <span className={cx(m.strong && 'font-semibold')}>{m.label}</span>
-                <span className="shrink-0 text-label-3">{m.date}</span>
-              </li>
-            ))}
-          </ol>
+          {thread && emailStatus ? (
+            <p className="mb-2.5 text-[13.5px] text-label-2">
+              <Status tone={emailStatus.tone}>{emailStatus.text}</Status>
+            </p>
+          ) : null}
+          {milestones.length ? (
+            <ol className="relative pl-[18px] before:absolute before:top-2 before:bottom-2 before:left-[3px] before:w-px before:bg-separator-strong">
+              {milestones.map((m, i) => (
+                <li key={i} className={cx('relative flex justify-between gap-3 py-1 text-[14px]', m.faint ? 'text-label-3' : 'text-label-1')}>
+                  <span
+                    aria-hidden
+                    className={cx(
+                      'absolute top-[11px] -left-[18px] size-[7px] rounded-full',
+                      m.strong ? 'bg-panel shadow-[inset_0_0_0_2px_var(--ui-label-1)]' : 'bg-panel shadow-[inset_0_0_0_1.5px_var(--ui-label-3)]',
+                    )}
+                  />
+                  <span className={cx(m.strong && 'font-semibold')}>{m.label}</span>
+                  <span className="shrink-0 text-label-3">{m.date}</span>
+                </li>
+              ))}
+            </ol>
+          ) : null}
         </section>
       ) : null}
 
       <section className={section} aria-label="Next step">
         <h3 className={cx(eyebrow, 'mb-2')}>Next step</h3>
-        <p className="text-[14.5px] text-label-1">{view.nextStep ?? 'None set. Add one under Activity.'}</p>
+        <p className="text-[14.5px] text-label-1">{view.nextStep ?? nextEmail ?? 'None set. Add one under Activity.'}</p>
+        {view.nextStep && nextEmail ? <p className="type-subhead mt-1 text-label-2">{nextEmail}</p> : null}
         {view.dueLabel ? (
           <p className="type-subhead mt-1 text-label-2">{view.overdue ? <Status tone="warn">Was due {view.dueLabel}</Status> : `Due ${view.dueLabel}`}</p>
         ) : null}

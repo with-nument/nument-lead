@@ -1,4 +1,4 @@
-// Sample data for the v2 Leads, Lead and Deals screens: the design kit preview (/v2/kit/w2/...) and the unit
+// Sample data for the v2 Leads, Lead and Deals screens, so the unit
 // tests render them without a database. Invented companies and people only, never real leads.
 import type { Board, LeadDetail, LeadListRow } from '@/lib/queries/page-data'
 

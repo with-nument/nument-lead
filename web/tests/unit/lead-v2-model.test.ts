@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { toBoardView } from '@/app/(v2)/v2/deals/_board/model'
 import { activityText, primaryActionFor, statusOf, toLeadView } from '@/app/(v2)/v2/leads/[id]/_lead/model'
 import { contactOf, extraFilterCount, scopeFilters, scopeOf } from '@/app/(v2)/v2/leads/_list/model'
-import { MOCK_NOW, mockBoard, mockLeadDetail } from '@/app/(v2)/v2/kit/w2/mock'
+import { MOCK_NOW, mockBoard, mockLeadDetail } from './fixtures/v2-mock'
 import { EMPTY_FILTERS } from '@/lib/leads-filters'
 
 const ctx = { now: MOCK_NOW, isAdmin: true, names: new Map<string, string>(), segmentOf: () => 'Startups' }

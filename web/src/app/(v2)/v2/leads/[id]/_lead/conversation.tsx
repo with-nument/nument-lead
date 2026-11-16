@@ -207,14 +207,23 @@ export function Conversation({
   onOpen,
   reply,
   onReply,
+  canApprove = false,
+  onApprove,
+  approving = false,
 }: Omit<ConversationProps, 'leadId' | 'approveReply'> & {
   view: LeadView
   canEdit: boolean
   onOpen: (channel: Channel) => void
   reply: string
   onReply: (text: string) => void
+  /** The person may approve the suggested reply (admin or caller, and the action is wired). */
+  canApprove?: boolean
+  /** Approve the suggested reply, the same as the header's Approve reply. */
+  onApprove?: () => void
+  approving?: boolean
 }) {
   const now = useMemo(() => new Date(view.now), [view.now])
+  const [editing, setEditing] = useState(false)
   if (!thread) return <Messages view={view} canEdit={canEdit} onOpen={onOpen} />
   return (
     <div className="flex flex-col gap-4">
@@ -239,15 +248,27 @@ export function Conversation({
           <label id="reply-h" htmlFor="suggested-reply" className={cx(eyebrow, 'mb-2 block')}>
             Suggested reply
           </label>
-          <textarea
-            id="suggested-reply"
-            rows={6}
-            value={reply}
-            readOnly={!canEdit}
-            onChange={(e) => onReply(e.currentTarget.value)}
-            className={textareaClass}
-          />
-          <p className="type-subhead mt-2 text-label-3">Edit it here, then approve it at the top. Nothing is sent until you approve.</p>
+          {editing && canApprove ? (
+            <textarea id="suggested-reply" rows={8} value={reply} autoFocus onChange={(e) => onReply(e.currentTarget.value)} className={textareaClass} />
+          ) : (
+            <p id="suggested-reply" className="whitespace-pre-line text-[16px] leading-[1.55] text-label-1 lg:text-[15px]">
+              {reply}
+            </p>
+          )}
+          {canApprove ? (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <button type="button" className={outlineClass('regular')} disabled={approving || !reply.trim()} onClick={onApprove}>
+                <Check aria-hidden />
+                Approve
+              </button>
+              <button type="button" className={plainClass('regular')} onClick={() => setEditing((e) => !e)} aria-pressed={editing}>
+                {editing ? 'Done editing' : 'Edit'}
+              </button>
+              <span className="type-subhead text-label-3 lg:ml-auto">Nothing is sent until you approve. 30 s to undo.</span>
+            </div>
+          ) : (
+            <p className="type-subhead mt-3 text-label-3">An admin or caller approves this reply before it is sent.</p>
+          )}
         </section>
       ) : null}
     </div>

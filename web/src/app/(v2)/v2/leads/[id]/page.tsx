@@ -3,8 +3,11 @@ import { notFound } from 'next/navigation'
 import { Suspense } from 'react'
 import { early, requireUser } from '@/lib/auth'
 import { canEdit, canSeeMoney } from '@/lib/roles'
+import { getLeadConversation } from '@/lib/queries/email'
 import { getLeadDetail, getProposals } from '@/lib/queries/lead'
 import { getSegments, getTeam, segmentLabeler } from '@/lib/queries/shared'
+import { approveReply, reopenReply } from './_lead/actions'
+import { toLeadExtras, type SourceOf } from './_lead/extras'
 import { LeadScreen, type Tab } from './_lead/lead-screen'
 import { LeadSkeleton } from './_lead/skeleton'
 import { toLeadView } from './_lead/model'
@@ -38,11 +41,35 @@ async function Lead({ params, searchParams }: Pick<PageProps<'/v2/leads/[id]'>, 
   // (RLS), so it starts now, before the session check. Unverified facts only when an admin asks.
   const wantsUnverified = sp.unverified === '1'
   const detailP = early(getLeadDetail(id, { includeUnverified: wantsUnverified }))
+  // The email side (lead_conversation: thread, offers, plan pages, startup profile) in parallel. If it fails the
+  // page still shows the lead, without the thread.
+  const conversationP = early(
+    getLeadConversation(id).catch((e: unknown) => {
+      console.error('lead_conversation failed', e instanceof Error ? e.message : e)
+      return null
+    }),
+  )
   const user = await requireUser()
   const isAdmin = canSeeMoney(user.role)
-  const [detail, team, segments, proposals] = await Promise.all([detailP, getTeam(), getSegments(), isAdmin ? getProposals(id) : Promise.resolve([])])
+  const [detail, conversation, team, segments, proposals] = await Promise.all([
+    detailP,
+    conversationP,
+    getTeam(),
+    getSegments(),
+    isAdmin ? getProposals(id) : Promise.resolve([]),
+  ])
   if (!detail) notFound()
   const now = new Date()
+  // Evidence ids in the startup profile point at facts and signals: their sources come from lead_detail.
+  const sources: SourceOf = new Map([
+    ...detail.facts.map((f) => [f.id, { url: f.url, at: f.created_at }] as const),
+    ...detail.signals.map((sg) => [sg.id, { url: sg.url, at: sg.observed_at }] as const),
+  ])
+  const extras = {
+    ...toLeadExtras(conversation, { contactName: detail.lead.contact_name ?? null, sources, now }),
+    approveReply,
+    reopenReply,
+  }
   const view = toLeadView(detail, { now, isAdmin, names: new Map(team.map((m) => [m.id, m.name])), segmentOf: segmentLabeler(segments) })
   const mine = detail.feedback.find((f) => f.user_id === user.id) ?? null
   const tab = typeof sp.tab === 'string' && TABS.has(sp.tab as Tab) ? (sp.tab as Tab) : null
@@ -57,6 +84,7 @@ async function Lead({ params, searchParams }: Pick<PageProps<'/v2/leads/[id]'>, 
       proposals={proposals.map((p) => ({ path: p.path, name: p.name, size: p.size }))}
       myFeedback={mine ? { rating: mine.rating, reason: mine.reason } : null}
       initialTab={tab}
+      extras={extras}
     />
   )
 }

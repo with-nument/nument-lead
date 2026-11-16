@@ -2846,6 +2846,7 @@ export type Database = {
       revoke_user_sessions: { Args: { target_user: string }; Returns: number }
       save_call_notes: { Args: { lead_id: string; notes: string }; Returns: Json }
       search_leads: { Args: { max?: number; q: string }; Returns: Json }
+      today_overnight: { Args: never; Returns: Json }
     }
     Enums: {
       [_ in never]: never

@@ -37,7 +37,7 @@ afterEach(() => {
 })
 
 describe('check-bundles', () => {
-  const v2 = ['/v2', '/v2/calls', '/v2/deals', '/v2/inbox', '/v2/leads', '/v2/insights', '/v2/settings', '/v2/engine']
+  const v2 = ['/v2', '/v2/calls', '/v2/deals', '/v2/inbox', '/v2/leads', '/v2/leads/[id]', '/v2/insights', '/v2/settings', '/v2/engine']
   const underBudget = {
     '/login': [100],
     '/': [120],

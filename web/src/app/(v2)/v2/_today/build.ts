@@ -7,6 +7,8 @@ import type { CallItem, FollowupItem, OvernightStat, ProposalItem, ReplyItem, St
 
 export type TodayData = {
   replies: ReplyItem[]
+  /** Every reply waiting, when `replies` lists only the newest few. */
+  replyTotal?: number
   calls: CallItem[]
   proposals: ProposalItem[]
   followups: FollowupItem[]
@@ -64,7 +66,9 @@ export function firstStep(d: TodayData): TodayStep | null {
 }
 
 /** How many things need the person: each reply, call, proposal and follow-up, and the startup batch as one. */
-export const thingsToDo = (d: TodayData) => d.replies.length + d.calls.length + d.proposals.length + d.followups.length + (d.startups.length ? 1 : 0)
+const repliesWaiting = (d: TodayData) => Math.max(d.replyTotal ?? 0, d.replies.length)
+
+export const thingsToDo = (d: TodayData) => repliesWaiting(d) + d.calls.length + d.proposals.length + d.followups.length + (d.startups.length ? 1 : 0)
 
 const plural = (n: number, one: string, many: string) => `${formatNumber(n)} ${n === 1 ? one : many}`
 
@@ -89,7 +93,7 @@ export function headline(d: TodayData, now: Date): { title: string; compact: str
   const step = firstStep(d)
   const start =
     step === 'replies'
-      ? `Start with ${plural(d.replies.length, 'reply', 'replies')}.`
+      ? `Start with ${plural(repliesWaiting(d), 'reply', 'replies')}.`
       : step === 'calls'
         ? 'Start with your calls.'
         : step === 'proposals'
@@ -101,7 +105,7 @@ export function headline(d: TodayData, now: Date): { title: string; compact: str
   return { title: `${hello}. ${things} today.`, compact: things, subtitle: `${start}${call}` }
 }
 
-/** The numbers card, from what home_summary counts today. The email work adds the overnight numbers later. */
+/** The numbers card when the overnight numbers are not available (today_overnight, 0034, not applied yet). */
 export function pipelineStats(summary: HomeSummary): OvernightStat[] {
   const k = summary.kpis
   const rows: OvernightStat[] = [
