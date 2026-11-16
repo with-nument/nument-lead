@@ -63,3 +63,69 @@ grades: {A: 75, B: 55, C: 40}   # D under 40
 fit_only_max_pct: 50            # fit-only leads a day per segment: at most this share of the other new leads,
 fit_only_min_per_day: 5         # but always up to this many (strong fit-only businesses are real B leads)
 judge_top_share: 0.5            # the best half by total (and every A) goes to the top model
+
+# Score s3.0 (15 Nov 2026) for startup segments (domain firms); every other segment keeps s2.0 above.
+# The target: startups of 2 to 10 people, idea to small seed (under about $2M raised), without a tech team.
+# Funding alone is not the signal; funding plus no tech team is. Four parts that add up to 100:
+#   need (0 to 35) + fit (0 to 25) + can pay (0 to 20) + reach (0 to 20)
+# Grade D for more than settings startup.max_team people, a team with engineers, a late round, more than
+# settings startup.max_raise_usd raised, or a business that is not a startup. The grade lines are the s2.0
+# ones above (A 75, B 55, C 40), so the judge reads both scores the same way. pipeline/qualify.py works out the
+# profile (tech team, size, money, product) and pipeline/score_startup.py the score.
+startup:
+  need:
+    no_tech_team: 15            # two independent signs that nobody technical is on the team (contract 4.3)
+    lone_cto: 8                 # exactly one technical person and no engineers
+    one_sign: 7                 # one sign of no tech team so far
+    stated_multiplier: 2.0      # their own ask or builder job post: signal points x 2.0, fresher counts more
+    stated_cap: 20
+    first_builder: 4            # the job post is for a founding engineer, first developer, CTO or technical co-founder
+    trigger_multiplier: 1.6     # fresh funding, a launch or news: signal points x 1.6, fresher counts more
+    trigger_cap: 8
+    cap: 35
+  fit:
+    startup: {shown: 6, unknown: 3}                  # shown: a startup sign (qualify.py)
+    size: {small: 6, mid: 5, solo: 3, unknown: 3}   # small: 2 to small_max people; mid: up to max_team; solo: 1
+    small_max: 5
+    stage: {early: 5, unknown: 2}                    # an early round (idea to seed) is known
+    product: {to_build: 5, live: 3, unknown: 2}      # to_build: idea, landing, waitlist or no-code; live: an app
+    young: {new: 3, middle: 1, old: 0, unknown: 1}   # online or founded within new_years, middle_years, or longer
+    new_years: 3
+    middle_years: 6
+  can_pay:                      # the best money sign, the best revenue sign, plus the small ones, at most cap
+    cap: 20
+    raised_250k: 20             # raised at least $250,000 in the last funding_valid_days
+    raised_50k: 16
+    raised_small: 8
+    round_known: 14             # an early round without an amount
+    accelerator: 14
+    crowdfunding: 10
+    grant: 8
+    revenue: 14                 # a stated revenue, ARR or MRR
+    paying_customers: 10
+    pricing: 6                  # published prices for their own product
+    hiring_builder: 6           # a builder job post: there is a budget for building
+    pays_for_tools: 3           # paid tools on their domain (Stripe, HubSpot, Google Workspace, ...)
+    custom_domain: 2            # a live site on its own domain
+    yes_at: 14                  # can_pay 'yes' from this many points, 'likely' from likely_at
+    likely_at: 6
+    funding_valid_days: 540     # money raised this long ago still counts
+  reach:                        # the founder email ladder (contract 4.4); a guess counts only once checked
+    verified_owner_email: 1.00
+    likely_owner_email: 0.85    # catch-all or risky but backed by a published address, or published by the person
+    company_email: 0.70
+    phone: 0.40
+    form: 0.30
+    none: 0.00
+  reach_points: 20
+  tech:
+    engineering_roles_team: 3   # a careers board with this many engineering roles: they are building a team
+    github_members_team: 2      # public members of their GitHub org, with a push in the last github_active_days
+    github_active_days: 180
+    signal_days: 180            # job posts and public asks this recent count as signs
+  max_age_years: 10             # founded or online longer ago, with no startup sign: not a startup
+  caps:                         # the most a lead can grade when...
+    no_contact: B               # nobody to email yet (founder_emails still searches B leads)
+    no_tech_evidence: C         # nothing yet about the tech team and no ask of their own: funding alone is no lead
+    no_gap_or_ask: B            # one sign only (two make it proof) or a lone CTO, and no ask of their own
+    no_budget: C                # equity only or unpaid, and no money seen: not a buyer now

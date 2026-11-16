@@ -26,6 +26,8 @@ from ..logging import get_logger
 from ..models import FlaggedVerification
 from ..segments import Segment, load_segments, load_yaml_config
 from ..settings import get_settings
+from ..sources.startup import _ROUND_WORDS as ROUND_WORDS  # the one list of round words
+from ..sources.startup import normalize_round
 from . import ai, evidence, lines
 from .evidence import CODE_MODELS, Row, fact_count, fact_flag, fact_text, on_domain, vget
 from .phones import (
@@ -158,6 +160,20 @@ AGENCY_FIELDS: Final = ("business_name", "is_agency_or_vendor", "service", "sale
 AGENCY_QUESTION: Final = (
     "Is this business an agency or software vendor that sells the same services as Nument "
     "(websites, apps, software, automation, marketing or hiring services)?"
+)
+# A startup (domain firms) sells its own product, often software: "CRM for dentists" or "an AI scheduling app" is
+# what it builds, not a service it sells. It is a competitor only when it builds, markets or hires for clients
+# (15 Nov 2026).
+_STARTUP_COMPETITOR: Final = re.compile(
+    r"\b(?:(?:custom )?software development|app development|web\s?(?:site)?\s?(?:design|development)|"
+    r"mvp development|development (?:services|agency|studio)|it (?:services|solutions|consulting|outsourcing)|"
+    r"staffing|recruitment|placement|outsourcing|digital marketing|social media marketing|seo)\b",
+    re.I,
+)
+STARTUP_AGENCY_QUESTION: Final = (
+    "Does this business sell building, IT, marketing or hiring services to other businesses (a software or app "
+    "development agency, an IT services firm, a marketing agency, a staffing or recruitment firm)? A startup that "
+    "sells its own product, such as an app, a SaaS or a marketplace, is not one."
 )
 
 
@@ -297,6 +313,187 @@ def email_belongs_to(email: str, name: str) -> bool:
     local = re.sub(r"[^a-z]", "", email.split("@", 1)[0].lower())
     parts = [re.sub(r"[^a-z]", "", p.lower()) for p in bare_name(name).split()]
     return any(len(p) >= 3 and p in local for p in parts)
+
+
+# =========================================================================
+# 10.2.5 The startup fields of extract_facts v2 (15 Nov 2026): the value itself must be in the quote
+# =========================================================================
+# A quote found on the page proves the line exists; these checks prove the line says what the fact claims, so a
+# right quote with an invented number, name or kind never counts. Qualification (pipeline/qualify.py) reads only
+# facts that pass both.
+
+STARTUP_FACT_FIELDS: Final = frozenset(
+    {"team_member", "team_size", "founded_year", "product_status", "uses_ai", "funding_mention", "revenue_hint",
+     "tech_statement"}
+)  # fmt: skip
+NUMBER_WORDS: Final[dict[str, int]] = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+    "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16, "seventeen": 17,
+    "eighteen": 18, "nineteen": 19, "twenty": 20, "dozen": 12, "solo": 1,
+}  # fmt: skip
+_AMOUNT: Final = re.compile(
+    r"(\d+(?:[.,]\d+)*)\s*(k|thousand|m|mn|mm|million|b|bn|billion|lakhs?|lacs?|crores?|cr)?(?![a-z])", re.I
+)
+_SCALES: Final[dict[str, float]] = {
+    "k": 1e3, "thousand": 1e3, "m": 1e6, "mn": 1e6, "mm": 1e6, "million": 1e6, "b": 1e9, "bn": 1e9,
+    "billion": 1e9, "lakh": 1e5, "lakhs": 1e5, "lac": 1e5, "lacs": 1e5, "crore": 1e7, "crores": 1e7, "cr": 1e7,
+}  # fmt: skip
+AMOUNT_TOLERANCE: Final = 0.02
+_ROLE_STOP: Final = frozenset({"and", "the", "of", "at", "for", "our", "with", "head", "lead", "team"})
+_AI_WORDS: Final = re.compile(
+    r"\b(?:ai|a\.i\.|artificial intelligence|machine learning|ml|deep learning|llms?|gpt|chatgpt|openai|"
+    r"generative|genai|neural|computer vision|nlp|natural language|speech recognition|copilot)\b",
+    re.I,
+)
+KIND_WORDS: Final[dict[str, re.Pattern[str]]] = {
+    # revenue_hint kinds
+    "revenue": re.compile(r"\b(?:revenue|arr|mrr|sales|turnover|profitable|profit|run[\s-]?rate|gmv)\b|[$€£₹]", re.I),
+    "paying_customers": re.compile(
+        r"\b(?:customers?|clients?|users?|subscribers?|brands?|companies|teams|businesses|merchants|partners|"
+        r"trusted by|used by|paying)\b",
+        re.I,
+    ),
+    "pricing": re.compile(
+        r"\b(?:price|pricing|plans?|per (?:month|year|user|seat)|/mo|monthly|annual|free trial)\b|[$€£₹]\s?\d", re.I
+    ),
+    "no_budget": re.compile(
+        r"\b(?:equity[\s-]?(?:only|based)|for equity|sweat equity|unpaid|no (?:salary|budget|pay)|volunteer|"
+        r"revenue[\s-]?share|rev[\s-]?share|deferred (?:pay|salary)|without pay)\b",
+        re.I,
+    ),
+    # tech_statement kinds
+    "engineering_team": re.compile(
+        r"\b(?:engineers?|engineering|developers?|dev team|tech(?:nical)? team|in[\s-]?house|programmers?)\b", re.I
+    ),
+    "no_technical_team": re.compile(
+        r"\b(?:non[\s-]?technical|technical co[\s-]?founder|cto|technical partner|developers?|engineers?|"
+        r"tech(?:nical)? team|coders?|code|programmers?|tech lead|first hire)\b",
+        re.I,
+    ),
+    "outsourced": re.compile(
+        r"\b(?:agency|agencies|freelanc\w*|outsourc\w*|studio|contractors?|development partner|dev shop|"
+        r"partnered with|built by|built with)\b",
+        re.I,
+    ),
+    "no_code": re.compile(
+        r"\b(?:no[\s-]?code|low[\s-]?code|bubble|webflow|softr|glide|adalo|flutterflow|thunkable|lovable|bolt|"
+        r"replit|framer|wix|squarespace|carrd|airtable|zapier|make\.com|appsheet|retool)\b",
+        re.I,
+    ),
+    # product_status values a line can contradict (idea and landing need no word; no_code uses the words above)
+    "waitlist": re.compile(
+        r"\b(?:wait[\s-]?list|waiting list|early access|beta|join|sign[\s-]?up|notify|launching|coming soon|"
+        r"pre[\s-]?order|reserve|request (?:access|an invite)|invite)\b",
+        re.I,
+    ),
+    "mobile_app": re.compile(
+        r"\b(?:app store|google play|play store|download|ios|android|iphone|mobile app|apps?)\b", re.I
+    ),
+    "web_app": re.compile(
+        r"\b(?:sign[\s-]?in|log[\s-]?in|sign[\s-]?up|get started|start (?:free|now|for free)|free trial|try|"
+        r"dashboard|app|platform|demo|subscribe|account|workspace)\b",
+        re.I,
+    ),
+}
+
+
+def numbers_in(text: str | None) -> set[int]:
+    """Whole numbers written in a line, as digits or words ("a team of six" -> {6})."""
+    low = (text or "").lower()
+    found = {int(n.replace(",", "")) for n in re.findall(r"\d[\d,]*", low) if n.replace(",", "").isdigit()}
+    found |= {v for w, v in NUMBER_WORDS.items() if re.search(rf"\b{w}\b", low)}
+    return found
+
+
+def _number_values(raw: str) -> set[float]:
+    """'1,500,000' -> {1500000}; '1.5' -> {1.5}; '2,5' -> {2.5, 25}; '1.500' -> {1.5, 1500} (both readings)."""
+    if "," in raw and "." in raw:
+        decimal = "," if raw.rfind(",") > raw.rfind(".") else "."
+        other = "." if decimal == "," else ","
+        return {float(raw.replace(other, "").replace(decimal, "."))}
+    sep = "," if "," in raw else "." if "." in raw else ""
+    if not sep:
+        return {float(raw)}
+    groups = raw.split(sep)
+    out: set[float] = set()
+    if all(len(g) == 3 for g in groups[1:]):
+        out.add(float("".join(groups)))  # thousands separators
+    if len(groups) == 2:
+        out.add(float(f"{groups[0]}.{groups[1]}"))  # a decimal point or comma
+    return out
+
+
+def amounts_in(text: str | None) -> set[float]:
+    """Money amounts written in a line, with their scale words: '$1.5M' -> 1500000, '₹2 crore' -> 20000000."""
+    out: set[float] = set()
+    for m in _AMOUNT.finditer(text or ""):
+        scale = _SCALES.get((m.group(2) or "").lower(), 1.0)
+        out |= {v * scale for v in _number_values(m.group(1))}
+    return out
+
+
+def rounds_in(text: str | None) -> set[str]:
+    """Every funding round a line names ("after our pre-seed we raised a seed round" -> pre_seed and seed)."""
+    low = (text or "").lower()
+    return {name for pattern, name in ROUND_WORDS if re.search(pattern, low)}
+
+
+def _role_words(role: str) -> list[str]:
+    return [w for w in re.findall(r"[a-z]+", role.lower()) if len(w) >= 2 and w not in _ROLE_STOP]
+
+
+def value_problem(fact: Mapping[str, Any]) -> str | None:
+    """Why a v2 startup fact's value is not what its quote says, or None when it is (10.2.5)."""
+    field_name = fact.get("field")
+    if field_name not in STARTUP_FACT_FIELDS:
+        return None
+    raw = fact.get("value")
+    value: Mapping[str, Any] = raw if isinstance(raw, Mapping) else {}
+    quote = str(fact.get("quote") or "")
+    low = norm(quote)
+    if field_name == "team_member":
+        name = str(value.get("name") or "").strip()
+        if not name or not name_positions(quote, name):
+            return "name_not_in_quote"
+        role = str(value.get("role") or "")
+        words = _role_words(role)
+        if words and not any(re.search(rf"\b{re.escape(w)}", low) for w in words):
+            return "role_not_in_quote"
+        return None
+    if field_name == "team_size":
+        count = fact_count(fact)
+        return None if count is not None and count in numbers_in(quote) else "number_not_in_quote"
+    if field_name == "founded_year":
+        year = value.get("year")
+        return None if year is not None and str(year) in quote else "year_not_in_quote"
+    if field_name == "funding_mention":
+        amount = value.get("amount")
+        if amount is not None:
+            try:
+                want = float(amount)
+            except (TypeError, ValueError):
+                return "amount_not_in_quote"
+            if want > 0 and not any(abs(a - want) <= AMOUNT_TOLERANCE * want for a in amounts_in(quote)):
+                return "amount_not_in_quote"
+        stated = normalize_round(str(value.get("round") or ""))
+        if stated != "unknown" and stated not in rounds_in(quote):
+            return "round_not_in_quote"
+        return None
+    if field_name == "uses_ai":
+        return "ai_not_in_quote" if value.get("value") is True and not _AI_WORDS.search(quote) else None
+    kind = str(value.get("kind") or value.get("value") or "")
+    pattern = KIND_WORDS.get(kind)
+    if field_name in ("revenue_hint", "tech_statement", "product_status") and pattern and not pattern.search(quote):
+        return "kind_not_in_quote"
+    return None
+
+
+def value_checked(fact: Mapping[str, Any], state: FactState) -> FactState:
+    """A passing quote check stays verified only when the value is in the quote too (10.2.5)."""
+    problem = value_problem(fact) if state.verified else None
+    if problem is None:
+        return state
+    return FactState(False, state.score, problem, state.url, state.page_id)
 
 
 # =========================================================================
@@ -478,7 +675,7 @@ def verify_quotes(bundle: Bundle, region: str) -> dict[str, FactState]:
             continue
         result = check_quote(f.get("quote"), cited.get("text")) if cited and cited.get("text") else None
         if result is not None and result.ok:
-            states[fid] = FactState(True, result.score, result.why)
+            states[fid] = value_checked(f, FactState(True, result.score, result.why))
             continue
         # 9.18: the model sometimes cites the home page for a line on the contact page.
         moved = None
@@ -490,7 +687,7 @@ def verify_quotes(bundle: Bundle, region: str) -> dict[str, FactState]:
                 moved = FactState(True, other.score, f"{other.why}_other_page", p["url"], str(p["id"]))
                 break
         if moved is not None:
-            states[fid] = moved
+            states[fid] = value_checked(f, moved)
         elif result is not None:
             states[fid] = FactState(False, result.score, result.why)
         else:
@@ -574,6 +771,7 @@ def competitor_hints(bundle: Bundle, verified: Sequence[Row], excl: Exclusions) 
     b = bundle.business
     hints: list[str] = []
     partner = str(b.get("segment_id") or "").startswith("partners-")  # agencies are the target there
+    startup = str(b.get("segment_id") or "").startswith("firms-")  # a product startup sells its own software
     agency_facts = [f for f in evidence.by_field(verified, "is_agency_or_vendor") if fact_flag(f) is True]
     if agency_facts and not partner:
         hints.append(f"is_agency_or_vendor fact {evidence.short_id(agency_facts[0]['id'])}")
@@ -594,7 +792,8 @@ def competitor_hints(bundle: Bundle, verified: Sequence[Row], excl: Exclusions) 
     if listed:
         hints.append(listed)
     services = [fact_text(f) for f in evidence.by_field(verified, "service")]
-    selling = [s for s in services if (_PARTNER_COMPETITOR if partner else _SERVICE_COMPETITOR).search(s)]
+    sells = _PARTNER_COMPETITOR if partner else _STARTUP_COMPETITOR if startup else _SERVICE_COMPETITOR
+    selling = [s for s in services if sells.search(s)]
     if len(selling) >= 2 and len(selling) * 2 >= len(services):
         hints.append(f"{len(selling)} of {len(services)} services are software, marketing or hiring")
     return hints
@@ -1271,7 +1470,7 @@ def plan_business(
             {
                 "business_name": b.get("name"),
                 "field": "is_agency_or_vendor",
-                "question": AGENCY_QUESTION,
+                "question": STARTUP_AGENCY_QUESTION if seg.domain == "firms" else AGENCY_QUESTION,
                 "hint": hints[0],
                 "facts": [
                     {k: v for k, v in _fact_payload(f, by_id, by_url).items() if k != "context"}

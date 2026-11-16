@@ -116,8 +116,8 @@ tiers:
       fallbacks: [g_flash_prev, g_lite, o_mini]   # batch on the first one available (4.10.2)
       mode: batch
       schema: FactsExtraction
-      prompt: extract_facts.md
-      max_output_tokens: 3000
+      prompt: extract_facts.md            # v2 (15 Nov 2026): the startup fields
+      max_output_tokens: 4000             # v2 answers for startups carry the team and money facts too
       temperature: 0.0
       thinking: low
       tools: []

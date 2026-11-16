@@ -484,8 +484,59 @@ class TextFact(Quoted):
     value: str
 
 
+# ---- extract_facts v2: what a startup's own pages say (15 Nov 2026) ----------
+ProductStatus = Literal["idea", "landing", "waitlist", "no_code", "web_app", "mobile_app"]
+PRODUCT_STATUSES: Final[tuple[str, ...]] = get_args(ProductStatus)
+RevenueHintKind = Literal["revenue", "paying_customers", "pricing", "no_budget"]
+TechStatementKind = Literal["engineering_team", "no_technical_team", "outsourced", "no_code"]
+
+
+class TeamMemberFact(Quoted):
+    """One person the pages list as part of the team (not an investor or advisor)."""
+
+    name: str
+    role: str | None = None
+    is_founder: bool = Field(description="A founder or co-founder")
+    is_engineer: bool = Field(
+        description="Writes code or leads engineering: CTO, engineer, developer, technical co-founder"
+    )
+
+
+class YearFact(Quoted):
+    year: int = Field(ge=1900, le=2100)
+
+
+class ProductStatusFact(Quoted):
+    value: ProductStatus
+    platform: str | None = Field(default=None, description="The no-code tool when the page names it, e.g. Bubble")
+
+
+class FundingFact(Quoted):
+    """Money the company says it raised."""
+
+    round: str | None = Field(default=None, description="As written, e.g. pre-seed, seed, angel, grant, Series A")
+    amount: float | None = Field(default=None, ge=0, description="A plain number, e.g. 1500000 for $1.5M")
+    currency: str | None = Field(default=None, description="ISO 4217 code, e.g. USD, EUR, GBP, INR")
+    date: str | None = Field(default=None, description="When, as written, e.g. March 2025")
+
+
+class RevenueHintFact(Quoted):
+    kind: RevenueHintKind
+    value: str
+
+
+class TechStatementFact(Quoted):
+    """A line about who builds the product."""
+
+    kind: TechStatementKind
+
+
 class FactsExtraction(BaseModel):
-    """`extract_facts`: facts from a business's own pages, each with a quote and a URL (Step 9.12)."""
+    """`extract_facts`: facts from a business's own pages, each with a quote and a URL (Step 9.12).
+
+    v2 (15 Nov 2026) adds the startup fields at the end: who is on the team and who builds the product, the
+    product's status, AI, money raised or earned, the stated team size and the founding year. Each one is
+    quote-backed like the rest and verified by code (pipeline/verify.py)."""
 
     business_name: TextFact | None = None
     decision_makers: list[PersonFact] = Field(default_factory=list, max_length=5)
@@ -509,6 +560,15 @@ class FactsExtraction(BaseModel):
     sales_notes: list[TextFact] = Field(
         default_factory=list, max_length=3, description="Quoted observations useful for a first message"
     )
+    # v2: the startup fields, empty for businesses that are not startups
+    team_members: list[TeamMemberFact] = Field(default_factory=list, max_length=12)
+    team_size: CountFact | None = Field(default=None, description="Total people, only when a page states it")
+    founded_year: YearFact | None = None
+    product_status: ProductStatusFact | None = None
+    uses_ai: FlagFact | None = Field(default=None, description="True when the product itself uses AI")
+    funding_mentions: list[FundingFact] = Field(default_factory=list, max_length=3)
+    revenue_hints: list[RevenueHintFact] = Field(default_factory=list, max_length=3)
+    tech_statements: list[TechStatementFact] = Field(default_factory=list, max_length=3)
 
 
 class FlaggedVerification(BaseModel):

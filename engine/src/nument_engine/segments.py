@@ -61,6 +61,20 @@ COUNTRY_NAMES: dict[str, str] = {
     "au": "Australia",
     "ca": "Canada",
     "sg": "Singapore",
+    # the startup segments (15 Nov 2026): every country config/outreach.yaml allows
+    "ie": "Ireland",
+    "nl": "the Netherlands",
+    "fr": "France",
+    "se": "Sweden",
+    "fi": "Finland",
+    "be": "Belgium",
+    "pt": "Portugal",
+    "nz": "New Zealand",
+    "br": "Brazil",
+    "mx": "Mexico",
+    "ph": "the Philippines",
+    "my": "Malaysia",
+    "id": "Indonesia",
 }
 
 

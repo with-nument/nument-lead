@@ -256,7 +256,7 @@ def test_email_first_countries_get_the_compliance_footer(monkeypatch: pytest.Mon
     )
     segs = load_segments()
     body = "Hi Maya,\n\nSaw you're hiring a full-stack engineer. We can ship it in weeks."
-    assert m.with_footer(body, segs["firms-in"]) == body  # WhatsApp-first countries: no footer
+    assert m.with_footer(body, segs["clinics-in"]) == body  # WhatsApp-first segments: no footer (startups email)
     us = m.with_footer(body, segs["firms-us"])
     assert us is not None and us.endswith(f"Team Nument\n{m.OPT_OUT_LINE}")
     address["value"] = "Nument, 1 Example Road, New Delhi 110001, India"

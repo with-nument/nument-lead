@@ -37,6 +37,7 @@ EXPECTED_FILES = [
     "0022_outreach.sql",
     "0023_auth_claims.sql",
     "0024_page_reads.sql",
+    "0028_startup_profile_evidence.sql",
 ]
 
 

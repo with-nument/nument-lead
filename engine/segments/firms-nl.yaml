@@ -1,0 +1,124 @@
+# Startups without a tech team, the Netherlands (founder reset, 15 Nov 2026): startups of 2 to 10 people, idea to small
+# seed (under about $2M raised), with no technical person or a lone CTO. A business exists here only because a
+# startup source found it (funding news, launch lists, filings, job posts, public asks); qualification
+# (pipeline/qualify.py) and score s3.0 (pipeline/score_startup.py) decide who is a lead. Agencies, IT services
+# firms and staffing companies are never leads here. Outreach is email only (config/outreach.yaml allows nl).
+id: firms-nl
+domain: firms
+country: nl
+display_name: Startups without a tech team, Netherlands
+enabled: true
+timezone: Europe/Amsterdam
+currency: EUR
+universe: signals_only
+outreach_channel: email          # the email autopilot writes to founders; never a cold WhatsApp
+
+quota:
+  daily_research: 10
+
+cities:
+  - name: Amsterdam
+    aliases: []
+    bbox: [4.72, 52.28, 5.08, 52.43]
+    localities: [Zuidas, Amsterdam Noord]
+  - name: Rotterdam
+    aliases: []
+    bbox: [4.35, 51.85, 4.60, 51.98]
+    localities: [Rotterdam Centrum]
+  - name: Utrecht
+    aliases: []
+    bbox: [5.03, 52.04, 5.17, 52.13]
+    localities: [Utrecht Centrum]
+  - name: Eindhoven
+    aliases: []
+    bbox: [5.38, 51.40, 5.53, 51.50]
+    localities: [Strijp-S]
+  - name: The Hague
+    aliases: [Den Haag]
+    bbox: [4.20, 52.03, 4.40, 52.13]
+    localities: [Den Haag Centrum]
+
+overture: {categories: []}      # no map universe (universe: signals_only)
+places: {queries: [], details_per_day: 0, reviews_per_day: 0}
+registries: []
+osm: {enabled: false}
+apna: {pages_per_day: 0}
+adzuna_enabled: false
+
+job_keywords:
+  frontdesk: [customer support executive, customer success executive]
+  builder: [founding engineer, first engineer, founding developer, cto, technical co-founder, tech co-founder,
+            full stack developer, mvp developer, app developer, mobile app developer, react developer,
+            react native developer, flutter developer, backend developer, software developer, ai engineer,
+            llm engineer, machine learning engineer, automation engineer, no-code developer, bubble developer]
+  exclude: [teacher, faculty, driver, nurse, accountant, delivery, intern]
+
+# Grounded search queries. A query that starts with "hiring:" looks for job posts and makes `hiring_builder`
+# signals; the others look for public asks (`public_ask`). Job boards and LinkedIn are search snippets only,
+# never fetched. Marketplaces (Upwork, Freelancer and similar) are never used. The grounding allowance
+# (pipeline/grounding.py) decides how many run each day.
+public_ask_queries:
+  - "hiring: pre-seed or seed startup in the Netherlands hiring a founding engineer or first developer, posted in the last 7 days"
+  - "hiring: early-stage startup in the Netherlands looking for a CTO or technical co-founder, posted recently"
+  - "non-technical founder in the Netherlands looking for a development agency or technical partner to build an MVP, recent post"
+  - "startup founder in the Netherlands looking for someone to build their app or AI product, recent post"
+  - "startup in the Netherlands that outgrew its no-code app (Bubble, Softr, Glide) and needs developers, recent post"
+news_queries:
+  - '("raises" OR "secures" OR "closes") ("pre-seed" OR "seed round" OR "angel round") startup sourcecountry:NL'
+  - '("launches" OR "unveils") startup ("app" OR "platform" OR "AI") sourcecountry:NL'
+  - '("haalt" OR "investering" OR "pre-seed" OR "seed") startup sourcecountry:NL'
+
+# Startups of 2 to 10 people. A known staff count above 10 is skipped before research (qualify.py then grades
+# a team of more than settings startup.max_team as D); an unknown size is researched when they have a website.
+size_rules:
+  any_of:
+    - {source: business, key: staff_count, op: "<=", value: 10}
+
+signal_points: {hiring_builder: 8, public_ask: 10, funding: 5, launch: 4, news: 3}
+
+fit:
+  categories: [startup, small_business]   # no map category: the stated need itself is the type match
+  service_keywords: [startup, saas, app, platform, marketplace, ai, fintech, edtech, healthtech, proptech,
+                     climate, d2c, e-commerce, ecommerce, logistics, legaltech, hrtech, insurtech, brand]
+  min_reviews: 100
+  min_staff: 2
+
+ticket_class:
+  funded_startup: {match: [startup, saas, platform, marketplace, fintech, edtech, healthtech, proptech, ai],
+                   points: 5}
+  smb:            {match: [small_business, brand, d2c, e-commerce, ecommerce, retail, logistics], points: 4}
+
+can_pay:
+  premium_price: {other: 900}       # EUR: a product, plan or project price they publish
+
+scoring: {}                       # score s3.0 (config/scoring.yaml `startup`); overrides go here
+
+packaged_outcome: Custom AI workflows
+
+# Angles. Score s3.0 picks build_what_they_asked for their own ask or job post, beyond_no_code for a no-code
+# product, extra_hands for a lone CTO, first_version for a team without anyone technical, growth_build after
+# fresh funding or a launch, and the fit-only angle otherwise. The clinic-style angles below are required by
+# every segment (Step 11) and are rarely picked for startups.
+angles:
+  - {key: build_what_they_asked, label: Their own stated need, signals: [public_ask, tender, hiring_builder],
+     idea: "We build exactly what they are hiring for or asked for, shipped by a small senior team in weeks, so they skip a long hire."}
+  - {key: first_version, label: No tech team yet, signals: [launch, funding],
+     idea: "Nobody technical on the team: we build the first real version of the product in weeks, without hiring a team first."}
+  - {key: beyond_no_code, label: Outgrowing no-code, signals: [launch],
+     idea: "The product runs on a no-code tool: we rebuild it on a codebase they own, so it scales and investors can diligence it."}
+  - {key: extra_hands, label: A lone CTO, signals: [hiring_builder],
+     idea: "One technical founder: a senior team works beside the CTO, so the roadmap ships while they hire slowly."}
+  - {key: growth_build, label: Just funded or launched, signals: [funding, launch, news, new_place, new_branch],
+     idea: "New funding or a launch means a product backlog: we ship the next version fast."}
+  - {key: frontdesk_load, label: Team overloaded with enquiries, signals: [hiring_frontdesk],
+     idea: "An AI assistant answers routine customer questions, so the team handles only real work."}
+  - {key: missed_calls, label: Customers waiting for replies, signals: [review_pain],
+     idea: "Every customer message answered in seconds, with a hand-off to a person when needed."}
+  - {key: ad_leads_cold, label: Ad leads going cold, signals: [ads_running],
+     idea: "Every lead from ads gets an instant reply and follow-ups until it converts."}
+  - {key: no_online_booking, label: No self-serve on the website, signals: [no_booking],
+     idea: "Customers can sign up, book or get a quote on the website without waiting for a call."}
+  - {key: slow_site, label: Slow website, signals: [slow_site],
+     idea: "A fast new website that turns visitors into sign-ups."}
+  - {key: custom_ai_workflows, label: AI product for an early startup (no signal), signals: [fit_only],
+     idea: "One AI feature or workflow at the heart of their product, built in weeks by a senior team."}
