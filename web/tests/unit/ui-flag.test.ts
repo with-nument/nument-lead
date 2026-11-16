@@ -7,7 +7,7 @@ describe('new design switch', () => {
     expect(v2PathFor('/')).toBe('/v2')
     expect(v2PathFor('/calls')).toBe('/v2/calls')
     expect(v2PathFor('/calls/')).toBe('/v2/calls')
-    expect(v2PathFor('/leads')).toBeNull()
+    expect(v2PathFor('/settings')).toBeNull()
     expect(v2PathFor('/login')).toBeNull()
     expect(v2PathFor('/callsx')).toBeNull()
   })
@@ -15,6 +15,24 @@ describe('new design switch', () => {
   it('never rewrites a /v2 path again', () => {
     expect(v2PathFor('/v2')).toBeNull()
     expect(v2PathFor('/v2/calls', ['/v2/*', '/'])).toBeNull()
+  })
+
+  it('serves Leads, a lead and Deals, but never the CSV export', () => {
+    const id = '0f8fad5b-d9cb-469f-a165-70867728950e'
+    expect(v2PathFor('/leads')).toBe('/v2/leads')
+    expect(v2PathFor(`/leads/${id}`)).toBe(`/v2/leads/${id}`)
+    expect(v2PathFor(`/leads/${id.toUpperCase()}/`)).toBe(`/v2/leads/${id.toUpperCase()}`)
+    expect(v2PathFor('/leads/export')).toBeNull()
+    expect(v2PathFor('/leads/not-a-uuid')).toBeNull()
+    expect(v2PathFor(`/leads/${id}/more`)).toBeNull()
+    expect(v2PathFor('/deals')).toBe('/v2/deals')
+  })
+
+  it('matches a :uuid segment only with a UUID', () => {
+    const routes = ['/x/:uuid/y']
+    expect(v2PathFor('/x/0f8fad5b-d9cb-469f-a165-70867728950e/y', routes)).toBe('/v2/x/0f8fad5b-d9cb-469f-a165-70867728950e/y')
+    expect(v2PathFor('/x/abc/y', routes)).toBeNull()
+    expect(v2PathFor('/x/0f8fad5b-d9cb-469f-a165-70867728950e', routes)).toBeNull()
   })
 
   it('matches a whole section with /*', () => {
