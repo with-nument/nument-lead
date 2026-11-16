@@ -7,14 +7,16 @@ import { describe, expect, it } from 'vitest'
 // The sign-in pages are v2 as well.
 
 const SRC = path.join(__dirname, '../../src')
-const V2_DIRS = ['app/(v2)', 'components/ui2', 'components/shell2'] // sign-in is classic again until the kit-based redesign (16 Nov 2026)
+const V2_DIRS = ['app/(v2)', 'components/ui2', 'components/shell2', 'app/(auth)', 'components/auth']
+// The sign-in art's material colours and canvas textures are scene data, not UI colours.
+const EXEMPT = new Set(['components/auth/coins-scene.tsx'])
 
 function files(dir: string): string[] {
   const out: string[] = []
   for (const name of readdirSync(dir)) {
     const p = path.join(dir, name)
     if (statSync(p).isDirectory()) out.push(...files(p))
-    else if (/\.(tsx?|css)$/.test(name)) out.push(p)
+    else if (/\.(tsx?|css)$/.test(name) && !EXEMPT.has(path.relative(SRC, p))) out.push(p)
   }
   return out
 }

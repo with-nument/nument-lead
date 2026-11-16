@@ -7,3 +7,6 @@ export const THEME_COLOR = [
   { media: '(prefers-color-scheme: light)', color: '#dfe6f8' },
   { media: '(prefers-color-scheme: dark)', color: '#0b1022' },
 ]
+
+/** Browser chrome colour for the sign-in pages: --ui-signin-canvas in theme.css (light only). */
+export const SIGNIN_THEME_COLOR = '#f4f4f4'

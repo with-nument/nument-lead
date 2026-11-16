@@ -3,9 +3,9 @@ import { DM_Mono, Figtree, Inter, Newsreader } from 'next/font/google'
 import { ClassicToaster } from './classic-toaster'
 import './globals.css'
 
-// Current-design (v1) kit fonts. Not preloaded: the sign-in page and new-design pages never use them,
-// so they no longer download there; current-design pages load them on first use (with a size-matched
-// fallback, so nothing shifts).
+// Current-design (v1) kit fonts. Not preloaded: new-design pages never use them, so they never download
+// there; current-design pages and the sign-in pages (Figtree only) load them on first use (with a
+// size-matched fallback, so nothing shifts).
 const display = Newsreader({ subsets: ['latin'], variable: '--nf-display', axes: ['opsz'], display: 'swap', preload: false })
 const sans = Figtree({ subsets: ['latin'], variable: '--nf-sans', display: 'swap', preload: false })
 const mono = DM_Mono({ subsets: ['latin'], weight: ['400', '500'], variable: '--nf-mono', display: 'swap', preload: false })

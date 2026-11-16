@@ -105,6 +105,23 @@
   --ui-blur-overlay: blur(30px) saturate(170%);
   --ui-blur-window: blur(40px) saturate(160%);
 
+  /* ---------- Sign-in pages: monochrome, light only (black, white and greys; no accent) ---------- */
+  --ui-signin-canvas: #f4f4f4;
+  --ui-signin-ink: #111111; /* titles, fields, the button */
+  --ui-signin-ink-strong: #000000; /* wordmark, button hover */
+  --ui-signin-on-ink: #ffffff;
+  --ui-signin-label-2: #5c5c5c; /* the line under the title */
+  --ui-signin-label-3: #6b6b6b; /* the note under the button */
+  --ui-signin-label-4: #6e6e6e; /* footer (the mock's #7a7a7a, darkened to 4.6:1) */
+  --ui-signin-placeholder: #8a8a8a; /* placeholders only */
+  --ui-signin-hint: #9a9a9a; /* the decorative hint on the art */
+  --ui-signin-field: rgb(255 255 255 / 0.85);
+  --ui-signin-field-focus: #ffffff;
+  --ui-signin-field-line: rgb(0 0 0 / 0.07);
+  --ui-signin-focus: rgb(17 17 17 / 0.08);
+  --ui-signin-underline: #bbbbbb;
+  --ui-signin-font: var(--nf-sans), system-ui, sans-serif; /* Figtree (src/app/layout.tsx) */
+
   /* ---------- Type, spacing, motion ---------- */
   /* SF on Apple devices (nothing downloaded); Inter elsewhere, loaded only when used. */
   --ui-font: -apple-system, BlinkMacSystemFont, var(--font-inter), system-ui, sans-serif;
@@ -585,4 +602,99 @@ html[data-materials='solid'] {
 /* Apple's activity indicator: eight spokes stepping round. */
 @utility activity-spin {
   animation: ui-spin 0.9s steps(8, end) infinite;
+}
+
+/* ---------- Sign-in pages (src/app/(auth)) ---------- */
+/* Phones and narrow windows: the art moves above the form (the mock's 900px break). */
+@custom-variant signin-phone (@media (max-width: 900px));
+/* The canvas past the page ends matches the sign-in background. */
+html:has(.signin-root),
+html:has(.signin-root) body {
+  background-color: var(--ui-signin-canvas);
+}
+/* Title, line and form rise in once (reduced motion: tokens.css ends it at once). */
+@keyframes ui-signin-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+}
+@utility signin-rise {
+  animation: ui-signin-up 0.9s cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+/* The 56px field: frosted white, a hairline; ink border and a soft ring on focus. 16px, so phones never zoom. */
+@utility signin-field {
+  height: 56px;
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid var(--ui-signin-field-line);
+  background-color: var(--ui-signin-field);
+  padding: 0 18px;
+  font-size: 16px;
+  color: var(--ui-signin-ink);
+  outline: none;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s,
+    background-color 0.2s;
+  &::placeholder {
+    color: var(--ui-signin-placeholder);
+  }
+  &:focus {
+    background-color: var(--ui-signin-field-focus);
+    border-color: var(--ui-signin-ink);
+    box-shadow: 0 0 0 4px var(--ui-signin-focus);
+  }
+}
+/* Underlined text links (Forgot password?, Back to sign in). */
+@utility signin-link {
+  border-radius: 4px;
+  font-size: 14px;
+  color: var(--ui-signin-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--ui-signin-underline);
+  text-underline-offset: 3px;
+  &:hover {
+    text-decoration-color: var(--ui-signin-ink);
+  }
+}
+/* The page's one black button; its arrow nudges right on hover. */
+@utility signin-button {
+  margin-top: 22px;
+  display: flex;
+  height: 54px;
+  width: 100%;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 14px;
+  background-color: var(--ui-signin-ink);
+  color: var(--ui-signin-on-ink);
+  font-size: 16px;
+  font-weight: 525;
+  transition:
+    scale 0.15s,
+    background-color 0.2s;
+  &:hover {
+    background-color: var(--ui-signin-ink-strong);
+  }
+  &:active {
+    scale: 0.98;
+  }
+  &:disabled {
+    cursor: default;
+  }
+  & svg {
+    transition: translate 0.25s cubic-bezier(0.2, 0, 0, 1);
+  }
+  &:hover svg {
+    translate: 3px 0;
+  }
+}
+/* Keyboard focus on the sign-in pages' links and buttons. */
+.signin-root :is(a, button):focus-visible {
+  outline: 2px solid var(--ui-signin-ink);
+  outline-offset: 2px;
 }
