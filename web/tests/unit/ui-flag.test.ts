@@ -7,7 +7,7 @@ describe('new design switch', () => {
     expect(v2PathFor('/')).toBe('/v2')
     expect(v2PathFor('/calls')).toBe('/v2/calls')
     expect(v2PathFor('/calls/')).toBe('/v2/calls')
-    expect(v2PathFor('/settings')).toBeNull()
+    expect(v2PathFor('/settings')).toBe('/v2/settings')
     expect(v2PathFor('/login')).toBeNull()
     expect(v2PathFor('/callsx')).toBeNull()
   })
