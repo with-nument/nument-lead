@@ -25,6 +25,7 @@ from .jobs import quote_in
 API = "https://api.gdeltproject.org/api/v2/doc/doc"
 DEFAULT_QUERIES_PER_DAY = 30
 MAX_RECORDS = 100
+MAX_RECORDS_LIMIT = 250  # the DOC API's own maximum for ArtList
 MIN_CONFIDENCE = 0.6
 ARTICLE_CHARS = 3000
 RATE_LIMIT_WAIT_S = 12.0
@@ -90,17 +91,31 @@ class GdeltAdapter(SourceAdapter):
             self._pages = None
         await super().aclose()
 
-    async def search(self, query: str, timespan: str = "3d") -> list[Article]:
+    async def search(
+        self,
+        query: str,
+        timespan: str = "3d",
+        *,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        max_records: int = MAX_RECORDS,
+    ) -> list[Article]:
         """Articles of the last `timespan` (3 days since 13 Nov 2026: a night lost to a rate limit or a timeout
-        no longer loses that day's news; the signal's evidence key keeps an article from counting twice)."""
-        params = {
+        no longer loses that day's news; the signal's evidence key keeps an article from counting twice), or of
+        the UTC range `start` to `end` (the API searches the last 3 months; the startup backlog reads it week by
+        week). At most `max_records` articles (the API allows 250)."""
+        params: dict[str, Any] = {
             "query": query,
             "mode": "ArtList",
             "format": "json",
-            "maxrecords": MAX_RECORDS,
-            "timespan": timespan,
+            "maxrecords": min(max(1, max_records), MAX_RECORDS_LIMIT),
             "sort": "DateDesc",
         }
+        if start is not None:
+            params["startdatetime"] = f"{start.astimezone(UTC):%Y%m%d%H%M%S}"
+            params["enddatetime"] = f"{(end or datetime.now(UTC)).astimezone(UTC):%Y%m%d%H%M%S}"
+        else:
+            params["timespan"] = timespan
         for attempt in range(2):
             res = await self.http.get(API, params=params, check_robots=False, raise_on_block=False, retries=1)
             self.ctx.budget.record("other", None, QUERY_TASK)  # free, counted for the daily query cap

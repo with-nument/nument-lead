@@ -1,0 +1,294 @@
+[
+ {
+  "id": 30290,
+  "name": "Tire Swing",
+  "slug": "tire-swing",
+  "former_names": [],
+  "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/954a6e03dc3be9737df64c792b63e036b1c580cf.png",
+  "website": "https://gettireswing.com",
+  "all_locations": "New York City, NY, USA",
+  "long_description": "Tire Swing uses AI to power resident and applicant eligibility evaluations for affordable housing.\r\n\r\nOur software manages the resident certification and recertification process end-to-end for public and private properties supported by Project Based Rental Assistance, Low Income Housing Tax Credit, ",
+  "one_liner": "The AI Affordable Housing Platform",
+  "team_size": 2,
+  "industry": "B2B",
+  "subindustry": "B2B -> Legal",
+  "launched_at": 1740473580,
+  "tags": [
+   "GovTech",
+   "Real Estate",
+   "Housing",
+   "Compliance",
+   "Legal"
+  ],
+  "tags_highlighted": [],
+  "top_company": false,
+  "isHiring": false,
+  "nonprofit": false,
+  "batch": "Fall 2026",
+  "status": "Active",
+  "industries": [
+   "B2B",
+   "Legal"
+  ],
+  "regions": [
+   "United States of America",
+   "America / Canada"
+  ],
+  "stage": "Early",
+  "partners": "Grey",
+  "app_video_public": false,
+  "demo_day_video_public": false,
+  "app_answers": null,
+  "question_answers": false,
+  "url": "https://www.ycombinator.com/companies/tire-swing",
+  "api": "https://yc-oss.github.io/api/batches/fall-2026/tire-swing.json"
+ },
+ {
+  "id": 31584,
+  "name": "CONUS",
+  "slug": "conus",
+  "former_names": [],
+  "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/8edd99606159933b27bd8c7f3992e7ad9e5b4dea.png",
+  "website": "https://www.conus-med.com",
+  "all_locations": "Cologne, NRW, Germany",
+  "long_description": "CONUS structures fragmented medical device information for surgeons. We combine manufacturer documentation, hospital protocols and medical research in one place, giving surgeons and MedTech teams reliable answers across products and procedures through search and source-backed AI.\r\n\r\nWe already work ",
+  "one_liner": "Medical Device Platform for Hospitals",
+  "team_size": 3,
+  "industry": "Healthcare",
+  "subindustry": "Healthcare",
+  "launched_at": 1790675017,
+  "tags": [
+   "Healthcare",
+   "AI"
+  ],
+  "tags_highlighted": [],
+  "top_company": false,
+  "isHiring": true,
+  "nonprofit": false,
+  "batch": "Fall 2026",
+  "status": "Active",
+  "industries": [
+   "Healthcare"
+  ],
+  "regions": [
+   "Germany",
+   "Europe"
+  ],
+  "stage": "Early",
+  "partners": "Grey",
+  "app_video_public": false,
+  "demo_day_video_public": false,
+  "app_answers": null,
+  "question_answers": true,
+  "url": "https://www.ycombinator.com/companies/conus",
+  "api": "https://yc-oss.github.io/api/batches/fall-2026/conus.json"
+ },
+ {
+  "id": 34828,
+  "name": "Kailash Labs",
+  "slug": "kailash-labs",
+  "former_names": [],
+  "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/9a65a6096b4135a40d95b668829c8fca7b87354d.png",
+  "website": "https://www.kailashlabs.com/",
+  "all_locations": "Bengaluru, KA, India",
+  "long_description": "The world generates petabytes of video every day, and almost none of it is readable to machines.  Frontier VLMs that can unlock this (like Gemini) are too expensive to run at the volume real industries have, too generic for any single task, and can't be deployed on-prem where sensitive video lives.\r",
+  "one_liner": "A factory for small and specialized video reasoning models",
+  "team_size": 2,
+  "industry": "B2B",
+  "subindustry": "B2B -> Analytics",
+  "launched_at": 1789754590,
+  "tags": [
+   "Deep Learning",
+   "Edge Computing Semiconductors"
+  ],
+  "tags_highlighted": [],
+  "top_company": false,
+  "isHiring": false,
+  "nonprofit": false,
+  "batch": "Fall 2026",
+  "status": "Active",
+  "industries": [
+   "B2B",
+   "Analytics"
+  ],
+  "regions": [
+   "India",
+   "South Asia"
+  ],
+  "stage": "Early",
+  "partners": "Harj",
+  "app_video_public": false,
+  "demo_day_video_public": false,
+  "app_answers": null,
+  "question_answers": false,
+  "url": "https://www.ycombinator.com/companies/kailash-labs",
+  "api": "https://yc-oss.github.io/api/batches/fall-2026/kailash-labs.json"
+ },
+ {
+  "id": 34904,
+  "name": "Viraj Aero",
+  "slug": "viraj-aero",
+  "former_names": [],
+  "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/d151d30449f8a414c0594312df47a98193fd069b.png",
+  "website": "https://www.viraj-aero.com/",
+  "all_locations": "",
+  "long_description": "Viraj Aero builds gas turbines that deliver both power and cooling water for data centers. It needs no grid connection and no water pipeline.\r\n\r\nBurning natural gas already produces water. Our patented system captures that water from the exhaust. Part of it cools the data center. The rest is turned ",
+  "one_liner": "Next generation gas turbines for data centers & aviation",
+  "team_size": null,
+  "industry": "Industrials",
+  "subindustry": "Industrials -> Energy",
+  "launched_at": 1789861657,
+  "tags": [
+   "Hard Tech",
+   "Energy",
+   "Aerospace",
+   "AI"
+  ],
+  "tags_highlighted": [],
+  "top_company": false,
+  "isHiring": false,
+  "nonprofit": false,
+  "batch": "Fall 2026",
+  "status": "Active",
+  "industries": [
+   "Industrials",
+   "Energy"
+  ],
+  "regions": [
+   "Unspecified"
+  ],
+  "stage": "Early",
+  "partners": "Kulveer",
+  "app_video_public": false,
+  "demo_day_video_public": false,
+  "app_answers": null,
+  "question_answers": false,
+  "url": "https://www.ycombinator.com/companies/viraj-aero",
+  "api": "https://yc-oss.github.io/api/batches/fall-2026/viraj-aero.json"
+ },
+ {
+  "id": 36082,
+  "name": "Organizely",
+  "slug": "organizely",
+  "former_names": [],
+  "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/26f181ecd0a89fb752608405bfab226e7b6bf3a0.png",
+  "website": "https://organizely.io/",
+  "all_locations": "San Francisco, CA, USA",
+  "long_description": "Organizely helps American manufacturers use AI to lower production costs. \r\n\r\nFactories depend on three resources: materials, equipment, and labor. Costs rise unexpectedly when components are missing, machines go down, or staffing doesn’t match demand. We experienced this firsthand while owning and ",
+  "one_liner": "A New AI-Native ERP for American Manufacturers 🇺🇸",
+  "team_size": null,
+  "industry": "B2B",
+  "subindustry": "B2B -> Supply Chain and Logistics",
+  "launched_at": 1793817753,
+  "tags": [
+   "Logistics",
+   "Manufacturing",
+   "E-commerce",
+   "Supply Chain",
+   "AI"
+  ],
+  "tags_highlighted": [],
+  "top_company": false,
+  "isHiring": false,
+  "nonprofit": false,
+  "batch": "Fall 2026",
+  "status": "Active",
+  "industries": [
+   "B2B",
+   "Supply Chain and Logistics"
+  ],
+  "regions": [
+   "United States of America",
+   "America / Canada"
+  ],
+  "stage": "Early",
+  "partners": "Harj",
+  "app_video_public": false,
+  "demo_day_video_public": false,
+  "app_answers": null,
+  "question_answers": false,
+  "url": "https://www.ycombinator.com/companies/organizely",
+  "api": "https://yc-oss.github.io/api/batches/fall-2026/organizely.json"
+ },
+ {
+  "id": 36741,
+  "name": "Perit.AI",
+  "slug": "peritai",
+  "former_names": [],
+  "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/a35e9e2f6026717a2640d1e01b9215eaff2d4310.png",
+  "website": "https://www.perit.ai/",
+  "all_locations": "San Francisco, CA, USA",
+  "long_description": "Perit is a training-data company for frontier AI labs. Everything we deliver is recorded, transcribed, labelled and graded by people who actually do the job: ex-contact-centre QA leads, claims handlers, ward clerks and shopkeepers, recruited for the sector and locale each program needs.\r\n\r\nWhat we d",
+  "one_liner": "Expert-collected voice, egocentric and RL training data for frontier…",
+  "team_size": 47,
+  "industry": "B2B",
+  "subindustry": "B2B",
+  "launched_at": 1789597716,
+  "tags": [
+   "Data Labeling"
+  ],
+  "tags_highlighted": [],
+  "top_company": false,
+  "isHiring": false,
+  "nonprofit": false,
+  "batch": "Fall 2026",
+  "status": "Active",
+  "industries": [
+   "B2B"
+  ],
+  "regions": [
+   "United States of America",
+   "America / Canada"
+  ],
+  "stage": "Early",
+  "partners": "Christopher",
+  "app_video_public": false,
+  "demo_day_video_public": false,
+  "app_answers": null,
+  "question_answers": false,
+  "url": "https://www.ycombinator.com/companies/peritai",
+  "api": "https://yc-oss.github.io/api/batches/fall-2026/peritai.json"
+ },
+ {
+  "id": 37435,
+  "name": "GrayPass",
+  "slug": "graypass",
+  "former_names": [],
+  "small_logo_thumb_url": "https://bookface-images.s3.amazonaws.com/small_logos/824e97773961053f47e92f9a1a6fd805d2328d0b.png",
+  "website": "https://graypass.com/",
+  "all_locations": "Toronto, ON, Canada",
+  "long_description": "Login tells you who signed in. GrayPass helps apps check who’s behind sensitive actions and whether they’re authorized before those actions go through.\r\n\r\nIt combines identity, device and session context with behavioral signals like typing rhythm, cursor movement and scrolling. Before a sensitive ac",
+  "one_liner": "Verify the expected person is still in control before sensitive…",
+  "team_size": 2,
+  "industry": "B2B",
+  "subindustry": "B2B -> Infrastructure",
+  "launched_at": 1789869580,
+  "tags": [
+   "Biometrics",
+   "Identity",
+   "Infrastructure"
+  ],
+  "tags_highlighted": [],
+  "top_company": false,
+  "isHiring": false,
+  "nonprofit": false,
+  "batch": "Fall 2026",
+  "status": "Active",
+  "industries": [
+   "B2B",
+   "Infrastructure"
+  ],
+  "regions": [
+   "Canada",
+   "America / Canada"
+  ],
+  "stage": "Early",
+  "partners": "Max",
+  "app_video_public": false,
+  "demo_day_video_public": false,
+  "app_answers": null,
+  "question_answers": false,
+  "url": "https://www.ycombinator.com/companies/graypass",
+  "api": "https://yc-oss.github.io/api/batches/fall-2026/graypass.json"
+ }
+]

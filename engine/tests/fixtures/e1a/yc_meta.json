@@ -1,0 +1,41 @@
+{
+ "last_updated": "2026-11-15T03:54:35.067Z",
+ "readme": "https://github.com/yc-oss/api",
+ "batches": {
+  "summer-2027": {
+   "name": "Summer 2027",
+   "count": 1,
+   "api": "https://yc-oss.github.io/api/batches/summer-2027.json"
+  },
+  "winter-2027": {
+   "name": "Winter 2027",
+   "count": 13,
+   "api": "https://yc-oss.github.io/api/batches/winter-2027.json"
+  },
+  "fall-2026": {
+   "name": "Fall 2026",
+   "count": 234,
+   "api": "https://yc-oss.github.io/api/batches/fall-2026.json"
+  },
+  "summer-2026": {
+   "name": "Summer 2026",
+   "count": 227,
+   "api": "https://yc-oss.github.io/api/batches/summer-2026.json"
+  },
+  "spring-2026": {
+   "name": "Spring 2026",
+   "count": 192,
+   "api": "https://yc-oss.github.io/api/batches/spring-2026.json"
+  },
+  "summer-2005": {
+   "name": "Summer 2005",
+   "count": 8,
+   "api": "https://yc-oss.github.io/api/batches/summer-2005.json"
+  },
+  "unspecified": {
+   "name": "Unspecified",
+   "count": 1,
+   "api": "https://yc-oss.github.io/api/batches/unspecified.json"
+  }
+ }
+}

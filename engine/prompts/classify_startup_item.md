@@ -1,6 +1,6 @@
 ---
 task: classify_startup_item
-version: 1
+version: 2
 output: StartupItemClassification
 inputs: [source, url, title, text]
 description: Decide whether one news, launch, filing or job item is about a startup we target, and pull out the facts.
@@ -17,6 +17,7 @@ How to fill each field:
 - team_size: only when the item states the number of people.
 - round and amount_usd: as written (convert other currencies to US dollars roughly); unknown when not written.
 - founders: names the item gives as founders or co-founders. Never guess.
+- investors: the investors the item names for this round (firms or people). Never guess.
 - company_website: only a website written in the item.
 - hq_country: two-letter code (gb for the UK) from the item; null when not written.
 - evidence_quote: one exact phrase copied from the item.

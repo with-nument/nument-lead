@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xml:lang="en-US" xmlns="http://www.w3.org/2005/Atom">
+  <id>tag:betalist.com,2005:/startups/feed_original</id>
+  <link rel="alternate" type="text/html" href="https://betalist.com"/>
+  <link rel="self" type="application/atom+xml" href="https://betalist.com/startups/feed_original"/>
+  <title>BetaList - Discover tomorrow's startups, today</title>
+  <subtitle>Discover tomorrow's startups, today.</subtitle>
+  <updated>2026-11-15T17:35:00Z</updated>
+  <entry>
+    <id>https://betalist.com/startups/wfh-alert</id>
+    <published>2026-11-15T17:35:00Z</published>
+    <updated>2026-11-15T17:35:00Z</updated>
+    <link rel="alternate" type="text/html" href="https://betalist.com/startups/wfh-alert?utm_campaign=startup-198853&amp;utm_medium=atom&amp;utm_source=newsfeed"/>
+    <title>WFH Alert – Remote jobs reviewed by a person before they reach your inbox</title>
+    <content type="html">&lt;a href='https://betalist.com/startups/wfh-alert?utm_campaign=startup-198853&amp;utm_medium=atom&amp;utm_source=newsfeed'&gt;
+  &lt;img src='https://resize.imagekit.co/hYpUH9T1EzvdiRL9gTAWSIyX5KOME7i86RBAH8aYy44/rs:fill:1000:750/plain/s3://betalist-production/prpwkuyy0f6gzmkdqunmaha732a3' width='500'&gt;
+&lt;/a&gt;
+&lt;br /&gt;
+
+&lt;p&gt;WFH Alert is a remote job discovery service for people seeking focused opportunities without searching broad job boards daily. It combines human-reviewed daily job leads with searchable web directories for entry-level, customer support, data entry, no-phone, equipment-provided, and remote-first jobs. Each listing links to the original source and includes practical details such as the shared date, location limits, and role type when available.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href='https://betalist.com/startups/wfh-alert?utm_campaign=startup-198853&amp;utm_medium=atom&amp;utm_source=newsfeed'&gt;View startup&lt;/a&gt;&lt;/p&gt;
+</content>
+    <author>
+      <name>BetaList</name>
+    </author>
+  </entry>
+<entry>
+    <id>https://betalist.com/startups/eniwher3</id>
+    <published>2026-11-15T16:10:00Z</published>
+    <updated>2026-11-15T16:10:00Z</updated>
+    <link rel="alternate" type="text/html" href="https://betalist.com/startups/eniwher3?utm_campaign=startup-197431&amp;utm_medium=atom&amp;utm_source=newsfeed"/>
+    <title>eniwher3 – A free scratch pad for notes and to-dos on every device</title>
+    <content type="html">&lt;a href='https://betalist.com/startups/eniwher3?utm_campaign=startup-197431&amp;utm_medium=atom&amp;utm_source=newsfeed'&gt;
+  &lt;img src='https://resize.imagekit.co/jCxb_HSBD1CxNiOl0XDvIODJ2alE1CRvudOQ8cw0_Dw/rs:fill:1000:750/plain/s3://betalist-production/ssaohddruyjwmz0murnkrgwrqaec' width='500'&gt;
+&lt;/a&gt;
+&lt;br /&gt;
+
+&lt;p&gt;eniwher3 is a free digital scratch pad available in any browser. Paste or double-click empty space to drop a note, then drag it anywhere. Add a to-do list, calendar, clock, stopwatch, or code pad from Widgets and minimize them to a dock. The default cream theme switches to dark if your device prefers it, with options for high contrast, a sans font, and larger text for accessibility. Sign in with your email (no password) to sync laptops and phones, with encryption in transit and at rest. Premium offers more boards, extra themes, and a calculator.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href='https://betalist.com/startups/eniwher3?utm_campaign=startup-197431&amp;utm_medium=atom&amp;utm_source=newsfeed'&gt;View startup&lt;/a&gt;&lt;/p&gt;
+</content>
+    <author>
+      <name>BetaList</name>
+    </author>
+  </entry>
+</feed>

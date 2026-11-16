@@ -568,6 +568,7 @@ class StartupItemClassification(BaseModel):
     round: Literal["pre_seed", "seed", "series_a", "series_b_plus", "grant", "crowdfunding", "unknown"] | None
     amount_usd: float | None
     founders: list[str] = Field(default_factory=list, description="founder names written in the item")
+    investors: list[str] = Field(default_factory=list, description="investor names written in the item")
     evidence_quote: str = Field(description="exact phrase copied from the item that proves the event")
     confidence: float = Field(ge=0, le=1)
 

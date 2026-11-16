@@ -1,0 +1,76 @@
+{
+ "hits": [
+  {
+   "objectID": "50509537",
+   "title": "Show HN: A Markdown and Mermaid pane for Herdr, the terminal for coding agents",
+   "url": "https://github.com/example/herdr-markdown",
+   "story_text": null,
+   "created_at": "2026-11-15T18:51:36Z",
+   "created_at_i": 1794768696,
+   "points": 1,
+   "num_comments": 0,
+   "author": "user1",
+   "_tags": [
+    "story",
+    "author_user1",
+    "story_50509537",
+    "show_hn"
+   ]
+  },
+  {
+   "objectID": "50509047",
+   "title": "Show HN: Local AI Video Agent",
+   "url": "https://www.wiyomi.com/",
+   "story_text": "Hi HN, Sam here.<p>I am trying to make video agent can be run fully local on the device instead of cloud. This might be more useful for people who are trying to cut cost of mass content production.<p>We think this will be so helpful for people producing UGC content, storytelling, talkinghead, and more.<p>It is still very early and honestly not really well refined plan, but yea that&#x27;s the point for launching this early so people can share their thoughts and shape the idea much better!<p>Appreciate for any comments and feedback from everyone :)",
+   "created_at": "2026-11-15T17:55:38Z",
+   "created_at_i": 1794765338,
+   "points": 1,
+   "num_comments": 0,
+   "author": "user1",
+   "_tags": [
+    "story",
+    "author_user1",
+    "story_50509047",
+    "show_hn"
+   ]
+  },
+  {
+   "objectID": "50508720",
+   "title": "Show HN: I built a free, Python micro-learning platform with real Python tasks",
+   "url": "https://www.blockofbytes.com/",
+   "story_text": null,
+   "created_at": "2026-11-15T17:22:47Z",
+   "created_at_i": 1794763367,
+   "points": 4,
+   "num_comments": 1,
+   "author": "user1",
+   "_tags": [
+    "story",
+    "author_user1",
+    "story_50508720",
+    "show_hn"
+   ]
+  },
+  {
+   "objectID": "50455811",
+   "title": "Launch HN: Pomerado (YC F26) – Turn any website into an MCP for agents",
+   "url": null,
+   "story_text": "Hi HN, we’re Ana and Raj from Pomerado (<a href=\"https:&#x2F;&#x2F;pomerado.ai&#x2F;\">https:&#x2F;&#x2F;pomerado.ai&#x2F;</a>). We connect your agents to any website by turning sites into deterministic, self-healing APIs in minutes, fully self-serve.<p>Agents are no longer limited by their intelligence, but rather by their ability to interact with systems. Airlines, banks, e-commerce, insurance portals, government sites, and legacy portals all lack APIs or MCPs and are common parts of personal assistant or business workflows. Agents instead rely on browser automation or computer use, which can be slow, expensive, and unreliable. And even if computer use were perfect, most companies have banned it out of security and compliance concerns.",
+   "created_at": "2026-11-11T17:11:56Z",
+   "created_at_i": 1794417116,
+   "points": 64,
+   "num_comments": 48,
+   "author": "user1",
+   "_tags": [
+    "story",
+    "author_user1",
+    "story_50455811",
+    "launch_hn"
+   ]
+  }
+ ],
+ "nbHits": 4,
+ "page": 0,
+ "nbPages": 1,
+ "hitsPerPage": 1000
+}

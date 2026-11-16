@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"
+	xmlns:content="http://purl.org/rss/1.0/modules/content/"
+	xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+	xmlns:dc="http://purl.org/dc/elements/1.1/"
+	xmlns:atom="http://www.w3.org/2005/Atom"
+	xmlns:sy="http://purl.org/rss/1.0/modules/syndication/"
+	xmlns:slash="http://purl.org/rss/1.0/modules/slash/"
+	>
+
+<channel>
+	<title>Startups | TechCrunch</title>
+	<atom:link href="https://techcrunch.com/category/startups/feed/" rel="self" type="application/rss+xml" />
+	<link>https://techcrunch.com/category/startups/</link>
+	<description>Startup and Technology News</description>
+	<lastBuildDate>Sun, 15 Nov 2026 18:32:07 +0000</lastBuildDate>
+	<language>en-US</language>
+	<sy:updatePeriod>
+	hourly	</sy:updatePeriod>
+	<sy:updateFrequency>
+	1	</sy:updateFrequency>
+	<generator>https://wordpress.org/?v=6.9.11</generator>
+
+<image>
+	<url>https://techcrunch.com/wp-content/uploads/2015/02/cropped-cropped-favicon-gradient.png?w=32</url>
+	<title>Startups | TechCrunch</title>
+	<link>https://techcrunch.com/category/startups/</link>
+	<width>32</width>
+	<height>32</height>
+</image> 
+	<item>
+		<title>AI agent startup LangChain hits $3B valuation</title>
+		<link>https://techcrunch.com/2026/11/13/ai-agent-startup-langchain-hits-3b-valuation/</link>
+		
+		<dc:creator><![CDATA[TechCrunch staff]]></dc:creator>
+		<pubDate>Fri, 13 Nov 2026 19:37:57 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[Fundraising]]></category>
+		<category><![CDATA[Startups]]></category>
+		<category><![CDATA[agent]]></category>
+		<category><![CDATA[In Brief]]></category>
+		<category><![CDATA[langchain]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3188474</guid>
+
+					<description><![CDATA[LangChain now claims 7,000 customers of its model and platform agnostic agent management tool LangSmith. ]]></description>
+		
+		
+		
+			</item>
+<item>
+		<title>Nectar launches an AI agent to automate creator discovery and outreach for brands</title>
+		<link>https://techcrunch.com/2026/11/12/nectar-launches-an-ai-agent-to-automate-creator-discovery-and-outreach-for-brands/</link>
+		
+		<dc:creator><![CDATA[TechCrunch staff]]></dc:creator>
+		<pubDate>Thu, 12 Nov 2026 19:11:00 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[Startups]]></category>
+		<category><![CDATA[AI agents]]></category>
+		<category><![CDATA[Marketing]]></category>
+		<category><![CDATA[nectar social]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3187494</guid>
+
+					<description><![CDATA[Nectar's new AI agent automates influencer marketing, helping brands discover creators, manage outreach and partnerships, and track campaign results.]]></description>
+		
+		
+		
+			</item>
+<item>
+		<title>With $720M round, Britain&#8217;s Fractile gets a leg up in the race for AI chips</title>
+		<link>https://techcrunch.com/2026/11/11/with-720m-round-britains-fractile-gets-a-leg-up-in-the-race-for-ai-chips/</link>
+		
+		<dc:creator><![CDATA[TechCrunch staff]]></dc:creator>
+		<pubDate>Wed, 11 Nov 2026 19:34:55 +0000</pubDate>
+				<category><![CDATA[AI]]></category>
+		<category><![CDATA[Fundraising]]></category>
+		<category><![CDATA[Startups]]></category>
+		<category><![CDATA[semiconductor chips]]></category>
+		<guid isPermaLink="false">https://techcrunch.com/?p=3187339</guid>
+
+					<description><![CDATA[Fractile has now become one of the top-funded players in the race for purpose-built AI chips. ]]></description>
+		
+		
+		
+			</item>
+</channel>
+</rss>
