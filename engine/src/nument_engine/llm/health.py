@@ -329,6 +329,12 @@ SMOKE_INPUTS: dict[str, dict[str, Any]] = {
         "country": "India",
         "website": "https://brightcart.in",
     },
+    "find_founder_email": {
+        "name": "Maya Chen",
+        "company": "Brightcart",
+        "domain": "brightcart.io",
+        "country": "United States",
+    },
     "find_website": {
         "name": "Brightcart Foods",
         "city": "Pune",

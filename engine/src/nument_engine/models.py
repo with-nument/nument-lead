@@ -261,6 +261,7 @@ AITask = Literal[
     "write_precall_brief",
     "write_proposal",
     "weekly_audit",
+    "find_founder_email",
 ]
 AI_TASKS: Final[tuple[str, ...]] = get_args(AITask)
 
@@ -396,6 +397,15 @@ class DecisionMakerLookup(BaseModel):
     name: str | None = Field(description="the person's full name as the answer gives it, or null")
     role: str | None = Field(description="their role as written, for example Founder or Owner, or null")
     line: str | None = Field(description="the Decision maker line copied exactly from the answer, or null")
+
+
+class FounderEmailLookup(BaseModel):
+    """`find_founder_email`: a founder's work email as written in Google Search results (15 Nov 2026). Code keeps
+    it only when the address is at the company's own domain, fits the founder's name and a sentence the search
+    results back contains it word for word."""
+
+    email: str | None = Field(description="the address exactly as the answer gives it, or null")
+    line: str | None = Field(description="the Email line copied exactly from the answer, or null")
 
 
 class WebsiteLookup(BaseModel):
@@ -712,4 +722,5 @@ AI_OUTPUT_MODELS: Final[dict[str, type[BaseModel]]] = {
     "write_precall_brief": PrecallBrief,
     "write_proposal": ProposalDraft,
     "weekly_audit": AuditResult,
+    "find_founder_email": FounderEmailLookup,
 }
