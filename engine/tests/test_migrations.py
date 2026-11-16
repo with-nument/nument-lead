@@ -39,6 +39,7 @@ EXPECTED_FILES = [
     "0024_page_reads.sql",
     "0028_startup_profile_evidence.sql",
     "0033_inbox_calls.sql",
+    "0034_today_overnight.sql",
 ]
 
 
