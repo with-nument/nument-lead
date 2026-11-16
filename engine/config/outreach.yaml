@@ -7,7 +7,7 @@
 allowed_countries: [in, ae, us, gb, ie, nl, fr, se, fi, be, pt, au, nz, ca, sg, br, mx, ph, my, id]
 
 # Prior consent needed even for B2B: never cold-email these (warm channels and inbound only).
-blocked_countries: [de, at, dk, it, es, pl, il, za, vn, sa, qa, ch, no]
+blocked_countries: [de, at, dk, it, es, pl, il, za, vn, sa, qa, ch, "no"]  # "no" quoted: bare no is YAML false
 
 # A guessed address (a name pattern checked without sending) is never used here: only addresses the
 # person or business published (Canada CASL; Australia and New Zealand infer consent only from publication).

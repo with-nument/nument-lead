@@ -48,8 +48,22 @@ FLUSH_EVERY = 500
 REGISTRY_SOURCES = frozenset({"art_registry"})
 GEO_SOURCES = frozenset({"places", "overture", "osm"})
 OPEN_SIGNAL_SOURCES = frozenset(
-    {"apna", "adzuna", "gdelt", "grounded_search", "careers_watch", "inbox", "sec_edgar"}
-)  # sec_edgar: a Form D names no website
+    {
+        "apna",
+        "adzuna",
+        "gdelt",
+        "grounded_search",
+        "careers_watch",
+        "inbox",
+        "sec_edgar",
+        "funding_rss",
+        "hn_launches",
+        "betalist",
+        "startup_lists",
+        "ats_jobs",
+        "job_feeds",
+    }
+)  # startup sources: the lookup stage finds the website
 
 # Source precedence per field group (lower wins). Step 6.6.4.
 RANK: dict[str, dict[str, int]] = {
