@@ -93,6 +93,18 @@ A metric with nothing to measure in a run (for example no hand-checked business)
 and does not fail the run on its own. Every run is stored as a `reports` row of kind `eval`; the weekly
 report shows the latest one.
 
+## Task evals
+
+Some AI tasks have their own small labelled set, run on the dev key before a prompt or model change for that
+task goes live.
+
+| Set | File | Run | Thresholds |
+|---|---|---|---|
+| `classify_reply` | `golden/classify_reply.jsonl` (44 fictional replies, every category) | `uv run python -m evals.classify_reply --env dev` | accuracy 85%, every opt-out caught, no confident wrong out-of-office or not now, return dates and referrals 90% |
+
+`--dry-run` validates the file without AI calls. The set runs the production path: the plain opt-out rule
+first, then the task, then the same clean-up the replies phase applies.
+
 ## In CI
 
 The `eval-gate` job runs `nlead eval --subset 20 --env dev` on pull requests that change prompts,
