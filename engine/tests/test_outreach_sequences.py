@@ -505,6 +505,45 @@ def test_unknown_email_status_waits(world: World, prod: None, clock: FakeClock, 
     assert send(clock, gmail)["held"] == {"email_unknown": 1}
 
 
+@pytest.mark.parametrize(("status", "outcome"), [("invalid", "stopped"), ("unknown", "held")])
+def test_a_recheck_after_the_thread_was_made_refuses_the_followup(
+    world: World, prod: None, clock: FakeClock, gmail: ClockedMailbox, status: str, outcome: str
+) -> None:
+    """Lane E3's verifier can turn an address invalid or unknown once the sequence has started."""
+    world.outreach_on("auto")
+    world.mailbox()
+    lead = world.lead()
+    t = world.thread(lead, day0="draft")
+    send(clock, gmail)
+    assert world.msg(t["steps"][0])["status"] == "sent"
+    world.update("update public.contacts set email_status = %s where id = %s", [status, lead["contact"]])
+    clock.at = utc(2026, 11, 20, 15, 5)  # day 3 is due
+    world.update("update public.email_messages set body = 'Hi Maya, the plan is ready.' where id = %s", [t["steps"][3]])
+    out = send(clock, gmail)
+    assert len(gmail.sent) == 1  # day 0 only
+    if outcome == "stopped":
+        assert out["conversations_stopped"] == {"email_invalid": 1}
+        assert world.thread_row(t["id"])["stop_reason"] == "email_invalid"
+        assert {world.msg(t["steps"][s])["status"] for s in (3, 7, 12)} == {"cancelled"}
+    else:
+        assert out["held"] == {"email_unknown": 1}
+        assert world.msg(t["steps"][3])["status"] == "queued"
+
+
+@pytest.mark.parametrize(("status", "key"), [("invalid", "conversations_stopped"), ("unknown", "held")])
+def test_a_reply_to_an_invalid_or_unknown_address_is_refused(
+    world: World, prod: None, clock: FakeClock, gmail: ClockedMailbox, status: str, key: str
+) -> None:
+    world.outreach_on()
+    world.mailbox()
+    lead = world.lead(stage="talking", email_status=status)
+    t = world.thread(lead, day0="sent", followups="cancelled", status="stopped")
+    reply = world.message(t["id"], step=None, body="Hi Maya, happy to help.", status="approved")
+    out = send(clock, gmail)
+    assert gmail.sent == [] and out[key] == {f"email_{status}": 1}
+    assert world.msg(reply)["status"] == ("cancelled" if status == "invalid" else "approved")
+
+
 def test_future_and_paused_messages_are_not_due(
     world: World, prod: None, clock: FakeClock, gmail: ClockedMailbox
 ) -> None:

@@ -178,14 +178,16 @@ def hard_block(row: Row, rules: Rules, now: datetime, *, conn: Connection[Any] |
         return "suppressed"
     if row["do_not_contact"]:
         return "do_not_contact"
+    # A re-check after the thread was made can find the address invalid: nothing more goes to it, replies too.
+    known = row["contact_id"] is not None and _same_address(row["contact_email"], row["to_email"])
+    if known and row["email_status"] == "invalid":
+        return "email_invalid"
     if row["step"] is None:  # a reply to someone who wrote to us: the cold-email rules do not apply
         return None
     if row["contact_id"] is None:
         return "no_contact"
     if not _same_address(row["contact_email"], row["to_email"]):
         return "address_changed"
-    if row["email_status"] == "invalid":
-        return "email_invalid"
     country = (row["country"] or "").strip().lower()
     if country in rules.blocked:
         return "blocked_country"
@@ -227,10 +229,10 @@ def hold_reason(row: Row, rules: Rules, now: datetime, *, conn: Connection[Any] 
         return "no_time_zone"
     if not windows.in_window(now, zone, rules.windows):
         return "outside_window"
+    if row["contact_id"] is not None and row["email_status"] not in ("verified", "likely"):
+        return f"email_{row['email_status'] or 'unknown'}"  # wait for the verifier to settle it
     if row["step"] is None:
         return None
-    if row["email_status"] not in ("verified", "likely"):
-        return f"email_{row['email_status'] or 'unknown'}"
     if row["step"] > 0:
         return earlier_steps(row, conn=conn)
     return None
