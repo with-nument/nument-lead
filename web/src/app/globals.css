@@ -134,6 +134,11 @@
   --color-status-ok: var(--ui-ok);
   --color-status-warn: var(--ui-warn);
   --color-status-bad: var(--ui-bad);
+  --color-dot-ok: var(--ui-dot-ok);
+  --color-dot-warn: var(--ui-dot-warn);
+  --color-dot-bad: var(--ui-dot-bad);
+  --color-silver: var(--ui-silver);
+  --color-avatar: var(--ui-avatar);
   --color-stage-new: var(--ui-stage-new);
   --color-stage-contacted: var(--ui-stage-contacted);
   --color-stage-replied: var(--ui-stage-replied);
@@ -154,6 +159,10 @@
   --color-grade-c-ink: var(--ui-grade-c-ink);
   --color-grade-d: var(--ui-grade-d);
   --color-grade-d-ink: var(--ui-grade-d-ink);
+  --color-grade-a-ring: var(--ui-grade-a-ring);
+  --color-grade-b-ring: var(--ui-grade-b-ring);
+  --color-grade-c-ring: var(--ui-grade-c-ring);
+  --color-grade-d-ring: var(--ui-grade-d-ring);
   --color-line-owner: var(--ui-line-owner);
   --color-line-front-desk: var(--ui-line-front-desk);
   --color-line-bot: var(--ui-line-bot);
@@ -162,13 +171,15 @@
   --color-bar: var(--ui-bar-bg);
   --color-overlay: var(--ui-overlay-bg);
   --color-field: var(--ui-field);
+  --color-tabbar: var(--ui-tabbar);
+  --color-row-done: var(--ui-row-done);
 
   --font-ui: var(--ui-font);
   --font-signin: var(--ui-signin-font);
 
-  --radius-control: 10px;
-  --radius-panel: 16px;
-  --radius-sheet: 22px;
+  --radius-control: 12px;
+  --radius-panel: 20px;
+  --radius-sheet: 24px;
   --radius-window: 28px;
 
   --ease-glide: var(--ui-ease-glide);

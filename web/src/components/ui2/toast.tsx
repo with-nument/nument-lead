@@ -4,8 +4,8 @@ import { useSyncExternalStore } from 'react'
 import { CircleAlert, CircleCheck } from 'lucide-react'
 import { cx } from './cx'
 
-// A tiny toast (a few hundred bytes): a short confirmation after an action, announced politely.
-// v2 pages use this; sonner stays with the current design until it is retired.
+// A tiny toast (a few hundred bytes), for errors and confirmations that have no row to sit in.
+// Changes that can be taken back use the inline Undo row (undo-row.tsx) instead.
 
 type Tone = 'neutral' | 'ok' | 'bad'
 type Action = { label: string; onClick: () => void }
@@ -61,10 +61,10 @@ export function Toaster() {
           key={t.id}
           data-ui-motion
           onClick={() => dismiss(t.id)}
-          className="motion-toast material-overlay type-body pointer-events-auto flex w-full max-w-[400px] items-center gap-3 rounded-panel py-3 pr-3 pl-4 text-label-1"
+          className="motion-toast material-overlay pointer-events-auto flex w-full max-w-[400px] items-center gap-3 rounded-[14px] py-3 pr-3 pl-4 text-[14px] text-label-1"
         >
-          {t.tone === 'ok' ? <CircleCheck aria-hidden className="size-5 shrink-0 text-status-ok" /> : null}
-          {t.tone === 'bad' ? <CircleAlert aria-hidden className="size-5 shrink-0 text-status-bad" /> : null}
+          {t.tone === 'ok' ? <CircleCheck aria-hidden className="size-[18px] shrink-0 text-status-ok" strokeWidth={1.6} /> : null}
+          {t.tone === 'bad' ? <CircleAlert aria-hidden className="size-[18px] shrink-0 text-status-bad" strokeWidth={1.6} /> : null}
           <span className="min-w-0 flex-1">{t.message}</span>
           {t.action ? (
             <button
@@ -74,7 +74,7 @@ export function Toaster() {
                 t.action?.onClick()
                 dismiss(t.id)
               }}
-              className={cx('shrink-0 rounded-[8px] px-2 py-1 font-semibold text-accent hover:bg-fill-3')}
+              className={cx('shrink-0 rounded-[8px] px-2 py-1 text-label-1 underline decoration-separator-strong underline-offset-[3px] hover:bg-fill-3')}
             >
               {t.action.label}
             </button>

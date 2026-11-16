@@ -2,7 +2,7 @@ import { cx } from './cx'
 
 const SPOKES = Array.from({ length: 8 }, (_, i) => i)
 
-/** Apple's activity indicator: eight spokes stepping round, the newest one darkest. */
+/** An activity indicator: eight spokes stepping round, the newest one darkest. */
 export function ActivityIndicator({ label = 'Loading', className }: { label?: string; className?: string }) {
   return (
     <span role="status" aria-label={label} className={cx('inline-block size-[1.15em] shrink-0', className)}>

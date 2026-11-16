@@ -22,12 +22,12 @@ const stageInfo = (stage: string | null | undefined) => STAGE_V2[stage as Stage]
 /** The v2 label for a stored stage value. */
 export const stageLabel = (stage: string | null | undefined) => stageInfo(stage).label
 
-/** A stage as a coloured dot and its name. The words carry the meaning; the dot helps scanning. */
+/** A stage as plain text with a tiny muted dot. The words carry the meaning; the dot helps scanning. */
 export function StageLabel({ stage, className }: { stage: string | null | undefined; className?: string }) {
   const s = stageInfo(stage)
   return (
-    <span className={cx('inline-flex items-center gap-1.5 whitespace-nowrap', className)}>
-      <span aria-hidden className={cx('size-2 shrink-0 rounded-full', s.dot)} />
+    <span className={cx('inline-flex items-center gap-[7px] text-[13.5px] whitespace-nowrap text-label-2', className)}>
+      <span aria-hidden className={cx('size-[7px] shrink-0 rounded-full', s.dot)} />
       {s.label}
     </span>
   )
