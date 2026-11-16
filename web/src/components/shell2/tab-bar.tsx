@@ -1,9 +1,9 @@
 'use client'
 
-import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import type { NavCounts } from '@/lib/queries/page-data'
 import { cx } from '@/components/ui2/cx'
+import { IntentLink } from './intent-link'
 import { isCurrent, PRIMARY_NAV } from './nav-items'
 
 /** The phone tab bar below 1024 px (mockups): the five places, one tap away, with the Inbox count as a badge. */
@@ -26,7 +26,7 @@ export function TabBarView({ path, counts }: { path: string | null; counts?: Nav
           const badge = item.href === '/inbox' && inbox > 0 ? inbox : null
           return (
             <li key={item.href} className="flex">
-              <Link
+              <IntentLink
                 href={item.href}
                 aria-current={current ? 'page' : undefined}
                 className={cx(
@@ -44,7 +44,7 @@ export function TabBarView({ path, counts }: { path: string | null; counts?: Nav
                   ) : null}
                 </span>
                 <span className={cx('type-tab', current && 'font-semibold')}>{item.label}</span>
-              </Link>
+              </IntentLink>
             </li>
           )
         })}

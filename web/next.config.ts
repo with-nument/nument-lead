@@ -17,6 +17,8 @@ const securityHeaders = [
   { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
 ]
 
+const publicFileCache = [{ key: 'Cache-Control', value: 'public, max-age=86400, stale-while-revalidate=604800' }]
+
 const nextConfig: NextConfig = {
   // Render runs the self-contained server (`node .next/standalone/server.js`).
   output: 'standalone',
@@ -24,8 +26,15 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   // Cache Components: the shell prerenders, per-user data streams in behind Suspense.
   cacheComponents: true,
-  partialPrefetching: true,
+  // Links prefetch each page's prerendered shell (skeletons) when they scroll into view. The sidebar and tab
+  // bar links (unstable_dynamicOnHover) also fetch the page's data when hovered or touched, so the click
+  // shows the finished page at once. Partial Prefetching would turn that hover prefetch back into a
+  // shell-only one, so it stays off.
+  partialPrefetching: false,
   experimental: {
+    // A hover prefetch (data included) is reused for at most 30 s (the minimum; default 5 min), so a page
+    // opened from the sidebar is never older than that. Server Actions that change data clear it anyway.
+    staleTimes: { static: 30 },
     serverActions: {
       // Proposal uploads are up to 10 MB, plus multipart overhead.
       bodySizeLimit: '11mb',
@@ -46,7 +55,14 @@ const nextConfig: NextConfig = {
     },
   },
   async headers() {
-    return [{ source: '/:path*', headers: securityHeaders }]
+    return [
+      { source: '/:path*', headers: securityHeaders },
+      // Files in public/ keep their names when they change, so a day in the browser and a week of serving the
+      // old copy while the new one loads, instead of a request on every visit. /_next/static is already
+      // cached for a year (immutable) by Next.js, since its file names change with their content.
+      { source: '/auth/:file*', headers: publicFileCache },
+      { source: '/icon-:size.png', headers: publicFileCache },
+    ]
   },
 }
 

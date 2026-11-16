@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { IntentLink } from '@/components/shell2/intent-link'
 import { useRouter } from 'next/navigation'
 import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { ChevronLeft, ChevronRight, ListFilter, Search, SearchX } from 'lucide-react'
@@ -38,6 +39,10 @@ export type LeadsListProps = {
   /** The server's clock (ISO), for the New tab's date. */
   now: string
 }
+
+// A row's page (data too) is fetched once the pointer rests on it this long (or the row gets focus), so sweeping
+// over the list fetches nothing; rows are not prefetched just for being on screen (50 a page).
+const ROW_DWELL_MS = 100
 
 const check = 'size-[18px] shrink-0 cursor-pointer accent-[var(--ui-label-2)]'
 const href = (f: LeadFilters) => {
@@ -317,9 +322,9 @@ export function LeadsList({ rows, filters, total, pageSize, newCount, options, v
                       <input type="checkbox" aria-label={`Select ${r.name}`} className={cx(check, 'relative z-10')} checked={on} onChange={() => toggle(r.id)} />
                     </td>
                     <td className="py-4 pr-4 lg:pr-3" colSpan={1}>
-                      <Link href={`/leads/${r.id}`} className="block font-medium text-label-1 outline-none after:absolute after:inset-0 focus-visible:underline lg:text-[16px]" onFocus={() => setCursor(i)}>
+                      <IntentLink href={`/leads/${r.id}`} viewport={false} dwellMs={ROW_DWELL_MS} className="block font-medium text-label-1 outline-none after:absolute after:inset-0 focus-visible:underline lg:text-[16px]" onFocus={() => setCursor(i)}>
                         {r.name}
-                      </Link>
+                      </IntentLink>
                       <p className="type-subhead mt-0.5 truncate text-label-3 lg:text-[14px]">{r.sub}</p>
                       {/* Phone: the rest of the row in two quiet lines. */}
                       <p className="type-subhead mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-label-2 lg:hidden">

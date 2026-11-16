@@ -1,17 +1,17 @@
 'use client'
 
-import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import type { Role } from '@/lib/roles'
 import type { NavCounts } from '@/lib/queries/page-data'
 import { cx } from '@/components/ui2/cx'
+import { IntentLink } from './intent-link'
 import { isCurrent, navCount, PRIMARY_NAV, secondaryFor, type NavItem } from './nav-items'
 
 function SidebarLink({ item, current, count, secondary }: { item: NavItem; current: boolean; count?: number | null; secondary?: boolean }) {
   const Icon = item.icon
   return (
     <li>
-      <Link
+      <IntentLink
         href={item.href}
         aria-current={current ? 'page' : undefined}
         className={cx(
@@ -30,7 +30,7 @@ function SidebarLink({ item, current, count, secondary }: { item: NavItem; curre
             <span className="sr-only"> waiting</span>
           </span>
         ) : null}
-      </Link>
+      </IntentLink>
     </li>
   )
 }
