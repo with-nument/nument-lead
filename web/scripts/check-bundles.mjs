@@ -21,6 +21,16 @@ export const BUDGETS_KB = {
   '/leads/[id]': 185,
   '/leads': 190,
   '/pipeline': 190,
+  // The new design (v2): the proxy serves these at the normal URLs when the design is switched on. The shell
+  // alone (sidebar, tab bar, account menu and sheet, toasts) is about 180 KB, so each page gets 5 to 10 KB on top.
+  '/v2': 185,
+  '/v2/calls': 185,
+  '/v2/deals': 190,
+  '/v2/inbox': 185,
+  '/v2/leads': 190,
+  '/v2/insights': 185,
+  '/v2/settings': 190,
+  '/v2/engine': 190,
 }
 
 /** Routes not rebuilt yet: reported, never failing. Remove a route from here when its new version ships. */

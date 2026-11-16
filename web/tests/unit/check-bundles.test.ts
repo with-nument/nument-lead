@@ -37,7 +37,16 @@ afterEach(() => {
 })
 
 describe('check-bundles', () => {
-  const underBudget = { '/login': [100], '/': [120], '/leads/[id]': [150], '/leads': [160], '/pipeline': [160], '/settings': [400] }
+  const v2 = ['/v2', '/v2/calls', '/v2/deals', '/v2/inbox', '/v2/leads', '/v2/insights', '/v2/settings', '/v2/engine']
+  const underBudget = {
+    '/login': [100],
+    '/': [120],
+    '/leads/[id]': [150],
+    '/leads': [160],
+    '/pipeline': [160],
+    '/settings': [400],
+    ...Object.fromEntries(v2.map((r) => [r, [150]])),
+  }
 
   it('passes when every budgeted page is under its budget, and lists every route', () => {
     const out = run(fakeBuild(underBudget), '--strict')
@@ -69,6 +78,13 @@ describe('check-bundles', () => {
     const out = run(fakeBuild(rest), '--strict')
     expect(out.status).toBe(1)
     expect(out.stderr).toContain('/pipeline has a budget but is not in the build')
+  })
+
+  it('holds the new design (v2) pages to their budgets, never as TODO', () => {
+    const over = run(fakeBuild({ ...underBudget, '/v2/settings': [200] }))
+    expect(over.status).toBe(1)
+    expect(over.stderr).toContain('/v2/settings loads 20')
+    expect(over.stderr).toContain('over its 190 KB budget')
   })
 
   it('fails clearly without a build', () => {
