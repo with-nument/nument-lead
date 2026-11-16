@@ -15,6 +15,7 @@ from nument_engine.ops import emails, notify
 from nument_engine.outreach import inbox, replies
 from nument_engine.outreach.replies import BOOKING_URL, DraftContext
 
+from . import outreach_world
 from .outreach_world import World, add_offer, add_plan_page, make_world, rc_for
 from .pipeline_fakes import AllProvidersDown, BudgetExceeded, FakeRouter
 
@@ -222,6 +223,7 @@ def outreach_on(engine_db: str) -> Iterator[str]:
         "suggested_reply = coalesce(suggested_reply, '') where direction = 'in'"
     )
     yield engine_db
+    outreach_world.cleanup()
     for key, value in before.items():
         if value is None:
             db.execute("delete from public.settings where key = %s", [key])

@@ -14,6 +14,7 @@ from nument_engine.outreach import bookings, inbox
 from nument_engine.outreach.bookings import CalendarEvent, Current, Party
 from nument_engine.outreach.gmail import FakeMailbox, Incoming
 
+from . import outreach_world
 from .outreach_world import World, fixture, make_world, rc_for
 
 # ---------------------------------------------------------------------------
@@ -148,6 +149,7 @@ def outreach_on(engine_db: str) -> Iterator[str]:
     before = db.get_setting("outreach.mode")
     db.set_setting("outreach.mode", "manual")
     yield engine_db
+    outreach_world.cleanup()
     db.set_setting("outreach.mode", before if before is not None else "off")
 
 

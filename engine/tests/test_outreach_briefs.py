@@ -14,6 +14,7 @@ from nument_engine.models import PrecallBrief
 from nument_engine.ops import emails, notify
 from nument_engine.outreach import briefs, inbox
 
+from . import outreach_world
 from .outreach_world import World, add_offer, make_world, rc_for
 from .pipeline_fakes import AllProvidersDown, FakeRouter
 
@@ -34,6 +35,7 @@ def outreach_on(engine_db: str) -> Iterator[str]:
     # The session database is shared: calls booked by other tests must not be due in this one.
     db.execute("update public.leads set meeting_at = null where meeting_at is not null")
     yield engine_db
+    outreach_world.cleanup()
     db.set_setting("outreach.mode", before if before is not None else "off")
 
 

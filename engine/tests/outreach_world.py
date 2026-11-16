@@ -143,6 +143,18 @@ class World:
         )
 
 
+CREATED: list[tuple[str, str, str]] = []  # (dsn, lead id, business id) of every world, for cleanup
+
+
+def cleanup() -> None:
+    """Delete every world this process made, so tests elsewhere that count rows see none of ours."""
+    while CREATED:
+        dsn, _lead, business_id = CREATED.pop()
+        with connect(dsn) as conn:
+            conn.execute("delete from public.leads where business_id = %s", [business_id])
+            conn.execute("delete from public.businesses where id = %s", [business_id])
+
+
 def ensure_segment(conn: psycopg.Connection[dict[str, Any]]) -> None:
     conn.execute(
         "insert into public.segments (id, domain, country, display_name, enabled) "
@@ -204,6 +216,7 @@ def make_world(
         assert thread is not None
         world = World(dsn, tag, biz["id"], lead["id"], contact["id"], thread["id"], domain, email, gmail_thread_id)
         world.mailbox = f"hello-{tag}@nument.example"
+        CREATED.append((dsn, lead["id"], biz["id"]))
         sent_at = now - timedelta(days=step0_sent_days_ago)
         plan: list[tuple[int, str, datetime | None, str | None]] = [
             (0, "sent", None, "your seed round"),

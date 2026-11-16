@@ -11,6 +11,7 @@ from nument_engine import db
 from nument_engine.models import ProposalDraft, ProposalMilestone
 from nument_engine.outreach import proposals
 
+from . import outreach_world
 from .outreach_world import World, add_offer, add_plan_page, make_world, rc_for
 from .pipeline_fakes import AllProvidersDown, BudgetExceeded, FakeRouter
 
@@ -39,6 +40,7 @@ def outreach_on(engine_db: str) -> Iterator[str]:
     # The session database is shared: proposals other tests left empty must not be drafted here.
     db.execute("update public.proposals set content = '{\"left_by\": \"another test\"}' where content = '{}'::jsonb")
     yield engine_db
+    outreach_world.cleanup()
     db.set_setting("outreach.mode", before if before is not None else "off")
 
 
