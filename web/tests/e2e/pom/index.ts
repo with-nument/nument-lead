@@ -2,3 +2,4 @@
 export { solidMaterials, UI_COOKIE, useNewDesign } from './design'
 export { LoginPage, ResetPasswordPage } from './login-page'
 export { PRIMARY, SECONDARY, Shell, type Place } from './shell'
+export { EnginePage, InsightsPage, SettingsPage } from './admin-pages'

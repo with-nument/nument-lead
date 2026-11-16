@@ -17,7 +17,9 @@ export const V2_PREFIX = '/v2'
  * path with `:uuid` segments, each matching one UUID (so '/leads/:uuid' is a lead page but never
  * '/leads/export', the CSV download). '/calls' and '/deals' are new destinations with no current-design page.
  */
-export const V2_ROUTES: readonly string[] = ['/', '/calls', '/deals', '/leads', '/leads/:uuid', '/inbox']
+export const V2_ROUTES: readonly string[] = [
+  '/', '/calls', '/deals', '/leads', '/leads/:uuid', '/inbox', '/settings', '/engine', '/insights',
+]
 
 const ONE_YEAR = 60 * 60 * 24 * 365
 
