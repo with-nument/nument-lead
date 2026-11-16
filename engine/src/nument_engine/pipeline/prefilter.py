@@ -238,7 +238,8 @@ def apply_rules(b: dict[str, Any], seg: Segment | None, excl: Exclusions, world:
     has_stated_need = any(s["category"] == "stated_need" for s in sigs)
     name = plain_text(b.get("name"))
     # R1: segment enabled and the city is one of its cities
-    if seg is None or b.get("city") not in {c.name for c in seg.cities}:
+    # Need-first startup segments have no map: a startup in any city (or none named) qualifies (16 Nov 2026).
+    if seg is None or (seg.universe != "signals_only" and b.get("city") not in {c.name for c in seg.cities}):
         return "skip", "R1_segment"
     # R2: category or subcategory allowed. Unknown category waits, unless a classified signal vouches for it.
     if b.get("category") or b.get("subcategory"):

@@ -260,7 +260,8 @@ def test_company_sites() -> None:
      ("nl", "segment_off")],
 )  # fmt: skip
 def test_route_reasons(country: str | None, why: str) -> None:
-    seg, got = rss.route(country, load_segments())
+    segments = {k: v for k, v in load_segments().items() if k != "firms-nl"}  # every allowed country has one now
+    seg, got = rss.route(country, segments)
     assert got == why and (seg is not None) is (why == "ok")
 
 

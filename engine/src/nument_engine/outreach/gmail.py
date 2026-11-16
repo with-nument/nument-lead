@@ -737,3 +737,21 @@ def connect(address: str, *, transport: httpx.BaseTransport | None = None) -> Gm
         refresh_token=token,
         transport=transport,
     )
+
+
+def open_mailbox() -> GmailMailbox | None:
+    """The connected outreach mailbox (status warming or active), or None when none is connected or it cannot
+    be opened (the inbox phase then skips quietly)."""
+    from .. import db
+
+    row = db.fetch_one(
+        "select email from public.mailboxes where status in ('warming', 'active') "
+        "order by connected_at desc nulls last limit 1"
+    )
+    if not row:
+        return None
+    try:
+        return connect(str(row["email"]))
+    except MailboxError as exc:
+        log.warning("gmail.open_failed", kind=exc.kind)
+        return None

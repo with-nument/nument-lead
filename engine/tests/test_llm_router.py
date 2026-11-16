@@ -203,7 +203,7 @@ def test_run_returns_the_output_and_last_meta_names_who_answered(llm_db: str) ->
         "model": "gemini-4-argon",
         "prompt_version": 3,
         "fallback_from": None,
-        "tag": "gemini:gemini-4-argon#judge_lead.v3",
+        "tag": "gemini:gemini-4-argon#judge_lead.v4",
         "cached": False,
         "inr": router.last_meta["inr"],
     }
