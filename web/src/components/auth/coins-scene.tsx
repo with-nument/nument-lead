@@ -1,13 +1,24 @@
 'use client'
 
-// The sign-in art: a brushed silver Nument card and four black coins, floating in soft light.
-// Ported one to one from the approved mock (signin-spec.html, three@0.160.0): same geometry,
-// materials, canvas textures, lights, camera, float, cursor tilt, hover spin (raycast), drag,
-// spin-all on Continue and Sign in, the intro fly-in, and reduced motion = still.
+// The sign-in art: a brushed silver Nument card and four glossy black coins, floating in soft studio light.
+// Each coin is a thick black lacquer token with a thin graphite-chrome bevel and a raised lowercase n on both faces
+// (real extruded geometry with a small dark bevel, not a texture). The card is light brushed aluminium with the
+// wordmark engraved in the corner.
 //
-// It is loaded with next/dynamic after the page is up (src/components/auth/auth-art.tsx), so three.js
-// is never part of the sign-in page's first load. The poster stays on screen until the first frame is
-// drawn and stays for good if WebGL is not available.
+// Framing: the camera's field of view is fitted to the panel on every resize, so the group always sits in
+// the middle of the panel at the same proportions (card about 40% of the panel width) with clear margin on
+// every side, whatever the window shape. Changing only the field of view scales the picture about its
+// centre, so the poster (a still of the rest pose rendered at POSTER_ASPECT) lines up exactly when shown
+// with object-fit: contain (auth-art.tsx).
+//
+// Motion: float, pointer tilt, hover spin (raycast), drag, spin-all on Continue and Sign in, and a short
+// intro rise. Every spin eases back to an upright rest pose facing the camera (coins tilted 20-35
+// degrees so the side band shows), never edge-on and never with the n upside down or mirrored.
+// Reduced motion = still.
+//
+// It is loaded lazily after the page is up (src/components/auth/auth-art.tsx), so three.js is never part
+// of the sign-in page's first load. The poster stays on screen until the first frame is drawn and stays for
+// good if WebGL is not available.
 //
 // Colours here are scene data (material colours and canvas textures), so this file is the one exemption
 // from the design lint (tests/unit/design-lint.test.ts).
@@ -18,16 +29,39 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { SPIN_EVENT } from './spin'
 
+/** Width / height of the poster images in public/auth/ (rendered from this scene at rest; auth-art.tsx). */
+const POSTER_ASPECT = 1.2
+
+// Framing, in world units on the z = 0 plane, seen from CAMERA_Z. The card is 3.4 wide, so a half width of
+// 4.25 makes it 40% of the panel width; the group itself spans about 64% of that width, leaving margin for
+// float, tilt, drag and the spin-all burst.
+const CAMERA_Z = 11
+const HALF_W = 4.25
+const HALF_H = HALF_W / POSTER_ASPECT
+
+const CARD_W = 3.4
+const CARD_H = 2.15
+const CARD_T = 0.12
+const COIN_R = (CARD_H * 0.55) / 2 // each coin is about 0.55x the card height across
+const COIN_T = 0.2
+const TURN = Math.PI * 2
+
 type Item = {
-  obj: THREE.Mesh
+  /** Rest position, orientation and float; the spinner inside it turns about its own vertical axis. */
+  holder: THREE.Group
+  spinner: THREE.Group
   base: THREE.Vector3
   rot: THREE.Euler
   amp: number
   speed: number
   phase: number
   depth: number
-  spin: number
-  coin?: boolean
+  /** Spin angle and speed (radians, radians per second). */
+  angle: number
+  vel: number
+  /** Rest angles are multiples of this: half a turn for coins (both faces carry the n), a full turn for the card. */
+  step: number
+  coin: boolean
 }
 
 type Props = {
@@ -73,7 +107,7 @@ export default function CoinsScene({ onReady, onLost, className }: Props) {
     host.appendChild(canvas)
 
     const family = fontFamily(host)
-    const fontsReady = Promise.all([document.fonts.load(`700 120px ${family}`), document.fonts.load(`700 300px ${family}`)]).catch(() => [])
+    const fontsReady = document.fonts.load(`700 118px ${family}`).catch(() => [])
 
     void fontsReady.then(() => {
       if (disposed) return
@@ -95,6 +129,30 @@ export default function CoinsScene({ onReady, onLost, className }: Props) {
   return <div ref={hostRef} className={className} />
 }
 
+/** A lowercase n (stem and arch, Figtree-like bold proportions), x-height `h`, centred on the origin. */
+function letterN(h: number) {
+  const sw = 0.21 // stem width
+  const w = 0.82 // overall width
+  const p = (x: number, y: number) => [(x - w / 2) * h, (y - 0.5) * h] as const
+  const s = new THREE.Shape()
+  s.moveTo(...p(0, 0))
+  s.lineTo(...p(sw, 0))
+  s.lineTo(...p(sw, 0.58))
+  // inside of the arch
+  s.bezierCurveTo(...p(sw + 0.01, 0.74), ...p(0.27, 0.81), ...p(0.41, 0.81))
+  s.bezierCurveTo(...p(0.54, 0.81), ...p(w - sw, 0.75), ...p(w - sw, 0.6))
+  s.lineTo(...p(w - sw, 0))
+  s.lineTo(...p(w, 0))
+  s.lineTo(...p(w, 0.64))
+  // outside of the arch
+  s.bezierCurveTo(...p(w, 0.9), ...p(0.69, 1.02), ...p(0.47, 1.02))
+  s.bezierCurveTo(...p(0.33, 1.02), ...p(sw + 0.04, 0.96), ...p(sw, 0.87))
+  s.lineTo(...p(sw, 1))
+  s.lineTo(...p(0, 1))
+  s.closePath()
+  return s
+}
+
 /** Builds the scene and runs it. Returns the teardown. */
 function start(
   renderer: THREE.WebGLRenderer,
@@ -106,129 +164,224 @@ function start(
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
   renderer.toneMapping = THREE.ACESFilmicToneMapping
-  renderer.toneMappingExposure = 1.05
-  renderer.shadowMap.enabled = true
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap
+  renderer.toneMappingExposure = 1.1
   const scene = new THREE.Scene()
   const pmrem = new THREE.PMREMGenerator(renderer)
-  const room = new RoomEnvironment()
-  const envMap = pmrem.fromScene(room, 0.04).texture
+  // The room, with its light panels turned down to soft boxes (at full strength a black coin turned towards
+  // one reflects pure white), plus two soft boxes behind the camera, off to the sides, so the faces turned
+  // towards the viewer show a soft studio sheen on one side while a coin facing straight on stays black.
+  const room = new RoomEnvironment(renderer)
+  room.traverse((o) => {
+    if (o instanceof THREE.Mesh && o.material instanceof THREE.MeshBasicMaterial && o.material.color.r > 1) {
+      o.material.color.setScalar(Math.min(o.material.color.r * 0.12, 4))
+    }
+    if (o instanceof THREE.PointLight) o.intensity *= 0.35 // darker walls, so the soft boxes read as highlights
+  })
+  const boxGeo = new THREE.BoxGeometry()
+  const boxMats = [2.4, 2, 2.2].map((v) => new THREE.MeshBasicMaterial({ color: new THREE.Color().setScalar(v) }))
+  // [material, x, y, z, width, height, depth]: two behind the camera, and a tall strip on each side wall near
+  // the front, which a coin turned 20-35 degrees catches as a soft sweep across its face.
+  for (const [i, x, y, z, sx, sy, sz] of [
+    [0, -6, 5, 13.8, 5, 3.5, 0.1],
+    [1, 8, -4, 13.8, 3, 7, 0.1],
+    [2, 14.6, 4, 11, 0.1, 16, 3.5],
+    [2, -16, 4, 11, 0.1, 16, 3.5],
+  ] as const) {
+    const box = new THREE.Mesh(boxGeo, boxMats[i])
+    box.position.set(x, y, z)
+    box.scale.set(sx, sy, sz)
+    room.add(box)
+  }
+  const envMap = pmrem.fromScene(room, 0.03).texture
   scene.environment = envMap
   const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100)
-  camera.position.set(0, 0, 11)
+  camera.position.set(0, 0, CAMERA_Z)
 
-  const key = new THREE.DirectionalLight(0xffffff, 1.6)
-  key.position.set(-4, 6, 7)
-  key.castShadow = true
-  key.shadow.mapSize.set(1024, 1024)
-  key.shadow.radius = 8
-  Object.assign(key.shadow.camera, { left: -6, right: 6, top: 6, bottom: -6 })
-  scene.add(key, new THREE.AmbientLight(0xffffff, 0.35))
-  const floorGeo = new THREE.PlaneGeometry(30, 30)
-  const floorMat = new THREE.ShadowMaterial({ opacity: 0.12 })
-  const floor = new THREE.Mesh(floorGeo, floorMat)
-  floor.rotation.x = -Math.PI / 2
-  floor.position.y = -3.4
-  floor.receiveShadow = true
-  scene.add(floor)
+  // A broad, diffuse-only fill on top of the room reflections, so the silver card stays light at every tilt.
+  // No direct (punctual) light: on a flat glossy face its highlight covers the whole coin at once and turns
+  // it white. No floor and no cast shadows.
+  const fill = new THREE.HemisphereLight(0xffffff, 0xd8d8dc, 2.4)
+  scene.add(fill)
 
-  // Canvas textures: brushed metal, the engraved wordmark and the embossed n.
-  function tex(w: number, h: number, draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void) {
+  // Canvas textures: brushed aluminium and the engraved wordmark (colour, and a height map for the cut).
+  function tex(w: number, h: number, draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void, color = true) {
     const c = document.createElement('canvas')
     c.width = w
     c.height = h
     draw(c.getContext('2d')!, w, h)
     const t = new THREE.CanvasTexture(c)
-    t.colorSpace = THREE.SRGBColorSpace
+    if (color) t.colorSpace = THREE.SRGBColorSpace
     t.anisotropy = 8
     return t
   }
+  const brushLines = Array.from({ length: 3200 }, () => [Math.random(), Math.random() * 0.06, Math.random() > 0.5] as const)
   function brushed(ctx: CanvasRenderingContext2D, w: number, h: number, base: string) {
     ctx.fillStyle = base
     ctx.fillRect(0, 0, w, h)
-    for (let i = 0; i < 2600; i++) {
-      const y = Math.random() * h
-      const a = Math.random() * 0.07
-      ctx.fillStyle = Math.random() > 0.5 ? `rgba(255,255,255,${a})` : `rgba(0,0,0,${a})`
-      ctx.fillRect(0, y, w, 1)
+    for (const [y, a, light] of brushLines) {
+      ctx.fillStyle = light ? `rgba(255,255,255,${a})` : `rgba(0,0,0,${a * 0.8})`
+      ctx.fillRect(0, y * h, w, 1)
     }
-  }
-  const cardFace = tex(1024, 640, (ctx, w, h) => {
-    brushed(ctx, w, h, '#b9bbbe')
-    ctx.font = `700 120px ${family}`
-    ctx.textBaseline = 'alphabetic'
-    ctx.save()
-    ctx.translate(80, h - 90)
-    ctx.fillStyle = 'rgba(255,255,255,.55)'
-    ctx.fillText('nument', 2, 2)
-    ctx.fillStyle = 'rgba(40,40,44,.55)'
-    ctx.fillText('nument', 0, 0)
-    ctx.restore()
-  })
-  const coinFace = tex(512, 512, (ctx, w, h) => {
-    const g = ctx.createRadialGradient(w * 0.4, h * 0.35, 20, w / 2, h / 2, w / 2)
-    g.addColorStop(0, '#3a3a3d')
-    g.addColorStop(1, '#141416')
+    // a soft diagonal sheen, like a studio light sweeping across the brushed metal
+    const g = ctx.createLinearGradient(0, 0, w, h)
+    g.addColorStop(0, 'rgba(255,255,255,0)')
+    g.addColorStop(0.38, 'rgba(255,255,255,.22)')
+    g.addColorStop(0.5, 'rgba(255,255,255,0)')
+    g.addColorStop(0.8, 'rgba(0,0,0,.05)')
+    g.addColorStop(1, 'rgba(255,255,255,.08)')
     ctx.fillStyle = g
     ctx.fillRect(0, 0, w, h)
-    ctx.strokeStyle = 'rgba(255,255,255,.18)'
-    ctx.lineWidth = 10
-    ctx.beginPath()
-    ctx.arc(w / 2, h / 2, w * 0.4, 0, Math.PI * 2)
-    ctx.stroke()
-    ctx.font = `700 300px ${family}`
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillStyle = 'rgba(0,0,0,.6)'
-    ctx.fillText('n', w / 2 + 6, h / 2 - 14)
-    ctx.fillStyle = '#4a4a4e'
-    ctx.fillText('n', w / 2, h / 2 - 20)
+  }
+  const wordmark = (ctx: CanvasRenderingContext2D, h: number) => {
+    ctx.font = `700 118px ${family}`
+    ctx.textBaseline = 'alphabetic'
+    ctx.translate(78, h - 78)
+  }
+  const cardBack = tex(1024, 640, (ctx, w, h) => brushed(ctx, w, h, '#e9ebee'))
+  const cardFace = tex(1024, 640, (ctx, w, h) => {
+    brushed(ctx, w, h, '#e9ebee')
+    wordmark(ctx, h)
+    ctx.fillStyle = 'rgba(255,255,255,.7)' // the lit lower lip of the cut
+    ctx.fillText('nument', 1.5, 2)
+    ctx.fillStyle = 'rgba(92,94,99,.85)'
+    ctx.fillText('nument', 0, 0)
   })
-  const silver = new THREE.MeshPhysicalMaterial({ color: 0xffffff, map: cardFace, metalness: 0.85, roughness: 0.32, clearcoat: 0.4 })
-  const silverEdge = new THREE.MeshPhysicalMaterial({ color: 0xc8c9cc, metalness: 1, roughness: 0.25 })
-  const blackSide = new THREE.MeshPhysicalMaterial({ color: 0x1b1b1d, metalness: 0.9, roughness: 0.28, clearcoat: 0.6 })
-  const blackFace = new THREE.MeshPhysicalMaterial({ map: coinFace, metalness: 0.75, roughness: 0.35, clearcoat: 0.8, clearcoatRoughness: 0.2 })
+  const cardCut = tex(
+    1024,
+    640,
+    (ctx, w, h) => {
+      ctx.fillStyle = '#fff'
+      ctx.fillRect(0, 0, w, h)
+      wordmark(ctx, h)
+      ctx.fillStyle = '#000'
+      ctx.fillText('nument', 0, 0)
+    },
+    false,
+  )
+
+  const silver = new THREE.MeshPhysicalMaterial({
+    color: 0xffffff,
+    map: cardFace,
+    bumpMap: cardCut,
+    bumpScale: 1.2,
+    metalness: 0.45,
+    roughness: 0.36,
+    clearcoat: 0.25,
+    clearcoatRoughness: 0.3,
+    envMapIntensity: 1.1,
+  })
+  const silverBack = silver.clone()
+  silverBack.map = cardBack
+  silverBack.bumpMap = null
+  const silverEdge = new THREE.MeshPhysicalMaterial({ color: 0xdcdde0, metalness: 0.7, roughness: 0.28 })
+  const lacquer = new THREE.MeshPhysicalMaterial({
+    color: 0x060607,
+    metalness: 0,
+    roughness: 0.14,
+    envMapIntensity: 0.6, // a soft sheen, never a white coin when it turns into the soft box
+    clearcoat: 1,
+    clearcoatRoughness: 0.05,
+  })
+  // graphite chrome: dark, so the rim only catches a soft highlight where it faces a light
+  const chrome = new THREE.MeshPhysicalMaterial({ color: 0x55575c, metalness: 1, roughness: 0.22, clearcoat: 0.6, clearcoatRoughness: 0.15, side: THREE.DoubleSide })
+  const letterEdge = new THREE.MeshPhysicalMaterial({ color: 0x3c3d41, metalness: 1, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.1 })
+
+  // Coin geometry, axis along z (the front face looks at the camera at rest).
+  const ri = COIN_R - 0.035 // where the black face meets the thin bevelled rim
+  const faceZ = COIN_T / 2 - 0.008
+  const faceGeo = new THREE.CircleGeometry(ri + 0.002, 96)
+  // Rim: a small rounded bevel from the face down to a straight side band, then the same on the back.
+  const rimProfile: [number, number][] = []
+  for (let i = 0; i <= 8; i++) {
+    const a = (i / 8) * (Math.PI / 2) // quarter round from the face (a = 0) to the side band (a = pi/2)
+    rimProfile.push([ri + 0.035 * Math.sin(a), COIN_T / 2 - 0.008 - 0.03 * (1 - Math.cos(a))])
+  }
+  const lathe = [...rimProfile, ...rimProfile.map(([r, y]) => [r, -y] as [number, number]).reverse()].map(
+    ([r, y]) => new THREE.Vector2(r, y),
+  )
+  const rimGeo = new THREE.LatheGeometry(lathe, 128)
+  rimGeo.rotateX(Math.PI / 2) // lathe axis y -> z
+  const bevel = 0.012
+  const nGeo = new THREE.ExtrudeGeometry(letterN(COIN_R * 0.86), {
+    depth: 0.04,
+    bevelEnabled: true,
+    bevelThickness: bevel,
+    bevelSize: 0.009,
+    bevelSegments: 4,
+    curveSegments: 24,
+  })
+  nGeo.translate(0.012 * COIN_R, 0, bevel) // optical centring; the back of the bevel sits on z = 0
+
+  function makeCoin() {
+    const coin = new THREE.Group()
+    coin.add(new THREE.Mesh(rimGeo, chrome))
+    for (const side of [1, -1]) {
+      // The back is the front turned half a turn about the vertical axis, so either face reads upright.
+      const face = new THREE.Group()
+      face.rotation.y = side === 1 ? 0 : Math.PI
+      const disc = new THREE.Mesh(faceGeo, lacquer)
+      disc.position.z = faceZ
+      const n = new THREE.Mesh(nGeo, [lacquer, letterEdge]) // caps black, bevel and walls catch the light
+      n.position.z = faceZ - 0.002
+      face.add(disc, n)
+      coin.add(face)
+    }
+    return coin
+  }
 
   const world = new THREE.Group()
   scene.add(world)
   const items: Item[] = []
-  // The silver card
-  const cardGeo = new RoundedBoxGeometry(3.4, 2.15, 0.07, 6, 0.12)
-  const faceGeo = new THREE.PlaneGeometry(3.25, 2.02)
-  const card = new THREE.Mesh(cardGeo, silverEdge)
-  const face = new THREE.Mesh(faceGeo, silver)
-  face.position.z = 0.0365
-  card.add(face)
-  card.castShadow = true
-  card.rotation.set(-0.25, 0.35, 0.62)
-  world.add(card)
-  items.push({ obj: card, base: new THREE.Vector3(0.1, -0.1, 0), rot: card.rotation.clone(), amp: 0.12, speed: 0.6, phase: 0, depth: 0.5, spin: 0 })
-  // Four black coins
-  const coinGeo = new THREE.CylinderGeometry(0.62, 0.62, 0.16, 96)
-  const spots = [
-    [-1.6, 1.55, 0.6, 0.9, -0.5],
-    [1.15, 2.35, -0.4, 1.1, 0.4],
-    [1.75, -0.45, 1.0, 0.8, -0.3],
-    [0.65, -2.45, 0.3, 1.25, 0.6],
-  ] as const
-  for (const [x, y, z, rx, rz] of spots) {
-    const coin = new THREE.Mesh(coinGeo, [blackSide, blackFace, blackFace])
-    coin.castShadow = true
-    coin.rotation.set(rx, 0.3, rz)
-    world.add(coin)
+  function place(obj: THREE.Object3D, o: { pos: [number, number, number]; rot: [number, number, number]; amp: number; speed: number; coin: boolean }) {
+    const holder = new THREE.Group()
+    const spinner = new THREE.Group()
+    spinner.add(obj)
+    holder.add(spinner)
+    holder.rotation.set(...o.rot)
+    world.add(holder)
     items.push({
-      obj: coin,
-      base: new THREE.Vector3(x, y, z),
-      rot: coin.rotation.clone(),
-      amp: 0.18,
-      speed: 0.8 + Math.random() * 0.4,
+      holder,
+      spinner,
+      base: new THREE.Vector3(...o.pos),
+      rot: holder.rotation.clone(),
+      amp: o.amp,
+      speed: o.speed,
       phase: Math.random() * 6,
-      depth: 1 + z * 0.4,
-      spin: 0,
-      coin: true,
+      depth: 1 + o.pos[2] * 0.4,
+      angle: 0,
+      vel: 0,
+      step: o.coin ? Math.PI : TURN,
+      coin: o.coin,
     })
   }
-  const coins = items.filter((i) => i.coin).map((i) => i.obj)
+
+  // The silver card
+  const cardGeo = new RoundedBoxGeometry(CARD_W, CARD_H, CARD_T, 6, 0.05)
+  const cardFaceGeo = new THREE.PlaneGeometry(CARD_W - 0.1, CARD_H - 0.1)
+  const card = new THREE.Mesh(cardGeo, silverEdge)
+  const face = new THREE.Mesh(cardFaceGeo, silver)
+  face.position.z = CARD_T / 2 + 0.0005
+  const back = new THREE.Mesh(cardFaceGeo, silverBack)
+  back.position.z = -(CARD_T / 2 + 0.0005)
+  back.rotation.y = Math.PI
+  card.add(face, back)
+  place(card, { pos: [-0.05, 0.05, 0], rot: [-0.16, 0.26, 0.4], amp: 0.08, speed: 0.6, coin: false })
+
+  // Four black coins around it, tilted 20-35 degrees (alternating left and right, all facing slightly up so
+  // they catch the soft boxes rather than the dark floor), small in-plane roll.
+  const spots: [number, number, number, number, number, number][] = [
+    [-1.9, 1.45, 0.55, -0.22, 0.5, -0.1],
+    [1.45, 1.88, -0.35, -0.3, -0.5, 0.12],
+    [1.98, -0.6, 0.65, -0.25, -0.52, 0.08],
+    [-1.2, -1.92, 0.45, -0.35, 0.45, -0.12],
+  ]
+  const coinNodes: THREE.Object3D[] = []
+  for (const [x, y, z, rx, ry, rz] of spots) {
+    const coin = makeCoin()
+    coinNodes.push(coin)
+    place(coin, { pos: [x, y, z], rot: [rx, ry, rz], amp: 0.1, speed: 0.8 + Math.random() * 0.4, coin: true })
+  }
+  const coinItems = items.filter((i) => i.coin)
 
   // Interaction: tilt toward the pointer, hover spins a coin, drag turns the scene, Continue spins everything.
   const pointer = new THREE.Vector2()
@@ -251,10 +404,14 @@ function start(
     const r = canvas.getBoundingClientRect()
     pointer.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
     ray.setFromCamera(pointer, camera)
-    const hit = ray.intersectObjects(coins, true)[0]
+    const hit = ray.intersectObjects(coinNodes, true)[0]
     if (hit) {
-      const it = items.find((i) => i.obj === hit.object || i.obj === hit.object.parent)
-      if (it) it.spin = Math.max(it.spin, 9)
+      const it = coinItems.find((i) => {
+        let o: THREE.Object3D | null = hit.object
+        while (o && o !== i.spinner) o = o.parent
+        return !!o
+      })
+      if (it) it.vel = Math.max(it.vel, 9)
     }
     canvas.style.cursor = dragging ? 'grabbing' : hit ? 'pointer' : 'grab'
   }
@@ -268,23 +425,35 @@ function start(
   }
   const spinAll = () => {
     burst = 1
-    items.forEach((i) => (i.spin = Math.max(i.spin, i.coin ? 18 : 3)))
+    for (const i of items) i.vel = Math.max(i.vel, 19) // about one full turn each
   }
   addEventListener('pointermove', onMove)
   addEventListener('pointerup', onUp)
   addEventListener(SPIN_EVENT, spinAll)
   canvas.addEventListener('pointerdown', onDown)
 
+  // Fit the framing rectangle to the panel: whichever of width and height is tighter sets the field of view.
   function resize() {
     const r = host.getBoundingClientRect()
     if (!r.width || !r.height) return
     renderer.setSize(r.width, r.height, false)
     camera.aspect = r.width / r.height
+    const half = Math.max(HALF_H, HALF_W / camera.aspect)
+    camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(half / CAMERA_Z))
     camera.updateProjectionMatrix()
   }
   const sizer = new ResizeObserver(resize)
   sizer.observe(host)
   resize()
+
+  /** Eases a spin to rest: free spin while fast, then a spring to the nearest rest angle. */
+  function settle(it: Item, dt: number) {
+    it.vel *= Math.exp(-dt * 2.6)
+    it.angle += it.vel * dt
+    const rest = Math.round(it.angle / it.step) * it.step
+    const pull = THREE.MathUtils.clamp(1 - Math.abs(it.vel) / 3, 0, 1)
+    it.angle += (rest - it.angle) * (1 - Math.exp(-dt * 5)) * pull
+  }
 
   // Time only moves while frames are drawn, so a paused scene picks up where it stopped.
   const clock = new THREE.Clock()
@@ -293,29 +462,36 @@ function start(
   function frame() {
     const dt = Math.min(clock.getDelta(), 0.05)
     t += dt
-    intro = Math.min(1, intro + dt * 0.7)
+    intro = Math.min(1, intro + dt * 0.75)
     const ease = 1 - Math.pow(1 - intro, 3)
+    const m = reduce ? 0 : 1
     if (!dragging) {
-      dragVel *= 0.94
+      dragVel *= Math.exp(-dt * 4)
       dragRot += dragVel
+      // drifts back to the nearest whole turn, so the scene always comes back facing the camera
+      const home = Math.round(dragRot / TURN) * TURN
+      const pull = THREE.MathUtils.clamp(1 - Math.abs(dragVel) * 20, 0, 1)
+      dragRot += (home - dragRot) * (1 - Math.exp(-dt * 2.5)) * pull
     }
-    dragRot *= 0.985 // drifts back to rest
-    burst *= 0.96
-    world.rotation.y += (target.x * 0.35 + dragRot - world.rotation.y) * 0.06
-    world.rotation.x += (-target.y * 0.2 - world.rotation.x) * 0.06
+    burst *= Math.exp(-dt * 2.5)
+    const k = 1 - Math.exp(-dt * 4)
+    world.rotation.y += (target.x * 0.3 * m + dragRot - world.rotation.y) * k
+    world.rotation.x += (-target.y * 0.18 * m - world.rotation.x) * k
+    const spread = 1 + burst * 0.1
     for (const it of items) {
-      const m = reduce ? 0 : 1
-      const fly = (1 - ease) * 6 * it.depth
-      it.obj.position.set(
-        it.base.x * (1 + burst * 0.35) + target.x * 0.25 * it.depth,
-        it.base.y * (1 + burst * 0.35) + Math.sin(t * it.speed + it.phase) * it.amp * m - fly,
+      it.holder.position.set(
+        it.base.x * spread + target.x * 0.15 * it.depth * m,
+        it.base.y * spread + Math.sin(t * it.speed + it.phase) * it.amp * m - (1 - ease) * 1.2 * it.depth,
         it.base.z,
       )
-      it.spin *= 0.95
-      it.obj.rotation.x = it.rot.x + Math.sin(t * 0.5 + it.phase) * 0.08 * m
-      it.obj.rotation.z = it.rot.z + Math.cos(t * 0.4 + it.phase) * 0.06 * m
-      it.obj.rotation.y += it.spin * dt + 0.12 * dt * m * (it.coin ? 1 : 0.2)
-      if (!it.coin) it.obj.rotation.y += (it.rot.y + Math.sin(t * 0.3) * 0.15 - it.obj.rotation.y) * 0.03
+      it.holder.rotation.set(
+        it.rot.x + Math.sin(t * 0.5 + it.phase) * 0.07 * m,
+        it.rot.y + Math.sin(t * 0.33 + it.phase) * 0.08 * m,
+        it.rot.z + Math.cos(t * 0.4 + it.phase) * 0.05 * m,
+      )
+      settle(it, dt)
+      // the intro turns each coin in once and lands on the rest pose
+      it.spinner.rotation.y = it.angle + (it.coin ? (1 - ease) * TURN : 0)
     }
     renderer.render(scene, camera)
     if (first) {
@@ -352,7 +528,6 @@ function start(
     on.lost()
   }
   canvas.addEventListener('webglcontextlost', onLost)
-  cardFace.needsUpdate = coinFace.needsUpdate = true
   sync()
 
   return () => {
@@ -366,12 +541,13 @@ function start(
     removeEventListener(SPIN_EVENT, spinAll)
     canvas.removeEventListener('pointerdown', onDown)
     canvas.removeEventListener('webglcontextlost', onLost)
-    for (const g of [floorGeo, cardGeo, faceGeo, coinGeo]) g.dispose()
-    for (const m of [floorMat, silver, silverEdge, blackSide, blackFace]) m.dispose()
-    for (const x of [cardFace, coinFace, envMap]) x.dispose()
+    for (const g of [cardGeo, cardFaceGeo, faceGeo, rimGeo, nGeo]) g.dispose()
+    for (const x of [silver, silverBack, silverEdge, lacquer, chrome, letterEdge]) x.dispose()
+    for (const x of [cardFace, cardBack, cardCut, envMap]) x.dispose()
     room.dispose()
+    boxGeo.dispose()
+    for (const x of boxMats) x.dispose()
     pmrem.dispose()
-    key.shadow.map?.dispose()
     renderer.renderLists.dispose()
   }
 }

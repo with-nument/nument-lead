@@ -38,22 +38,23 @@ export function AuthArt() {
   const [live, setLive] = useState(false)
   return (
     <div aria-hidden className="absolute inset-0 overflow-hidden">
-      {/* The poster keeps the scene's framing: full height, centred, like the camera's fixed vertical view.
-          It is a 4:3 render, wide enough to cover the panel on desktop and phones without showing its edges. */}
+      {/* The poster is a still of the scene at rest, rendered at 6:5 on a transparent background. The scene
+          fits its framing to the panel the same way object-fit: contain does (coins-scene.tsx), so the
+          poster and the first live frame line up at every panel size. */}
       <picture>
         <source
           type="image/webp"
           srcSet="/auth/scene-poster-1200.webp 1200w, /auth/scene-poster-2400.webp 2400w"
-          sizes="(max-width: 900px) 62vh, 134vh"
+          sizes="(max-width: 900px) min(100vw, 55vh), min(50vw, 120vh)"
         />
         <img
           src="/auth/scene-poster.png"
           alt=""
           width={1200}
-          height={900}
+          height={1000}
           fetchPriority="high"
           draggable={false}
-          className={cx('pointer-events-none absolute top-0 left-1/2 h-full w-auto max-w-none -translate-x-1/2 select-none', fade, live && 'opacity-0')}
+          className={cx('pointer-events-none absolute inset-0 h-full w-full object-contain select-none', fade, live && 'opacity-0')}
         />
       </picture>
       {load ? (
