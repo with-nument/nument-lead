@@ -1,8 +1,8 @@
 'use client'
 
 // The sign-in art: a brushed silver Nument card and four glossy black coins, floating in soft studio light.
-// Each coin is a black lacquer token with a thin polished chrome rim and a raised lowercase n on both faces
-// (real extruded geometry with a small bevel, not a texture). The card is light brushed aluminium with the
+// Each coin is a thick black lacquer token with a thin graphite-chrome bevel and a raised lowercase n on both faces
+// (real extruded geometry with a small dark bevel, not a texture). The card is light brushed aluminium with the
 // wordmark engraved in the corner.
 //
 // Framing: the camera's field of view is fitted to the panel on every resize, so the group always sits in
@@ -12,8 +12,9 @@
 // with object-fit: contain (auth-art.tsx).
 //
 // Motion: float, pointer tilt, hover spin (raycast), drag, spin-all on Continue and Sign in, and a short
-// intro rise. Every spin eases back to an upright rest pose facing the camera (coins within about 30
-// degrees), so a coin never rests edge-on or with its n upside down or mirrored. Reduced motion = still.
+// intro rise. Every spin eases back to an upright rest pose facing the camera (coins tilted 20-35
+// degrees so the side band shows), never edge-on and never with the n upside down or mirrored.
+// Reduced motion = still.
 //
 // It is loaded lazily after the page is up (src/components/auth/auth-art.tsx), so three.js is never part
 // of the sign-in page's first load. The poster stays on screen until the first frame is drawn and stays for
@@ -40,8 +41,9 @@ const HALF_H = HALF_W / POSTER_ASPECT
 
 const CARD_W = 3.4
 const CARD_H = 2.15
+const CARD_T = 0.12
 const COIN_R = (CARD_H * 0.55) / 2 // each coin is about 0.55x the card height across
-const COIN_T = 0.13
+const COIN_T = 0.2
 const TURN = Math.PI * 2
 
 type Item = {
@@ -173,16 +175,21 @@ function start(
     if (o instanceof THREE.Mesh && o.material instanceof THREE.MeshBasicMaterial && o.material.color.r > 1) {
       o.material.color.setScalar(Math.min(o.material.color.r * 0.12, 4))
     }
+    if (o instanceof THREE.PointLight) o.intensity *= 0.35 // darker walls, so the soft boxes read as highlights
   })
   const boxGeo = new THREE.BoxGeometry()
-  const boxMats = [3, 2].map((v) => new THREE.MeshBasicMaterial({ color: new THREE.Color().setScalar(v) }))
-  for (const [i, x, y, sx, sy] of [
-    [0, -6, 5, 5, 3.5],
-    [1, 8, -4, 3, 7],
+  const boxMats = [2.4, 2, 2.2].map((v) => new THREE.MeshBasicMaterial({ color: new THREE.Color().setScalar(v) }))
+  // [material, x, y, z, width, height, depth]: two behind the camera, and a tall strip on each side wall near
+  // the front, which a coin turned 20-35 degrees catches as a soft sweep across its face.
+  for (const [i, x, y, z, sx, sy, sz] of [
+    [0, -6, 5, 13.8, 5, 3.5, 0.1],
+    [1, 8, -4, 13.8, 3, 7, 0.1],
+    [2, 14.6, 4, 11, 0.1, 16, 3.5],
+    [2, -16, 4, 11, 0.1, 16, 3.5],
   ] as const) {
     const box = new THREE.Mesh(boxGeo, boxMats[i])
-    box.position.set(x, y, 13.8)
-    box.scale.set(sx, sy, 0.1)
+    box.position.set(x, y, z)
+    box.scale.set(sx, sy, sz)
     room.add(box)
   }
   const envMap = pmrem.fromScene(room, 0.03).texture
@@ -190,12 +197,11 @@ function start(
   const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100)
   camera.position.set(0, 0, CAMERA_Z)
 
-  // Soft studio light on top of the room reflections: a key from the upper left and a broad fill, so the
-  // silver card stays light at every tilt. No floor and no cast shadows.
-  const key = new THREE.DirectionalLight(0xffffff, 1.4)
-  key.position.set(-4, 6, 8)
-  const fill = new THREE.HemisphereLight(0xffffff, 0xd8d8dc, 1.1)
-  scene.add(key, fill)
+  // A broad, diffuse-only fill on top of the room reflections, so the silver card stays light at every tilt.
+  // No direct (punctual) light: on a flat glossy face its highlight covers the whole coin at once and turns
+  // it white. No floor and no cast shadows.
+  const fill = new THREE.HemisphereLight(0xffffff, 0xd8d8dc, 2.4)
+  scene.add(fill)
 
   // Canvas textures: brushed aluminium and the engraved wordmark (colour, and a height map for the cut).
   function tex(w: number, h: number, draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void, color = true) {
@@ -216,15 +222,24 @@ function start(
       ctx.fillStyle = light ? `rgba(255,255,255,${a})` : `rgba(0,0,0,${a * 0.8})`
       ctx.fillRect(0, y * h, w, 1)
     }
+    // a soft diagonal sheen, like a studio light sweeping across the brushed metal
+    const g = ctx.createLinearGradient(0, 0, w, h)
+    g.addColorStop(0, 'rgba(255,255,255,0)')
+    g.addColorStop(0.38, 'rgba(255,255,255,.22)')
+    g.addColorStop(0.5, 'rgba(255,255,255,0)')
+    g.addColorStop(0.8, 'rgba(0,0,0,.05)')
+    g.addColorStop(1, 'rgba(255,255,255,.08)')
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, w, h)
   }
   const wordmark = (ctx: CanvasRenderingContext2D, h: number) => {
     ctx.font = `700 118px ${family}`
     ctx.textBaseline = 'alphabetic'
     ctx.translate(78, h - 78)
   }
-  const cardBack = tex(1024, 640, (ctx, w, h) => brushed(ctx, w, h, '#cdd0d3'))
+  const cardBack = tex(1024, 640, (ctx, w, h) => brushed(ctx, w, h, '#e9ebee'))
   const cardFace = tex(1024, 640, (ctx, w, h) => {
-    brushed(ctx, w, h, '#cdd0d3')
+    brushed(ctx, w, h, '#e9ebee')
     wordmark(ctx, h)
     ctx.fillStyle = 'rgba(255,255,255,.7)' // the lit lower lip of the cut
     ctx.fillText('nument', 1.5, 2)
@@ -249,53 +264,49 @@ function start(
     map: cardFace,
     bumpMap: cardCut,
     bumpScale: 1.2,
-    metalness: 0.55,
+    metalness: 0.45,
     roughness: 0.36,
     clearcoat: 0.25,
     clearcoatRoughness: 0.3,
-    envMapIntensity: 0.8,
+    envMapIntensity: 1.1,
   })
   const silverBack = silver.clone()
   silverBack.map = cardBack
   silverBack.bumpMap = null
   const silverEdge = new THREE.MeshPhysicalMaterial({ color: 0xdcdde0, metalness: 0.7, roughness: 0.28 })
   const lacquer = new THREE.MeshPhysicalMaterial({
-    color: 0x08080a,
+    color: 0x060607,
     metalness: 0,
-    roughness: 0.2,
-    envMapIntensity: 0.4, // a soft sheen, never a white coin when it turns into the soft box
+    roughness: 0.14,
+    envMapIntensity: 0.6, // a soft sheen, never a white coin when it turns into the soft box
     clearcoat: 1,
     clearcoatRoughness: 0.05,
   })
-  const chrome = new THREE.MeshPhysicalMaterial({ color: 0xf4f4f6, metalness: 1, roughness: 0.1, side: THREE.DoubleSide })
-  const letterEdge = new THREE.MeshPhysicalMaterial({ color: 0xececee, metalness: 1, roughness: 0.1, clearcoat: 1, clearcoatRoughness: 0.05 })
+  // graphite chrome: dark, so the rim only catches a soft highlight where it faces a light
+  const chrome = new THREE.MeshPhysicalMaterial({ color: 0x55575c, metalness: 1, roughness: 0.22, clearcoat: 0.6, clearcoatRoughness: 0.15, side: THREE.DoubleSide })
+  const letterEdge = new THREE.MeshPhysicalMaterial({ color: 0x3c3d41, metalness: 1, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.1 })
 
   // Coin geometry, axis along z (the front face looks at the camera at rest).
-  const ri = COIN_R - 0.065 // where the black face meets the chrome rim
-  const faceZ = COIN_T / 2 - 0.016
+  const ri = COIN_R - 0.035 // where the black face meets the thin bevelled rim
+  const faceZ = COIN_T / 2 - 0.008
   const faceGeo = new THREE.CircleGeometry(ri + 0.002, 96)
-  const rimProfile = [
-    [ri, faceZ],
-    [ri + 0.008, COIN_T / 2 - 0.002],
-    [ri + 0.03, COIN_T / 2],
-    [COIN_R - 0.022, COIN_T / 2 - 0.004],
-    [COIN_R - 0.006, COIN_T / 2 - 0.02],
-    [COIN_R, COIN_T / 2 - 0.042],
-    [COIN_R, -(COIN_T / 2 - 0.042)],
-    [COIN_R - 0.006, -(COIN_T / 2 - 0.02)],
-    [COIN_R - 0.022, -(COIN_T / 2 - 0.004)],
-    [ri + 0.03, -COIN_T / 2],
-    [ri + 0.008, -(COIN_T / 2 - 0.002)],
-    [ri, -faceZ],
-  ].map(([r, y]) => new THREE.Vector2(r, y))
-  const rimGeo = new THREE.LatheGeometry(rimProfile, 128)
+  // Rim: a small rounded bevel from the face down to a straight side band, then the same on the back.
+  const rimProfile: [number, number][] = []
+  for (let i = 0; i <= 8; i++) {
+    const a = (i / 8) * (Math.PI / 2) // quarter round from the face (a = 0) to the side band (a = pi/2)
+    rimProfile.push([ri + 0.035 * Math.sin(a), COIN_T / 2 - 0.008 - 0.03 * (1 - Math.cos(a))])
+  }
+  const lathe = [...rimProfile, ...rimProfile.map(([r, y]) => [r, -y] as [number, number]).reverse()].map(
+    ([r, y]) => new THREE.Vector2(r, y),
+  )
+  const rimGeo = new THREE.LatheGeometry(lathe, 128)
   rimGeo.rotateX(Math.PI / 2) // lathe axis y -> z
-  const bevel = 0.02
+  const bevel = 0.012
   const nGeo = new THREE.ExtrudeGeometry(letterN(COIN_R * 0.86), {
-    depth: 0.022,
+    depth: 0.04,
     bevelEnabled: true,
     bevelThickness: bevel,
-    bevelSize: 0.016,
+    bevelSize: 0.009,
     bevelSegments: 4,
     curveSegments: 24,
   })
@@ -345,23 +356,24 @@ function start(
   }
 
   // The silver card
-  const cardGeo = new RoundedBoxGeometry(CARD_W, CARD_H, 0.07, 6, 0.12)
-  const cardFaceGeo = new THREE.PlaneGeometry(CARD_W - 0.15, CARD_H - 0.13)
+  const cardGeo = new RoundedBoxGeometry(CARD_W, CARD_H, CARD_T, 6, 0.05)
+  const cardFaceGeo = new THREE.PlaneGeometry(CARD_W - 0.1, CARD_H - 0.1)
   const card = new THREE.Mesh(cardGeo, silverEdge)
   const face = new THREE.Mesh(cardFaceGeo, silver)
-  face.position.z = 0.0365
+  face.position.z = CARD_T / 2 + 0.0005
   const back = new THREE.Mesh(cardFaceGeo, silverBack)
-  back.position.z = -0.0365
+  back.position.z = -(CARD_T / 2 + 0.0005)
   back.rotation.y = Math.PI
   card.add(face, back)
   place(card, { pos: [-0.05, 0.05, 0], rot: [-0.16, 0.26, 0.4], amp: 0.08, speed: 0.6, coin: false })
 
-  // Four black coins around it: rest poses within about 30 degrees of facing the camera, small in-plane roll.
+  // Four black coins around it, tilted 20-35 degrees (alternating left and right, all facing slightly up so
+  // they catch the soft boxes rather than the dark floor), small in-plane roll.
   const spots: [number, number, number, number, number, number][] = [
-    [-1.9, 1.45, 0.55, 0.26, 0.38, -0.1],
-    [1.45, 1.88, -0.35, 0.3, -0.34, 0.12],
-    [1.98, -0.6, 0.65, -0.18, -0.42, 0.08],
-    [-1.2, -1.92, 0.45, -0.3, 0.3, -0.12],
+    [-1.9, 1.45, 0.55, -0.22, 0.5, -0.1],
+    [1.45, 1.88, -0.35, -0.3, -0.5, 0.12],
+    [1.98, -0.6, 0.65, -0.25, -0.52, 0.08],
+    [-1.2, -1.92, 0.45, -0.35, 0.45, -0.12],
   ]
   const coinNodes: THREE.Object3D[] = []
   for (const [x, y, z, rx, ry, rz] of spots) {
